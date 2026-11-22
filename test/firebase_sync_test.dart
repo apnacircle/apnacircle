@@ -29,6 +29,12 @@ void main() {
       'users/u1/circles/c1',
     );
     expect(FirebaseConfig.invitePath('482913'), 'invites/482913');
+    // Free trial node is keyed by the SHA-256 device hash, NOT by
+    // account or circle (once per phone, 23 Nov 2026).
+    expect(
+      FirebaseConfig.trialPath('a1b2c3hash'),
+      'trials/a1b2c3hash',
+    );
   });
 
   test('invite code is 6 digits', () {
