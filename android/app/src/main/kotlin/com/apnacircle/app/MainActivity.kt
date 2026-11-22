@@ -4,12 +4,14 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.telephony.PhoneStateListener
+import android.telephony.SmsManager
 import android.telephony.TelephonyManager
 import android.view.accessibility.AccessibilityManager
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import org.json.JSONArray
 
 /**
  * ApnaCircle native bridge.
@@ -17,6 +19,9 @@ import io.flutter.plugin.common.MethodChannel
  * Channels (must match lib/core/constants.dart):
  * - "apnacircle/calls"   : incoming SIM-call number for caller distance.
  * - "apnacircle/applock" : locked-app packages + schedule for AppLockService.
+ * - "apnacircle/sms"     : offline SMS location (v0.3) — send a GPS fix
+ *   by SMS to a parent number when the phone has no data, and read
+ *   incoming APNACIRCLE LOC: messages saved by SmsReceiver.
  *
  * WHAT IS IMPLEMENTED HERE (v0.2, 22 Nov 2026 — code written, NOT
  * yet tested on a real phone):
@@ -47,6 +52,22 @@ import io.flutter.plugin.common.MethodChannel
  * iOS cannot do SIM-call distance at all (Apple restriction).
  */
 class MainActivity : FlutterActivity() {
+
+    companion object {
+        // Live SMS-location channel, set when the engine is ready.
+        // SmsReceiver calls deliverSmsLocation() when a location SMS
+        // arrives; it is a no-op when the app is not running (the
+        // message is still saved in SharedPreferences by the
+        // receiver, and Dart reads it on the next start).
+        private var smsChannel: MethodChannel? = null
+
+        fun deliverSmsLocation(from: String, body: String) {
+            smsChannel?.invokeMethod(
+                "onSmsLocation",
+                mapOf("from" to from, "body" to body),
+            )
+        }
+    }
 
     private var lastIncomingNumber: String? = null
     private var phoneListener: PhoneStateListener? = null
@@ -92,6 +113,65 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+
+        // Offline SMS location (v0.3): the child phone sends its GPS
+        // fix by SMS to the parent when it has no data; the parent
+        // phone reads APNACIRCLE LOC: messages saved by SmsReceiver.
+        // Dart asks permission_handler for Permission.sms first and
+        // only calls sendSms with a parent's number from the same
+        // circle. SmsManager throws SecurityException without the
+        // permission — caught here, reported as false.
+        val sms = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger, "apnacircle/sms"
+        )
+        smsChannel = sms
+        sms.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "sendSms" -> {
+                    val to = call.argument<String>("to")
+                    val body = call.argument<String>("body")
+                    if (to.isNullOrBlank() || body.isNullOrBlank()) {
+                        result.success(false)
+                        return@setMethodCallHandler
+                    }
+                    try {
+                        SmsManager.getDefault()
+                            .sendTextMessage(to, null, body, null, null)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.success(false)
+                    }
+                }
+                "getPendingSmsLocations" -> result.success(readPendingSms())
+                "clearPendingSmsLocations" -> {
+                    getSharedPreferences(
+                        SmsReceiver.PREFS_NAME, Context.MODE_PRIVATE
+                    ).edit().remove(SmsReceiver.KEY_PENDING).apply()
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun readPendingSms(): List<Map<String, Any>> {
+        val prefs = getSharedPreferences(
+            SmsReceiver.PREFS_NAME, Context.MODE_PRIVATE
+        )
+        val raw = prefs.getString(SmsReceiver.KEY_PENDING, "[]") ?: "[]"
+        val out = mutableListOf<Map<String, Any>>()
+        val arr = JSONArray(raw)
+        for (i in 0 until arr.length()) {
+            val obj = arr.optJSONObject(i) ?: continue
+            out.add(
+                mapOf(
+                    "from" to (obj.optString("from")),
+                    "body" to (obj.optString("body")),
+                    "at" to obj.optLong("at"),
+                )
+            )
+        }
+        return out
     }
 
     private fun startCallListener() {
