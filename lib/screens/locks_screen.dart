@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../core/app_lock_service.dart';
 import '../core/time_lock.dart';
+import '../services/family_service.dart';
+import '../services/sync_service.dart';
 import 'pin_gate_dialog.dart';
 
 /// Locks — all parent-only (PIN):
@@ -31,6 +34,76 @@ class _LocksScreenState extends State<LocksScreen> {
 
   static const _dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+  /// v0.3 remote locks: in synced mode the parent edits locks for
+  /// ONE member (the child) — picked below. The child's phone
+  /// subscribes to its own locks node and enforces them live.
+  String? _targetMemberId;
+  bool _remoteSubscribed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _afterFirstFrame());
+  }
+
+  Future<void> _afterFirstFrame() async {
+    if (!mounted) return;
+    final sync = context.read<SyncService>();
+    final family = context.read<FamilyService>();
+    if (!sync.isAvailable || sync.activeCircleId == null) return;
+    final circleId = sync.activeCircleId!;
+    final amAdmin = sync.activeCircle?.isAdmin ?? false;
+    if (!amAdmin) {
+      // Child side: listen to MY locks and enforce them live.
+      if (_remoteSubscribed) return;
+      _remoteSubscribed = true;
+      sync.subscribeLocks(circleId, sync.uid!, (incoming) {
+        if (!mounted) return;
+        setState(() {
+          _apps
+            ..clear()
+            ..addAll(incoming);
+        });
+        AppLockService.applyLocks(incoming);
+      });
+      return;
+    }
+    // Parent side: default target = first non-parent member.
+    final target = family.members
+        .where((m) => !m.isParent && m.id != sync.uid)
+        .map((m) => m.id)
+        .firstOrNull;
+    if (target != null) await _loadTargetLocks(target);
+  }
+
+  Future<void> _loadTargetLocks(String memberId) async {
+    final sync = context.read<SyncService>();
+    setState(() => _targetMemberId = memberId);
+    if (sync.activeCircleId == null) return;
+    final remote =
+        await sync.getLocksOnce(sync.activeCircleId!, memberId);
+    if (!mounted) return;
+    if (remote.isNotEmpty) {
+      setState(() {
+        _apps
+          ..clear()
+          ..addAll(remote);
+      });
+    }
+  }
+
+  /// Push the current list to the target child's phone (RTDB).
+  void _publishLocks() {
+    final sync = context.read<SyncService>();
+    final target = _targetMemberId;
+    if (!sync.isAvailable ||
+        sync.activeCircleId == null ||
+        target == null) {
+      return;
+    }
+    sync.publishLocks(sync.activeCircleId!, target, List.of(_apps));
+  }
+
   @override
   void dispose() {
     _customName.dispose();
@@ -43,6 +116,7 @@ class _LocksScreenState extends State<LocksScreen> {
       if (i >= 0) _apps[i] = updated;
     });
     AppLockService.applyLocks(_apps);
+    _publishLocks();
   }
 
   void _withPin(VoidCallback action) =>
@@ -68,6 +142,7 @@ class _LocksScreenState extends State<LocksScreen> {
         _customName.clear();
       });
       AppLockService.applyLocks(_apps);
+      _publishLocks();
     });
   }
 
@@ -180,9 +255,49 @@ class _LocksScreenState extends State<LocksScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final family = context.watch<FamilyService>();
+    final sync = context.watch<SyncService>();
+    final amAdmin = sync.activeCircle?.isAdmin ?? false;
+    final targets = family.members
+        .where((m) => !m.isParent && m.id != sync.uid)
+        .toList();
+    // Members may arrive after the first frame (RTDB) — pick the
+    // default target once they are here.
+    if (sync.isAvailable &&
+        amAdmin &&
+        targets.isNotEmpty &&
+        _targetMemberId == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _targetMemberId == null) {
+          _loadTargetLocks(targets.first.id);
+        }
+      });
+    }
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        if (sync.isAvailable && amAdmin && targets.isNotEmpty) ...[
+          const Text(
+            'Locks for',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          DropdownButton<String>(
+            value: _targetMemberId,
+            isExpanded: true,
+            items: [
+              for (final m in targets)
+                DropdownMenuItem(value: m.id, child: Text(m.name)),
+            ],
+            onChanged: (v) {
+              if (v != null) _loadTargetLocks(v);
+            },
+          ),
+          const Text(
+            'Changes here are sent to that member\'s phone live.',
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+          const Divider(),
+        ],
         SwitchListTile(
           title: const Text('Location Lock'),
           subtitle: const Text(

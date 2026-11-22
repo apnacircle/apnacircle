@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../services/pin_service.dart';
+import '../services/sync_service.dart';
 
 /// Parent sets their PIN on first run. No default PIN in the real
 /// app (the web demo used 1234 — that must NOT ship here).
@@ -32,7 +33,21 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
       setState(() => _error = 'PINs do not match.');
       return;
     }
-    await context.read<PinService>().setPin(_pin.text);
+    final pinService = context.read<PinService>();
+    await pinService.setPin(_pin.text);
+    // v0.3: store the PIN hash on the active circle (parent only)
+    // so the same PIN is recovered when the parent signs in on a
+    // NEW phone. The hash is SHA-256 — never the PIN itself.
+    if (mounted) {
+      final sync = context.read<SyncService>();
+      final circle = sync.activeCircle;
+      if (sync.isAvailable &&
+          circle != null &&
+          circle.isAdmin &&
+          pinService.pinHash != null) {
+        await sync.publishPinHash(circle.id, pinService.pinHash!);
+      }
+    }
   }
 
   @override
