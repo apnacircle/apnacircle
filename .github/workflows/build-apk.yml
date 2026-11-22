@@ -37,9 +37,14 @@ jobs:
       # (Settings > Secrets and variables > Actions). Without it the app
       # still builds (the google-services plugin applies only when the
       # file exists) but runs in local demo mode with no cross-phone sync.
+      # NOTE: the `secrets` context CANNOT be used in a step `if:`
+      # (runs #30-41 failed validation: "Unrecognized named-value:
+      # 'secrets'"), so the check is done in shell instead.
       - name: Restore google-services.json (Firebase)
-        if: ${{ secrets.GOOGLE_SERVICES_JSON != '' }}
-        run: printf '%s' "${{ secrets.GOOGLE_SERVICES_JSON }}" > android/app/google-services.json
+        run: |
+          if [ -n "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
+            printf '%s' "${{ secrets.GOOGLE_SERVICES_JSON }}" > android/app/google-services.json
+          fi
       - name: Install dependencies
         run: flutter pub get
       - name: Analyze
