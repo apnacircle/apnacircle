@@ -1,0 +1,42 @@
+# ApnaCircle — build release APK on GitHub Actions (free runner).
+# No account/card needed to add this file. To use it:
+#   1. Create a free GitHub repo (github.com/new) — no card needed.
+#   2. Push this project: git init && git add . && git commit -m "ApnaCircle" && git remote add origin <repo-url> && git push -u origin main
+#   3. GitHub tab "Actions" -> "Build ApnaCircle APK" -> Run workflow (or it runs on every push).
+#   4. Download the APK from the run's "Artifacts" (apnacircle-apk), valid 90 days.
+# NOTE: release APK here is unsigned/debug-signed by Flutter; for Play Store
+# use `flutter build appbundle --release` with a real keystore (see README).
+name: Build ApnaCircle APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.5"
+          channel: stable
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Analyze
+        run: flutter analyze
+      - name: Test
+        run: flutter test
+      - name: Build APK
+        run: flutter build apk --release
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: apnacircle-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 90
