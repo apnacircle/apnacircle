@@ -1,0 +1,64 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+android {
+    namespace = "com.apnacircle.app"
+    // Play Store current target is 34 in this release; raise it when
+    // Google raises the target API requirement (check before each release).
+    compileSdk = 34
+    ndkVersion = "26.3.11579264"
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
+    defaultConfig {
+        applicationId = "com.apnacircle.app"
+        // minSdk 21 = Android 5.0 — old / low-end phones supported.
+        minSdk = 21
+        targetSdk = 34
+        versionCode = 1
+        versionName = "0.1.0"
+        // Google Maps key comes from gradle.properties / local.properties
+        // (MAPS_API_KEY). Default is the placeholder — the map will not
+        // load until a real key is set on the build machine. The key is
+        // never hard-coded in source or committed to git.
+        manifestPlaceholders = [
+            MAPS_API_KEY: project.hasProperty("MAPS_API_KEY")
+                ? project.property("MAPS_API_KEY")
+                : "YOUR_GOOGLE_MAPS_API_KEY"
+        ]
+    }
+
+    signingConfigs {
+        // Release signing is configured on the build machine:
+        // create a keystore with keytool, put its path/passwords in
+        // android/key.properties (NEVER commit it). See README.
+        release {
+            keyAlias = "apnacircle"
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.debug
+            minifyEnabled = false
+            shrinkResources = false
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.24"
+}
