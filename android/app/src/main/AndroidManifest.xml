@@ -19,6 +19,10 @@
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.SEND_SMS" />
+    <!-- Offline location fallback (v0.3): the parent's phone reads
+         APNACIRCLE LOC: SMS from the child's phone when the child
+         has no data. SmsReceiver ignores every other SMS. -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
@@ -56,6 +60,18 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Offline SMS location (v0.3): SmsReceiver only acts on
+             messages starting with "APNACIRCLE LOC:" — see
+             SmsReceiver.kt. SMS_RECEIVED is delivered to any app
+             holding RECEIVE_SMS (no need to be the default SMS app). -->
+        <receiver
+            android:name=".SmsReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
