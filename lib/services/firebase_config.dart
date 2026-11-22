@@ -1,9 +1,8 @@
-/// Firebase setup — PLACEHOLDERS ONLY (v0.2, 22 Nov 2026).
-///
-/// NO Firebase project has been created, NO account has been used,
-/// and NO firebase_* package is in pubspec.yaml yet. This file is
-/// the single place where the real values will go, so the rest of
-/// the code only has to call [FirebaseConfig.isConfigured].
+/// Firebase setup — v0.3 (22 Nov 2026): packages added, sync code
+/// written. NO Firebase project exists yet (no console project, no
+/// google-services.json) — until the project is created the app
+/// runs in local demo mode (see FirebaseBootstrap): every Firebase
+/// call is guarded, nothing crashes, the v0.2 local behaviour stays.
 ///
 /// Why Firebase is needed (see FIREBASE_SETUP.md for the checklist):
 /// * Realtime Database — live location + parent's remote control
@@ -14,26 +13,38 @@
 ///   tied to one phone. Anonymous sign-in is NOT enough for a
 ///   family product: a lost phone must not lose the circle.
 ///
-/// Until Firebase is wired, FamilyService stores everything locally
-/// (SharedPreferences) — live sync between two phones does NOT work
-/// yet. That is the honest v0.1 limit, written in the README.
+/// Until the console project exists, FamilyService stores
+/// everything locally (SharedPreferences) — live sync between two
+/// phones does NOT work yet. That is the honest v0.3 limit, written
+/// in the README.
 class FirebaseConfig {
   FirebaseConfig._();
 
-  /// Fill these from the Firebase console (google-services.json).
-  /// NEVER commit a real google-services.json with a production
-  /// key — it is already in .gitignore. Use the placeholder below
-  /// until the project exists.
+  /// From the Firebase console (google-services.json, placed in
+  /// android/app/ — gitignored, never committed). The Android SDK
+  /// reads the json at runtime; these constants hold only the
+  /// NON-SECRET identifiers the Dart code needs directly.
+  /// NEVER put a real API key here — it lives in google-services.json.
   static const String apiKey = 'YOUR_FIREBASE_API_KEY';
-  static const String projectId = 'YOUR_FIREBASE_PROJECT_ID';
   static const String appId = 'YOUR_FIREBASE_APP_ID';
   static const String messagingSenderId = 'YOUR_FCM_SENDER_ID';
-  static const String databaseUrl =
-      'https://YOUR_FIREBASE_PROJECT_ID-default-rtdb.firebaseio.com';
 
-  /// True only when a real project has been configured.
-  static bool get isConfigured =>
-      !apiKey.startsWith('YOUR_') && !projectId.startsWith('YOUR_');
+  /// Real project (created 22 Nov 2026 ~22:09 PKT, Spark free,
+  /// Analytics OFF, Android app com.apnacircle.app).
+  static const String projectId = 'apnacircle-22ef3';
+
+  /// Realtime Database URL (asia-southeast1). Hard-coded because
+  /// the google-services.json downloaded before the database was
+  /// created contains NO firebase_url — without this, the Dart
+  /// SDK cannot find the database. This URL is NOT a secret (it
+  /// is just the database's address; the member-only rules in
+  /// FIREBASE_SETUP.md §2 are what protect the data).
+  static const String databaseUrl =
+      'https://apnacircle-22ef3-default-rtdb.asia-southeast1.firebasedatabase.app';
+
+  /// True when a real project is known (values come from
+  /// google-services.json at runtime).
+  static bool get isConfigured => !projectId.startsWith('YOUR_');
 
   /// Realtime Database paths (decided now, so the schema is stable
   /// when Firebase is wired — no migration later):
@@ -41,7 +52,46 @@ class FirebaseConfig {
   ///   circles/{circleId}/locks/{memberId}     — app locks + time windows
   ///   circles/{circleId}/alerts/{memberId}    — per-alert on/off
   ///   circles/{circleId}/chat                 — family chat messages
+  ///   circles/{circleId}/events               — SOS / battery / phone-off
+  ///   circles/{circleId}/info                 — name, invite code, PIN hash
+  ///   users/{uid}/profile                     — name, phone, email, FCM token
+  ///   users/{uid}/circles/{circleId}          — this user's role in a circle
+  ///   invites/{6-digit code}                  — invite code -> circleId
+  ///
+  /// Pure path builders (no Firebase import) so the schema is
+  /// unit-tested in test/firebase_sync_test.dart.
   static const String circlesPath = 'circles';
+  static const String usersPath = 'users';
+  static const String invitesPath = 'invites';
+
+  static String circleInfoPath(String circleId) => 'circles/$circleId/info';
+  static String circleMembersPath(String circleId) =>
+      'circles/$circleId/members';
+  static String circleMemberPath(String circleId, String memberId) =>
+      'circles/$circleId/members/$memberId';
+  static String circleLocksPath(String circleId, String memberId) =>
+      'circles/$circleId/locks/$memberId';
+  static String circleAlertsPath(String circleId, String memberId) =>
+      'circles/$circleId/alerts/$memberId';
+  static String circleChatPath(String circleId) => 'circles/$circleId/chat';
+  static String circleEventsPath(String circleId) =>
+      'circles/$circleId/events';
+  static String userProfilePath(String uid) => 'users/$uid/profile';
+  static String userCirclesPath(String uid) => 'users/$uid/circles';
+  static String userCircleRolePath(String uid, String circleId) =>
+      'users/$uid/circles/$circleId';
+  static String invitePath(String code) => 'invites/$code';
+
+  /// A 6-digit invite code (100000–999999). Generated on the parent
+  /// phone when a circle is created; the child types it to join.
+  /// Pure function — the only randomness in the sync layer.
+  static String newInviteCode([int Function(int max)? randomInt]) {
+    final r = randomInt ?? _defaultRandom;
+    return (100000 + r(900000)).toString();
+  }
+
+  static int _defaultRandom(int max) =>
+      DateTime.now().microsecondsSinceEpoch % max;
 }
 
 /// One checklist item for the Firebase setup (FIREBASE_SETUP.md).

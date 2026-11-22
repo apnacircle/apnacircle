@@ -18,6 +18,22 @@ class PinService extends ChangeNotifier {
 
   bool get hasPin => _pinHash != null;
 
+  /// The stored SHA-256 hash (never the PIN itself). The parent
+  /// phone publishes it to the circle so a new phone can recover
+  /// the same PIN after signing in (see SyncService).
+  String? get pinHash => _pinHash;
+
+  /// Adopt a PIN hash recovered from a circle (parent on a new
+  /// phone). Only when this phone has NO PIN yet — an existing
+  /// local PIN is never overwritten by a remote one.
+  Future<void> adoptHash(String hash) async {
+    if (_pinHash != null) return;
+    final prefs = await SharedPreferences.getInstance();
+    _pinHash = hash;
+    await prefs.setString(_hashKey, hash);
+    notifyListeners();
+  }
+
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
     _pinHash = prefs.getString(_hashKey);

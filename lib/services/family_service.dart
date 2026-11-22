@@ -1,19 +1,30 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/alerts.dart';
 import '../core/constants.dart';
+import '../models/circle.dart';
 import '../models/member.dart';
+import 'sync_service.dart';
 
 /// Family circle state: members (MAX 10), alerts, places.
 ///
-/// v0.1 persistence: SharedPreferences (local, on-device).
-/// PRODUCTION (TODO, before Play launch): Firebase Realtime Database
-/// for live location + remote parent control, Firebase Cloud
-/// Messaging for alerts, Firebase Auth for accounts. The API of this
-/// class stays the same — only the storage layer changes — so the
-/// screens do not need rewriting.
+/// TWO storage modes (v0.3, 22 Nov 2026):
+/// * DEMO mode (no Firebase project / nobody signed in): everything
+///   is local SharedPreferences, exactly like v0.2. The demo family
+///   is seeded on first run.
+/// * SYNCED mode (Firebase configured + signed in + an active
+///   circle): the Realtime Database is the source of truth for the
+///   member list. Local writes are ALSO pushed to RTDB, so a parent
+///   changing a lock/alert on the parent phone updates the child's
+///   phone live. The public API of this class is unchanged — the
+///   screens do not need rewriting.
+///
+/// Multi-circle: [activeCircleId] comes from SyncService. A user
+/// can be a member of one circle and admin of others; the role is
+/// per circle (see CircleInfo / SyncService).
 class FamilyService extends ChangeNotifier {
   static const _membersKey = 'family_members_v1';
 
@@ -24,13 +35,59 @@ class FamilyService extends ChangeNotifier {
 
   Member? get me => _members.isEmpty ? null : _members.first;
 
+  /// My own member entry: by Firebase uid when synced, else the
+  /// first (local demo) member.
+  Member? get myMember {
+    final sync = _sync;
+    if (sync != null && sync.isAvailable && sync.uid != null) {
+      for (final m in _members) {
+        if (m.id == sync.uid) return m;
+      }
+      return null;
+    }
+    return me;
+  }
+
+  /// Parent phone numbers in the active circle (for the offline
+  /// SMS fallback — SMS goes ONLY to these numbers).
+  List<String> get parentPhones => _members
+      .where((m) => m.isParent && m.phone.isNotEmpty)
+      .map((m) => m.phone)
+      .toList();
+
+  // --- Sync wiring ---
+
+  SyncService? _sync;
+
+  /// True when live sync is active: Firebase configured, signed
+  /// in, and an active circle is selected.
+  bool get isSynced =>
+      _sync != null && _sync!.isAvailable && _sync!.activeCircleId != null;
+
+  String? get activeCircleId => _sync?.activeCircleId;
+
+  final _eventsController = StreamController<CircleEvent>.broadcast();
+
+  /// SOS / battery / phone-off events arriving from the circle
+  /// (other members' phones). The Home screen listens and shows
+  /// them as an alert.
+  Stream<CircleEvent> get circleEvents => _eventsController.stream;
+
+  bool _subscribed = false;
+
+  void attachSync(SyncService sync) {
+    _sync = sync;
+  }
+
   /// Add a member. Returns false (and adds nobody) when the circle
   /// is already full at 10 — enforced here AND on the server.
+  /// In synced mode the member node is also written to RTDB.
   bool addMember(Member member) {
     if (isFull) return false;
     if (_members.any((m) => m.phone == member.phone)) return false;
     _members.add(member);
     _save();
+    _pushMemberNode(member);
     notifyListeners();
     return true;
   }
@@ -40,23 +97,65 @@ class FamilyService extends ChangeNotifier {
     _members.removeWhere((m) => m.id == id);
     if (_members.length == before) return false;
     _save();
+    _removeMemberNode(id);
     notifyListeners();
     return true;
   }
 
   /// Update one member's live location (called by LocationService).
+  /// In synced mode only MY OWN location is published (other
+  /// members' locations arrive from RTDB).
   void updateLocation(String id, double lat, double lon, DateTime at) {
     final i = _members.indexWhere((m) => m.id == id);
     if (i < 0) return;
     _members[i] =
         _members[i].copyWith(lat: lat, lon: lon, lastSeen: at, isOnline: true);
     _save();
+    if (isSynced && _sync!.uid == id) {
+      unawaited(_sync!.publishMyLocation(activeCircleId!, _members[i]));
+    }
     notifyListeners();
+  }
+
+  /// Publish MY live location (GPS fix + battery) to the active
+  /// circle. Creates my member node first if it does not exist
+  /// yet (fresh circle). No-op in demo mode.
+  Future<void> publishSelfLocation(
+    double lat,
+    double lon,
+    int battery,
+  ) async {
+    if (!isSynced) return;
+    final circleId = activeCircleId!;
+    final uid = _sync!.uid!;
+    await _sync!.ensureMyMemberNode(circleId);
+    var mine = myMember;
+    if (mine == null) {
+      mine = Member(
+        id: uid,
+        name: 'Me',
+        phone: '',
+        role: _sync!.activeCircle?.role ?? 'member',
+        lastSeen: DateTime.now(),
+        isOnline: true,
+      );
+      _members.add(mine);
+    }
+    updateLocation(uid, lat, lon, DateTime.now());
+    // Battery rides on the same node.
+    final i = _members.indexWhere((m) => m.id == uid);
+    if (i >= 0) {
+      _members[i] = _members[i].copyWith(battery: battery);
+      _save();
+      unawaited(_sync!.publishMyLocation(circleId, _members[i]));
+      notifyListeners();
+    }
   }
 
   /// Parent-only: change one alert for one member. The caller (UI)
   /// must already have verified the parent PIN — see AlertsScreen.
-  /// TODO(v0.2): sync this change to the member's phone via Firebase.
+  /// In synced mode the change is pushed to RTDB, so the member's
+  /// phone gets it live.
   void setAlert(String memberId, AlertType type, bool value) {
     final i = _members.indexWhere((m) => m.id == memberId);
     if (i < 0) return;
@@ -64,6 +163,9 @@ class FamilyService extends ChangeNotifier {
       ..[type] = value;
     _members[i] = _members[i].copyWith(alerts: alerts);
     _save();
+    if (isSynced) {
+      unawaited(_sync!.publishAlerts(activeCircleId!, memberId, alerts));
+    }
     notifyListeners();
   }
 
@@ -76,7 +178,38 @@ class FamilyService extends ChangeNotifier {
     if (i < 0) return;
     _members[i] = _members[i].copyWith(locationSharingOn: on);
     _save();
+    if (isSynced && _sync!.uid == memberId) {
+      unawaited(_sync!.publishMyLocation(activeCircleId!, _members[i]));
+    }
     notifyListeners();
+  }
+
+  /// Apply a location that arrived by SMS while the member's phone
+  /// was offline (parent side). The member stays OFFLINE (no data)
+  /// and the location is labelled "SMS se aayi" with the SMS time
+  /// (see [Member.locationViaSms]). Matched by phone number —
+  /// the sender is a member of this circle.
+  /// Returns false when the sender is not a member (never apply
+  /// an SMS from a stranger).
+  bool applySmsLocation(
+    String fromPhone,
+    double lat,
+    double lon,
+    DateTime at,
+  ) {
+    final member = memberByPhone(fromPhone);
+    if (member == null) return false;
+    final i = _members.indexWhere((m) => m.id == member.id);
+    _members[i] = _members[i].copyWith(
+      lat: lat,
+      lon: lon,
+      lastSeen: at,
+      isOnline: false,
+      locationViaSms: true,
+    );
+    _save();
+    notifyListeners();
+    return true;
   }
 
   Member? memberByPhone(String phone) {
@@ -90,13 +223,48 @@ class FamilyService extends ChangeNotifier {
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_membersKey);
-    if (raw == null) return;
-    _members
-      ..clear()
-      ..addAll(
-        (jsonDecode(raw) as List).map((e) => Member.fromJson(e as Map<String, dynamic>)),
-      );
+    if (raw != null) {
+      try {
+        _members
+          ..clear()
+          ..addAll(
+            (jsonDecode(raw) as List).map(
+              (e) => Member.fromJson(e as Map<String, dynamic>),
+            ),
+          );
+      } catch (_) {
+        _members.clear();
+      }
+    }
     notifyListeners();
+    _subscribeRemote();
+  }
+
+  /// Subscribe to the active circle's RTDB nodes (members + my
+  /// alerts + circle events). In demo mode this does nothing.
+  void _subscribeRemote() {
+    if (!isSynced || _subscribed) return;
+    _subscribed = true;
+    final circleId = activeCircleId!;
+    final sync = _sync!;
+    sync.subscribeMembers(circleId, (remote) {
+      _members
+        ..clear()
+        ..addAll(remote);
+      _save();
+      notifyListeners();
+    });
+    sync.subscribeAlerts(circleId, sync.uid!, (alerts) {
+      final i = _members.indexWhere((m) => m.id == sync.uid);
+      if (i < 0) return;
+      _members[i] = _members[i].copyWith(alerts: alerts);
+      _save();
+      notifyListeners();
+    });
+    sync.subscribeEvents(circleId, (event) {
+      // Ignore my own events (I already know I pressed SOS).
+      if (event.fromUid != sync.uid) _eventsController.add(event);
+    });
   }
 
   Future<void> _save() async {
@@ -105,6 +273,24 @@ class FamilyService extends ChangeNotifier {
       _membersKey,
       jsonEncode(_members.map((m) => m.toJson()).toList()),
     );
+  }
+
+  Future<void> _pushMemberNode(Member member) async {
+    if (!isSynced) return;
+    try {
+      await _sync!.publishMyLocation(activeCircleId!, member);
+    } catch (_) {
+      // Local copy is already saved; RTDB retries on next change.
+    }
+  }
+
+  Future<void> _removeMemberNode(String memberId) async {
+    if (!isSynced) return;
+    try {
+      await _sync!.removeMemberNode(activeCircleId!, memberId);
+    } catch (_) {
+      // Local removal already happened.
+    }
   }
 
   /// Demo family (Lahore) — used ONLY until real accounts exist.
@@ -151,5 +337,11 @@ class FamilyService extends ChangeNotifier {
       ),
     ]);
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _eventsController.close();
+    super.dispose();
   }
 }
