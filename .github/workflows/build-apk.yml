@@ -22,10 +22,16 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      # NOTE (22 Nov 2026, build #1 failed): pin ONLY the version — do NOT
+      # add `channel: stable` here. Run #1 pinned 3.24.5 but the runner
+      # installed 3.35.7, and geolocator_android 4.6.2's legacy
+      # `flutter.compileSdkVersion` only resolves on Flutter >= 3.35, whose
+      # Gradle plugin creates the `flutter` extension on plugin projects
+      # (Flutter 3.24 only creates it on :app). 3.35.7 is the version the
+      # runner actually used, so pin it explicitly.
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.24.5"
-          channel: stable
+          flutter-version: "3.35.7"
       - name: Install dependencies
         run: flutter pub get
       - name: Analyze
