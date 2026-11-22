@@ -3,6 +3,7 @@ package com.apnacircle.app
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.provider.Settings
 import android.telephony.PhoneStateListener
 import android.telephony.SmsManager
 import android.telephony.TelephonyManager
@@ -22,6 +23,10 @@ import org.json.JSONArray
  * - "apnacircle/sms"     : offline SMS location (v0.3) — send a GPS fix
  *   by SMS to a parent number when the phone has no data, and read
  *   incoming APNACIRCLE LOC: messages saved by SmsReceiver.
+ * - "apnacircle/device"  : stable device id for the 7-day free trial
+ *   (23 Nov 2026) — "getAndroidId" returns Settings.Secure.ANDROID_ID.
+ *   Dart hashes it (SHA-256) before storing; the raw id never leaves
+ *   the phone. No permission needed.
  *
  * WHAT IS IMPLEMENTED HERE (v0.2, 22 Nov 2026 — code written, NOT
  * yet tested on a real phone):
@@ -149,6 +154,24 @@ class MainActivity : FlutterActivity() {
                     ).edit().remove(SmsReceiver.KEY_PENDING).apply()
                     result.success(null)
                 }
+                else -> result.notImplemented()
+            }
+        }
+
+        // Stable device id for the 7-day free trial (23 Nov 2026):
+        // one trial per PHONE, not per account. ANDROID_ID is stable
+        // across reinstalls on the same phone; a factory reset changes
+        // it (accepted limit — see DeviceIdService). Dart hashes the
+        // id (SHA-256) before storing; the raw id never leaves here.
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger, "apnacircle/device"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getAndroidId" -> result.success(
+                    Settings.Secure.getString(
+                        contentResolver, Settings.Secure.ANDROID_ID
+                    )
+                )
                 else -> result.notImplemented()
             }
         }
