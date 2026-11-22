@@ -35,6 +35,14 @@ circles/{circleId}/
   alerts/{memberId}/    {sos: true, lowBattery: true, ...}   // 14 alerts
   chat/                 [{from, text, at}]
   events/               [{type: sos/lowBattery/phoneOff, fromUid, fromName, at}]
+trials/{deviceHash}/    {trialUsed, trialStartedAt, trialEndsAt (epoch ms), deviceHash}
+                        — 7-day free trial, ONCE PER PHONE (23 Nov 2026).
+                        Key = SHA-256 of the Android ID, never the raw id.
+                        A different phone gets its own one trial; a
+                        reinstall or a new account on the same phone
+                        gets none. HONEST LIMIT: a factory reset
+                        changes the Android ID, so a reset phone could
+                        get a new trial — accepted, not hidden.
 users/{uid}/
   profile/              {name, phone, email, fcmToken}
   circles/{circleId}/   role ('parent' | 'child' | 'elderly' | 'member')
@@ -73,6 +81,18 @@ invites/{6-digit code}/ circleId
         ".write": "auth != null && auth.uid == $uid"
       }
     },
+    "trials": {
+      // 7-day free trial, ONCE PER PHONE (23 Nov 2026). The key is
+      // the SHA-256 hash of the Android ID — unguessable without the
+      // phone, so any signed-in user may read their own hash node.
+      // Write is CREATE-ONLY (!data.exists()): once a trial exists
+      // for a phone it can never be overwritten, extended or reset —
+      // not even by the phone's own user.
+      "$deviceHash": {
+        ".read": "auth != null",
+        ".write": "auth != null && !data.exists()"
+      }
+    },
     "invites": {
       ".read": "auth != null",
       ".write": "auth != null"
@@ -88,6 +108,13 @@ puri family ki live location khul jayegi.**
 > member-only rules published — **verify they match the full text
 > above (especially the `members/{uid}` self-write exception and
 > the `users`/`invites` blocks) before the two-phone test.**
+>
+> ⚠️ 23 Nov 2026 — RULES UPDATE STILL NEEDED: the `trials` block
+> above is NEW (7-day free trial, once per phone). It is NOT in the
+> published rules yet — update the console rules to this full text
+> BEFORE testing the trial on a signed-in phone, otherwise the
+> trial write fails with "permission denied" and the Plan screen
+> cannot start a trial (the app refuses cleanly; nothing breaks).
 
 ## 3. Authentication
 
