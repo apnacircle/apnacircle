@@ -6,10 +6,14 @@ plugins {
 
 android {
     namespace = "com.apnacircle.app"
-    // Play Store current target is 34 in this release; raise it when
-    // Google raises the target API requirement (check before each release).
-    compileSdk = 34
-    ndkVersion = "26.3.11579264"
+    // Play Store current target is 35 in this release (raised from 34 on
+    // 22 Nov 2026): flutter_plugin_android_lifecycle requires SDK 35+.
+    // compileSdk 35 (not 36): Android SDK platform 35 is guaranteed on the
+    // GitHub runner; plugins that need 36 (geolocator_android via
+    // flutter.compileSdkVersion on Flutter 3.35) only log a warning.
+    compileSdk = 35
+    // NDK 27.0.12077973 = AGP 8.9.1 default (was 26.3.11579264 for AGP 8.3.2).
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -21,9 +25,11 @@ android {
 
     defaultConfig {
         applicationId = "com.apnacircle.app"
-        // minSdk 21 = Android 5.0 — old / low-end phones supported.
-        minSdk = 21
-        targetSdk = 34
+        // minSdk 24 = Android 7.0 (raised from 21 on 22 Nov 2026).
+        // Flutter 3.35's Gradle plugin FAILS the build when minSdk < 23
+        // and warns below 24, so Android 5.0/6.0 are no longer supported.
+        minSdk = 24
+        targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
         // Google Maps key comes from gradle.properties / local.properties
@@ -60,5 +66,6 @@ flutter {
 }
 
 dependencies {
-    implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.24"
+    // Keep in step with the Kotlin plugin version in settings.gradle (2.1.0).
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:2.1.0"
 }
