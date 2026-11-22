@@ -7,15 +7,18 @@ environment:
   sdk: ">=3.5.0 <4.0.0"
   flutter: ">=3.24.0"
 
-# Old Android support: minSdk 21 = Android 5.0 (Lollipop).
-# Target is Play Store current target (34 in this release); bump
-# targetSdk/compileSdk in android/app/build.gradle when Google raises it.
+# Android support: minSdk 24 = Android 7.0 (Nougat). Raised from 21 on
+# 22 Nov 2026 — Flutter 3.35's Gradle plugin FAILS the build when minSdk
+# is below 23 (and warns below 24), so Android 5.0/6.0 are no longer
+# supported. Target is Play Store current target (35 in this release).
 dependencies:
   flutter:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
-  intl: ^0.19.0
+  # intl 0.20.2: Flutter >= 3.32 pins flutter_localizations to intl 0.20.2,
+  # so ^0.19.0 fails version solving on Flutter 3.35 (build #1 latent bug).
+  intl: ^0.20.2
   provider: ^6.1.2
   shared_preferences: ^2.3.2
   google_maps_flutter: ^2.9.0
