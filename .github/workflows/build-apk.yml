@@ -40,10 +40,17 @@ jobs:
       # NOTE: the `secrets` context CANNOT be used in a step `if:`
       # (runs #30-41 failed validation: "Unrecognized named-value:
       # 'secrets'"), so the check is done in shell instead.
+      # NOTE 2 (run #42 failed): the secret JSON contains double quotes,
+      # so interpolating it inside double quotes in `run:` breaks the
+      # shell and mangles the file (MalformedJsonException at
+      # $.project_info.firebase_url). Pass it via `env:` instead — the
+      # value then reaches printf untouched.
       - name: Restore google-services.json (Firebase)
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
-          if [ -n "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
-            printf '%s' "${{ secrets.GOOGLE_SERVICES_JSON }}" > android/app/google-services.json
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
           fi
       - name: Install dependencies
         run: flutter pub get
