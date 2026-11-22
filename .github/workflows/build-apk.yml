@@ -32,6 +32,14 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.35.7"
+      # Firebase (v0.3, 22 Nov 2026): google-services.json is gitignored,
+      # so the runner gets it from the GOOGLE_SERVICES_JSON repo secret
+      # (Settings > Secrets and variables > Actions). Without it the app
+      # still builds (the google-services plugin applies only when the
+      # file exists) but runs in local demo mode with no cross-phone sync.
+      - name: Restore google-services.json (Firebase)
+        if: ${{ secrets.GOOGLE_SERVICES_JSON != '' }}
+        run: printf '%s' "${{ secrets.GOOGLE_SERVICES_JSON }}" > android/app/google-services.json
       - name: Install dependencies
         run: flutter pub get
       - name: Analyze
