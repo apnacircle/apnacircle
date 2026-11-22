@@ -11,6 +11,7 @@ import '../core/app_lock_service.dart';
 import '../models/chat_message.dart';
 import '../models/circle.dart';
 import '../models/member.dart';
+import '../models/trial.dart';
 import 'auth_service.dart';
 import 'firebase_bootstrap.dart';
 import 'firebase_config.dart';
@@ -520,6 +521,43 @@ class SyncService extends ChangeNotifier {
     } catch (e) {
       debugPrint('ApnaCircle: fetchPinHash failed ($e)');
       return null;
+    }
+  }
+
+  // --- 7-day free trial (22 Nov 2026; once PER DEVICE, 23 Nov 2026) ---
+
+  /// Read one device's trial state from `trials/{deviceHash}`.
+  /// Null = no trial stored yet (never started on this phone).
+  /// The device hash is the SHA-256 of the Android ID — the raw id
+  /// is never stored or sent (see DeviceIdService).
+  Future<TrialState?> fetchTrial(String deviceHash) async {
+    if (!isAvailable) return null;
+    try {
+      final snap =
+          await _root.child(FirebaseConfig.trialPath(deviceHash)).get();
+      if (!snap.exists) return null;
+      return TrialState.fromJson(asMap(snap.value));
+    } catch (e) {
+      debugPrint('ApnaCircle: fetchTrial failed ($e)');
+      return null;
+    }
+  }
+
+  /// Write one device's trial state to `trials/{deviceHash}` (set,
+  /// so the whole node is written at once). Returns false when the
+  /// write failed — the caller must not treat the trial as started
+  /// then. Needs the `trials` rules in FIREBASE_SETUP.md §2 —
+  /// without them this fails with "permission denied".
+  Future<bool> publishTrial(String deviceHash, TrialState trial) async {
+    if (!isAvailable) return false;
+    try {
+      await _root
+          .child(FirebaseConfig.trialPath(deviceHash))
+          .set(trial.toJson());
+      return true;
+    } catch (e) {
+      debugPrint('ApnaCircle: publishTrial failed ($e)');
+      return false;
     }
   }
 
