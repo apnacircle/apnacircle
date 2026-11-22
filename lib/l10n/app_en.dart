@@ -49,4 +49,21 @@ const Map<String, String> enStrings = {
   'lockedAllTime': 'Locked all the time',
   'setOnceRepeats': 'set once — repeats automatically',
   'everyDay': 'Every day',
+  // 7-day free trial (22 Nov 2026).
+  'trialTitle': '7-day free trial',
+  'trialNotStarted':
+      'Try the full Family plan free for 7 days — no payment needed. One trial per phone.',
+  'startTrial': 'Start 7-day free trial',
+  'trialActive': 'Free trial active',
+  'daysLeft': 'days left',
+  'trialEndsOn': 'Trial ends on',
+  'trialExpired': 'Your free trial has ended',
+  'trialExpiredNote':
+      'Subscribe to keep using the Family plan — your circle and its data stay as they are.',
+  'trialAlreadyUsed': 'The free trial was already used for this circle.',
+  'trialStarted':
+      'Free trial started — enjoy the full Family plan for 7 days!',
+  'subscribe': 'Subscribe — \$5/year',
+  'subscribeSoon':
+      'Subscriptions are coming soon with Google Play Billing. No payment is taken here yet.',
 };
