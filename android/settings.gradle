@@ -19,8 +19,11 @@ pluginManagement {
 
 plugins {
     id "dev.flutter.flutter-plugin-loader" version "1.0.0"
-    id "com.android.application" version "8.3.2" apply false
-    id "org.jetbrains.kotlin.android" version "1.9.24" apply false
+    // AGP 8.9.1 + Kotlin 2.1.0 = Flutter 3.35 template defaults (22 Nov 2026).
+    // Do NOT go back to AGP 8.3.2 / Kotlin 1.9.24: that combo is outside
+    // Flutter 3.35's supported AGP/KGP range.
+    id "com.android.application" version "8.9.1" apply false
+    id "org.jetbrains.kotlin.android" version "2.1.0" apply false
 }
 
 include ":app"
