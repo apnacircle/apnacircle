@@ -5,6 +5,15 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Firebase (v0.3): apply the google-services plugin ONLY when
+// google-services.json exists in this folder. It is gitignored —
+// it exists on machines where the console project was set up, and
+// is injected as a CI secret on the GitHub runner. Without the
+// file the app builds fine and runs in local demo mode.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "com.apnacircle.app"
     // Regenerated with Flutter 3.35.7 template (22 Nov 2026, Run #8 fix):
