@@ -1,1 +1,71 @@
-PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPCEtLSBBcG5hQ2lyY2xlIEFuZHJvaWRNYW5pZmVzdC4KICAgICBTZW5zaXRpdmUgcGVybWlzc2lvbnMgKFNNUywgQ0FMTF9MT0csIGJhY2tncm91bmQgbG9jYXRpb24pIGFyZQogICAgIHJlc3RyaWN0ZWQgYnkgUGxheSBTdG9yZSDigJQgZWFjaCBuZWVkcyBhIGRlY2xhcmF0aW9uICsgdmlkZW8KICAgICBqdXN0aWZpY2F0aW9uIGF0IHN1Ym1pc3Npb24uIFNlZSBSRUFETUUgIlBsYXkgU3RvcmUg4oCUIHNlbnNpdGl2ZQogICAgIHBlcm1pc3Npb25zIiBiZWZvcmUgcmVxdWVzdGluZyB0aGVtLiAtLT4KPG1hbmlmZXN0IHhtbG5zOmFuZHJvaWQ9Imh0dHA6Ly9zY2hlbWFzLmFuZHJvaWQuY29tL2Fway9yZXMvYW5kcm9pZCI+CiAgICA8dXNlcy1wZXJtaXNzaW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5wZXJtaXNzaW9uLklOVEVSTkVUIiAvPgogICAgPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5BQ0NFU1NfTkVUV09SS19TVEFURSIgLz4KICAgIDx1c2VzLXBlcm1pc3Npb24gYW5kcm9pZDpuYW1lPSJhbmRyb2lkLnBlcm1pc3Npb24uQUNDRVNTX0ZJTkVfTE9DQVRJT04iIC8+CiAgICA8dXNlcy1wZXJtaXNzaW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5wZXJtaXNzaW9uLkFDQ0VTU19DT0FSU0VfTE9DQVRJT04iIC8+CiAgICA8dXNlcy1wZXJtaXNzaW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5wZXJtaXNzaW9uLkFDQ0VTU19CQUNLR1JPVU5EX0xPQ0FUSU9OIiAvPgogICAgPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5GT1JFR1JPVU5EX1NFUlZJQ0UiIC8+CiAgICA8dXNlcy1wZXJtaXNzaW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5wZXJtaXNzaW9uLkZPUkVHUk9VTkRfU0VSVklDRV9MT0NBVElPTiIgLz4KICAgIDx1c2VzLXBlcm1pc3Npb24gYW5kcm9pZDpuYW1lPSJhbmRyb2lkLnBlcm1pc3Npb24uUE9TVF9OT1RJRklDQVRJT05TIiAvPgogICAgPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5WSUJSQVRFIiAvPgogICAgPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5XQUtFX0xPQ0siIC8+CiAgICA8dXNlcy1wZXJtaXNzaW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5wZXJtaXNzaW9uLlJFQ0VJVkVfQk9PVF9DT01QTEVURUQiIC8+CiAgICA8dXNlcy1wZXJtaXNzaW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5wZXJtaXNzaW9uLlJFQURfUEhPTkVfU1RBVEUiIC8+CiAgICA8dXNlcy1wZXJtaXNzaW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5wZXJtaXNzaW9uLkNBTExfUEhPTkUiIC8+CiAgICA8dXNlcy1wZXJtaXNzaW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5wZXJtaXNzaW9uLlNFTkRfU01TIiAvPgogICAgPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5TWVNURU1fQUxFUlRfV0lORE9XIiAvPgogICAgPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5VU0VfRlVMTF9TQ1JFRU5fSU5URU5UIiAvPgogICAgPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5RVUVSWV9BTExfUEFDS0FHRVMiIC8+CiAgICA8dXNlcy1wZXJtaXNzaW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5wZXJtaXNzaW9uLlBBQ0tBR0VfVVNBR0VfU1RBVFMiIC8+CiAgICA8dXNlcy1wZXJtaXNzaW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5wZXJtaXNzaW9uLkJJTkRfQUNDRVNTSUJJTElUWV9TRVJWSUNFIiAvPgoKICAgIDxhcHBsaWNhdGlvbgogICAgICAgIGFuZHJvaWQ6bGFiZWw9IkFwbmFDaXJjbGUiCiAgICAgICAgYW5kcm9pZDpuYW1lPSIke2FwcGxpY2F0aW9uTmFtZX0iCiAgICAgICAgYW5kcm9pZDppY29uPSJAbWlwbWFwL2ljX2xhdW5jaGVyIj4KICAgICAgICA8YWN0aXZpdHkKICAgICAgICAgICAgYW5kcm9pZDpuYW1lPSIuTWFpbkFjdGl2aXR5IgogICAgICAgICAgICBhbmRyb2lkOmV4cG9ydGVkPSJ0cnVlIgogICAgICAgICAgICBhbmRyb2lkOmxhdW5jaE1vZGU9InNpbmdsZVRvcCIKICAgICAgICAgICAgYW5kcm9pZDp0YXNrQWZmaW5pdHk9IiIKICAgICAgICAgICAgYW5kcm9pZDp0aGVtZT0iQHN0eWxlL0xhdW5jaFRoZW1lIgogICAgICAgICAgICBhbmRyb2lkOmNvbmZpZ0NoYW5nZXM9Im9yaWVudGF0aW9ufGtleWJvYXJkSGlkZGVufGtleWJvYXJkfHNjcmVlblNpemV8c21hbGxlc3RTY3JlZW5TaXplfGxvY2FsZXxsYXlvdXREaXJlY3Rpb258Zm9udFNjYWxlfHNjcmVlbkxheW91dHxkZW5zaXR5fHVpTW9kZSIKICAgICAgICAgICAgYW5kcm9pZDpoYXJkd2FyZUFjY2VsZXJhdGVkPSJ0cnVlIgogICAgICAgICAgICBhbmRyb2lkOndpbmRvd1NvZnRJbnB1dE1vZGU9ImFkanVzdFJlc2l6ZSI+CiAgICAgICAgICAgIDxtZXRhLWRhdGEKICAgICAgICAgICAgICAgIGFuZHJvaWQ6bmFtZT0iaW8uZmx1dHRlci5lbWJlZGRpbmcuYW5kcm9pZC5Ob3JtYWxUaGVtZSIKICAgICAgICAgICAgICAgIGFuZHJvaWQ6cmVzb3VyY2U9IkBzdHlsZS9Ob3JtYWxUaGVtZSIgLz4KICAgICAgICAgICAgPGludGVudC1maWx0ZXI+CiAgICAgICAgICAgICAgICA8YWN0aW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5pbnRlbnQuYWN0aW9uLk1BSU4iIC8+CiAgICAgICAgICAgICAgICA8Y2F0ZWdvcnkgYW5kcm9pZDpuYW1lPSJhbmRyb2lkLmludGVudC5jYXRlZ29yeS5MQVVOQ0hFUiIgLz4KICAgICAgICAgICAgPC9pbnRlbnQtZmlsdGVyPgogICAgICAgIDwvYWN0aXZpdHk+CiAgICAgICAgPCEtLSBNYXBzIGtleSBjb21lcyBmcm9tIG1hbmlmZXN0UGxhY2Vob2xkZXJzIChzZWUKICAgICAgICAgICAgIGFuZHJvaWQvYXBwL2J1aWxkLmdyYWRsZS5rdHMpOiBzZXQgTUFQU19BUElfS0VZIGluCiAgICAgICAgICAgICBncmFkbGUucHJvcGVydGllcyAvIGxvY2FsLnByb3BlcnRpZXMgb24gdGhlIGJ1aWxkIG1hY2hpbmUuCiAgICAgICAgICAgICBSZXN0cmljdCB0aGUga2V5IGluIEdvb2dsZSBDbG91ZCB0byB0aGlzIGFwcCArIE1hcHMgU0RLLiAtLT4KICAgICAgICA8bWV0YS1kYXRhCiAgICAgICAgICAgIGFuZHJvaWQ6bmFtZT0iY29tLmdvb2dsZS5hbmRyb2lkLmdlby5BUElfS0VZIgogICAgICAgICAgICBhbmRyb2lkOnZhbHVlPSIke01BUFNfQVBJX0tFWX0iIC8+CiAgICAgICAgPG1ldGEtZGF0YQogICAgICAgICAgICBhbmRyb2lkOm5hbWU9ImZsdXR0ZXJFbWJlZGRpbmciCiAgICAgICAgICAgIGFuZHJvaWQ6dmFsdWU9IjIiIC8+CiAgICA8L2FwcGxpY2F0aW9uPgogICAgPCEtLSBSZXF1aXJlZCB0byBxdWVyeSBhY3Rpdml0aWVzIHRoYXQgY2FuIHByb2Nlc3MgdGV4dCwgc2VlOgogICAgICAgICBodHRwczovL2RldmVsb3Blci5hbmRyb2lkLmNvbS90cmFpbmluZy9wYWNrYWdlLXZpc2liaWxpdHkgYW5kCiAgICAgICAgIGh0dHBzOi8vZGV2ZWxvcGVyLmFuZHJvaWQuY29tL3JlZmVyZW5jZS9hbmRyb2lkL2NvbnRlbnQvSW50ZW50I0FDVElPTl9QUk9DRVNTX1RFWFQuCgogICAgICAgICBJbiBwYXJ0aWN1bGFyLCB0aGlzIGlzIHVzZWQgYnkgdGhlIEZsdXR0ZXIgZW5naW5lIGluIGlvLmZsdXR0ZXIucGx1Z2luLnRleHQuUHJvY2Vzc1RleHRQbHVnaW4uIC0tPgogICAgPHF1ZXJpZXM+CiAgICAgICAgPGludGVudD4KICAgICAgICAgICAgPGFjdGlvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQuaW50ZW50LmFjdGlvbi5QUk9DRVNTX1RFWFQiIC8+CiAgICAgICAgICAgIDxkYXRhIGFuZHJvaWQ6bWltZVR5cGU9InRleHQvcGxhaW4iIC8+CiAgICAgICAgPC9pbnRlbnQ+CiAgICA8L3F1ZXJpZXM+CjwvbWFuaWZlc3Q+Cg==
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ApnaCircle AndroidManifest.
+     Sensitive permissions (SMS, CALL_LOG, background location) are
+     restricted by Play Store — each needs a declaration + video
+     justification at submission. See README "Play Store — sensitive
+     permissions" before requesting them. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
+    <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE" />
+
+    <application
+        android:label="ApnaCircle"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <!-- Maps key comes from manifestPlaceholders (see
+             android/app/build.gradle.kts): set MAPS_API_KEY in
+             gradle.properties / local.properties on the build machine.
+             Restrict the key in Google Cloud to this app + Maps SDK. -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="${MAPS_API_KEY}" />
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+    <!-- Required to query activities that can process text, see:
+         https://developer.android.com/training/package-visibility and
+         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+
+         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT" />
+            <data android:mimeType="text/plain" />
+        </intent>
+    </queries>
+</manifest>
