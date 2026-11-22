@@ -1,9 +1,53 @@
 # ApnaCircle — Real Android App (Flutter)
 
-**Status (22 Nov 2026): v0.2 source complete. `flutter analyze` clean (no issues),
-`flutter test` 18/18 pass (9 old + 9 new time-lock tests). No APK built yet
-in this environment — see "APK kyon nahi bana" below. This is the REAL
-native app, NOT the web demo (`apnacircle-shareable-demo`).**
+**Status (22 Nov 2026): v0.3 source complete. `flutter analyze` clean (no issues),
+`flutter test` 29/29 pass (18 old + 11 new Firebase/SMS tests). Firebase
+console DONE (project `apnacircle-22ef3`, RTDB asia-southeast1, Auth Phone +
+Email ON, FCM API enabled) and the code is wired for it — two-phone
+admin/child sync is implemented, NOT yet tested on real phones (see
+"Real-phone checklist"). This is the REAL native app, NOT the web demo
+(`apnacircle-shareable-demo`).**
+
+## v0.3 — kya naya hai (22 Nov 2026, "complete karo" order par)
+
+1. **Firebase Auth — account-based:** sign in with **Phone (6-digit SMS
+   OTP to the SIM)** or **Gmail (email + password)**. A circle belongs
+   to an ACCOUNT, not a phone — parent naye phone par usi account se
+   login kare to wahi circles + wahi PIN wapas. Auth screen pehli
+   dafa khulti hai (ya Settings → Account & Circles). "Continue in
+   demo mode" bhi hai — bina account ke app v0.2 jaisi local chalti hai.
+2. **Realtime Database sync — do phone, aik circle:** parent circle
+   banata hai → 6-digit invite code milta hai → child code se join
+   karta hai. Parent ke phone se lock/alert badlo → child ke phone
+   par live update. Live location (50 m / 60 s throttle) bhi dono
+   taraf dikhti hai. **Multiple circles:** aik banda aik circle mein
+   member aur dusri circles ka admin ho sakta hai — role har circle
+   ke hisab se alag hai.
+3. **FCM (push) wired:** token + foreground/background handlers,
+   Android 13+ permission. **Honest limit:** ek phone se doosre ko
+   push bhejne ke liye SERVER (Cloud Function) chahiye — woh abhi
+   nahi bana, is liye SOS abhi RTDB `events` node se deliver hota
+   hai (parent ka phone app khula ho to foran dikhta hai). Server
+   key kabhi app mein nahi aayegi.
+4. **Offline SMS location fallback (naya):** bache ke phone mein net
+   na ho (Wi-Fi gaya, data off) to GPS fix (GPS ko net nahi chahiye)
+   **SMS se parent ke number par** jata hai — zyada se zyada har
+   15 min, sirf jab 50 m chala ho, sirf parent ke number par. Parent
+   ke phone par SMS parh kar map par "SMS se aayi · [time]" dikhta
+   hai. Permission pehle saaf wazahat ke saath mangi jati hai.
+   **Limits (sach):** SMS live tracking nahi (15-min snapshot),
+   signal + SMS balance chahiye, phone band ho to kuch nahi bhej
+   sakta — aakhri location hi sab kuch hai.
+5. **Parent PIN recovery:** PIN hash (SHA-256, PIN khud kabhi nahi)
+   circle par save hota hai — naye phone par sign-in ke baad wahi
+   PIN chalta hai.
+6. **Offline state, imaandari se:** member offline ho to parent ko
+   aakhri location + "Offline since [time]" dikhta hai; SMS wali
+   location par "SMS se aayi" ka label hota hai.
+7. **Guarded Firebase init:** Firebase project na ho to app demo
+   mode mein chalti hai — crash nahi. Database URL explicit hai
+   (`instanceFor`, asia-southeast1) kyunke database default region
+   mein nahi hai.
 
 ## v0.2 — kya naya hai (22 Nov 2026, "jaldi complete karo" order par)
 
@@ -49,7 +93,10 @@ Family location safety app — Mujahid's idea, name FINAL: **ApnaCircle**.
    dono mein check hai).
 3. **Live location on Google Maps** — har member ki location, distance (km),
    battery, online/offline. **Net off ho to aakhri location + time** dikhta hai
-   (har fix local save hota hai).
+   (har fix local save hota hai). **v0.3:** net off ho aur SMS fallback on ho
+   to bache ki location SMS se aati hai ("SMS se aayi · [time]"); member
+   offline ho to "Offline since [time]" dikhta hai. Live location do
+   phones ke beech Firebase se sync hoti hai (sign-in + circle zaroori).
 4. **SIM call caller distance (km)** — normal SIM call par caller ka naam,
    number aur aap se fasla. WhatsApp call zaroori nahi. (Android only — iOS
    par Apple SIM call ki info nahi deta.)
@@ -65,13 +112,57 @@ Family location safety app — Mujahid's idea, name FINAL: **ApnaCircle**.
      likha hai).
    * App Lock — YouTube, Facebook, WhatsApp, Chrome, TikTok, PUBG + **parent
      koi bhi app naam likh kar add kar ke lock kar sakta hai** (custom app add).
-7. **Family chat** (text; voice/video v0.2 mein).
+7. **Family chat** (text; voice/video v0.2 mein). **v0.3:** sign-in + circle
+   ho to chat dono phones par live sync hoti hai (RTDB).
 8. **Family plan $5/year, sirf parent pay kare, poori family cover, max 10.**
    Payment methods plan screen par dikhte hain — Pakistan: JazzCash, Easypaisa,
    bank transfer/debit card; International: Visa/Mastercard, Google Play
    billing, PayPal (where available). **Koi real payment is code mein charge
    nahi hoti** — asal charging Google Play Billing se hogi (v0.2).
 9. **Lightweight, purane Android 5.0 (minSdk 21) se latest tak.**
+10. **Stolen-phone / SIM-change alert (approved 22 Nov 2026, "G dal do"):**
+    agar phone gum ho jaye aur chor phone band kar ke nayi SIM daal kar on
+    kare, to parent/family ko alert mile — **aakhri location (band hone se
+    pehle wali) AUR nayi location dono**. Tareeqa: SIM-change detection
+    (ICCID/IMSI check) + boot par auto-start + nayi location milte hi alert.
+    **Limits (sach):** nayi SIM mein net hona zaroori hai, warna alert tab
+    jayega jab net mile; nayi SIM ka number aksar nahi milta — location +
+    "SIM badal gayi" ki khabar milegi, number ki guarantee nahi; factory
+    reset se app delete ho jayegi (neeche anti-tamper dekhein).
+11. **Parent-phone-loss recovery (approved 22 Nov 2026, "Haan, ye bhi list mein add kar do"):**
+    agar parent ka apna phone gum ho jaye (sara control usi phone mein tha),
+    to woh kisi dusre phone se control le sakta hai — **control parent ke
+    ACCOUNT se bandha hai, device se nahi**. (1) Parent naye phone par
+    ApnaCircle install kar ke usi account se login kare to wahi circle, wahi
+    PIN, full control wapas — bachon ke phone par kuch nahi karna padega,
+    data Firebase cloud mein hai. (2) **OTP dono jagah aaye — SIM number par
+    bhi AUR Gmail par bhi** (user, 22 Nov 2026 ~13:23 PKT): number gum ho jaye
+    to SIM foran nikal bhi sakti hai, is liye OTP sirf SIM par nahi, Gmail par
+    bhi aana chahiye — login/recovery ke liye dono option hon. Firebase Auth
+    mein Phone + Email/Password dono ON rakhne hain. (3) Parent PIN account ke saath cloud mein save hona
+    chahiye, taake naye phone par wahi PIN chale (sirf phone mein save nahi).
+    (4) Optional: aik dusra trusted family member **co-parent / backup admin**
+    ho, taake parent ka phone gum hote hi foran control us ke paas ho — naye
+    phone ka intezar nahi. (5) Parent ka apna phone bhi circle ka member hai,
+    to us ki aakhri location family dekh sakti hai.
+12. **Anti-tamper / factory-reset protections (approved 22 Nov 2026):**
+    (a) **Device Admin** — uninstall ki koshish par parent ko foran alert +
+    rukawat (v0.2 mein abhi wired nahi hai, baaki hai);
+    (b) **Device Owner** (phone setup ke waqt QR se, ek dafa) — Settings se
+    factory reset ka option band ho jata hai;
+    (c) **Google FRP (built-in)** — reset ke baad phone purane Google account
+    ke password ke bagair nahi chalega, chor ke liye bekaar;
+    **Limits (sach):** recovery-mode button reset ko koi app nahi rok sakti;
+    **root / system-app wala raasta NAHI use karna** — warranty khatam, bank
+    apps band, Play Store reject kar deta hai.
+13. **Multiple circles / aik banda, kai admin (approved 22 Nov 2026):**
+    aik shakhs aik circle mein member ho sakta hai AUR dusri jagah admin —
+    koi limit nahi, jitni jagah chahiye. Misal: beta family circle mein
+    member hai, lekin apna bank-team circle bana kar us ka admin hai, aur
+    doston ka circle bana kar us ka bhi admin hai. Har circle ka apna admin,
+    apne members, apna PIN aur apne locks hain — aik circle ka admin dusre
+    circle ko nahi dekh sakta aur na control kar sakta hai. Role har circle
+    ke hisab se alag hota hai (member yahan, admin wahan).
 
 ## Project structure
 
@@ -178,13 +269,21 @@ flutter build appbundle --release   # Play Store ko AAB chahiye
   (masalan App Lock ke liye Family Link jaisa tareeqa). Ye submission
   se pehle check karna lazmi hai.
 
-## Jo abhi baaki hai (v0.1 se v1 tak)
+## Jo abhi baaki hai (v0.3 ke baad)
 
-1. **Firebase:** Realtime Database (live location + parent ka remote
-   control), Cloud Messaging (alerts), Auth (accounts). Abhi data local
-   (SharedPreferences) hai — doosre phone par live sync nahi hoga.
-   Placeholders + checklist tayyar hain: `lib/services/firebase_config.dart`
-   aur `FIREBASE_SETUP.md` (koi project abhi nahi bana).
+1. **Firebase — baaki cheezein (code ho gaya, test baaki):**
+   * Published RTDB rules ko `FIREBASE_SETUP.md` §2 ke FULL text se
+     match karein (sirf member-only block se Join circle FAIL hota
+     hai — self-write exception + `users/`/`invites/` blocks lazmi).
+   * GitHub Actions build mein `google-services.json` CI secret se
+     inject karein (gitignored hai — bina is ke runner ki APK demo
+     mode mein chalegi).
+   * **Do-phone test (lazmi):** parent circle banaye → child code se
+     join kare → live location, remote lock, SOS — teeno check karein.
+   * FCM server-side push (Cloud Function) — abhi SOS RTDB events se
+     deliver hota hai; band app par push ke liye server chahiye.
+   * Gmail par 6-digit OTP code (Firebase mein built-in nahi — link
+     hai; code ke liye Cloud Function + email sender chahiye).
 2. **Native App Lock enforcement:** `AppLockService.kt` v0.2 mein
    foreground check + time-window evaluation karta hai, lekin PIN
    overlay abhi MainActivity launch hai (dedicated LockActivity +
@@ -200,6 +299,14 @@ flutter build appbundle --release   # Play Store ko AAB chahiye
    abhi Flutter ka default hai.
 5. **Google Play Billing** ($5/year subscription) + **privacy policy**
    (draft `PRIVACY_POLICY.md` mein hai, placeholders bharne hain).
+6. **Stolen-phone / SIM-change alert + anti-tamper:** SIM-change detection
+   (ICCID/IMSI), boot auto-start, Device Admin wiring, Device Owner setup
+   guide (QR, ek dafa), FRP note. Limits upar Features 10–12 mein likhe
+   hain — net ke bagair alert nahi, recovery reset nahi rukta, root nahi.
+7. **Parent-phone-loss recovery — v0.3 mein code ho gaya:** account-based
+   control, Email + Phone OTP login, PIN hash circle par save, "Restore
+   my circles" (Circle screen). Baaki: do-phone test (naye phone par
+   login → circle + PIN wapas). Co-parent / backup admin abhi nahi bana.
 
 ## Real-phone checklist (APK milne ke baad, launch se pehle)
 
@@ -210,7 +317,15 @@ Ye sab is VM par verify NAHI ho sakta — asal phone par karna lazmi hai:
 - [ ] SIM call: family member SIM se call kare — overlay par naam +
       distance (km) dikhe. Dual SIM par dono SIMs test karein.
 - [ ] Location: do phones, ek ki live location doosre ke map par.
-- [ ] SOS / alerts: SOS dabane par parent ko notification (Firebase ke baad).
+      Parent phone se child ko lock karein → child ke phone par lock
+      lage (time window ke andar bhi).
+- [ ] SOS / alerts: SOS dabane par parent ko notification (RTDB event —
+      app khula ho; band app par push abhi server ke bagair nahi).
+- [ ] Offline SMS: child ka data off karein → 15 min mein parent ko
+      SMS location mile, map par "SMS se aayi" dikhe. SMS sirf parent
+      ke number par jaye.
+- [ ] Circles: parent naye phone par usi account se login kare → wahi
+      circle + wahi PIN wapas (bache ke phone par kuch nahi karna).
 - [ ] Device Admin: bacha ApnaCircle uninstall na kar sake.
 - [ ] Account delete + privacy policy link (Play requirement).
 6. **iOS:** baad mein — iOS par SIM-call distance Apple ki pabandi ki
