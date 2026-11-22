@@ -119,6 +119,13 @@ Family location safety app — Mujahid's idea, name FINAL: **ApnaCircle**.
    bank transfer/debit card; International: Visa/Mastercard, Google Play
    billing, PayPal (where available). **Koi real payment is code mein charge
    nahi hoti** — asal charging Google Play Billing se hogi (v0.2).
+   **7-day free trial (22 Nov 2026, once PER PHONE — 23 Nov 2026):** parent
+   Plan screen se "Start 7-day free trial" dabaye, 7 din full plan free. Trial
+   Android ID ke SHA-256 hash se `trials/{hash}` mein save hota hai — reinstall
+   ya naye account se dobara nahi milta; alag phone ko apna aik trial milta hai.
+   Factory reset Android ID badal deta hai, is liye reset phone ko naya trial
+   mil sakta hai — ye qubool-shuda limit hai. Trial khatam hone par circle/data
+   delete nahi hota, sirf Subscribe dikhaya jata hai.
 9. **Lightweight, purane Android 5.0 (minSdk 21) se latest tak.**
 10. **Stolen-phone / SIM-change alert (approved 22 Nov 2026, "G dal do"):**
     agar phone gum ho jaye aur chor phone band kar ke nayi SIM daal kar on
