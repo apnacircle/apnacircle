@@ -12,6 +12,7 @@ import 'services/notification_service.dart';
 import 'services/pin_service.dart';
 import 'services/sms_location_service.dart';
 import 'services/sync_service.dart';
+import 'services/trial_service.dart';
 
 /// ApnaCircle entry point.
 ///
@@ -37,6 +38,7 @@ Future<void> main() async {
   final sms = SmsLocationService();
   final pin = PinService();
   final family = FamilyService()..attachSync(sync);
+  final trial = TrialService()..attachSync(sync);
 
   if (FirebaseBootstrap.available) {
     FirebaseMessaging.onBackgroundMessage(
@@ -51,6 +53,7 @@ Future<void> main() async {
   await auth.loadDemoSkip();
   await pin.load();
   await sync.load();
+  await trial.load();
   await family.load();
 
   runApp(
@@ -60,6 +63,7 @@ Future<void> main() async {
         ChangeNotifierProvider.value(value: pin),
         ChangeNotifierProvider.value(value: auth),
         ChangeNotifierProvider.value(value: sync),
+        ChangeNotifierProvider.value(value: trial),
         ChangeNotifierProvider.value(value: notifications),
         ChangeNotifierProvider.value(value: family),
         Provider.value(value: sms),
