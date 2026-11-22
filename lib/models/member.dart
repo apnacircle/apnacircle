@@ -15,6 +15,11 @@ class Member {
   final bool locationSharingOn;
   final Map<AlertType, bool> alerts;
 
+  /// True when this member's shown location arrived by SMS while
+  /// their phone was offline (v0.3). The map labels it "SMS se
+  /// aayi" with the SMS time — it is a 15-minute snapshot, not live.
+  final bool locationViaSms;
+
   const Member({
     required this.id,
     required this.name,
@@ -26,6 +31,7 @@ class Member {
     this.battery = -1,
     this.isOnline = false,
     this.locationSharingOn = true,
+    this.locationViaSms = false,
     Map<AlertType, bool>? alerts,
   }) : alerts = alerts ?? const {};
 
@@ -40,6 +46,7 @@ class Member {
     int? battery,
     bool? isOnline,
     bool? locationSharingOn,
+    bool? locationViaSms,
     Map<AlertType, bool>? alerts,
   }) =>
       Member(
@@ -53,6 +60,7 @@ class Member {
         battery: battery ?? this.battery,
         isOnline: isOnline ?? this.isOnline,
         locationSharingOn: locationSharingOn ?? this.locationSharingOn,
+        locationViaSms: locationViaSms ?? this.locationViaSms,
         alerts: alerts ?? this.alerts,
       );
 
@@ -67,6 +75,7 @@ class Member {
         'battery': battery,
         'isOnline': isOnline,
         'locationSharingOn': locationSharingOn,
+        'locationViaSms': locationViaSms,
         'alerts': {for (final e in alerts.entries) e.key.name: e.value},
       };
 
@@ -83,6 +92,7 @@ class Member {
         battery: j['battery'] as int? ?? -1,
         isOnline: j['isOnline'] as bool? ?? false,
         locationSharingOn: j['locationSharingOn'] as bool? ?? true,
+        locationViaSms: j['locationViaSms'] as bool? ?? false,
         alerts: {
           for (final e in (j['alerts'] as Map? ?? {}).entries)
             AlertType.values.firstWhere(
