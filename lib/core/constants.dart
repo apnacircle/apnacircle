@@ -36,4 +36,5 @@ class AppConstants {
   static const String callChannel = 'apnacircle/calls';
   static const String appLockChannel = 'apnacircle/applock';
   static const String smsChannel = 'apnacircle/sms';
+  static const String deviceChannel = 'apnacircle/device';
 }
