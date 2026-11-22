@@ -21,6 +21,11 @@ plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
     id("com.android.application") version "8.9.1" apply false
     id("org.jetbrains.kotlin.android") version "2.1.0" apply false
+    // Firebase (v0.3): the google-services plugin reads
+    // google-services.json into the app. Declared here, applied
+    // in app/build.gradle.kts ONLY when the file exists — so the
+    // build still works on machines without the file (demo mode).
+    id("com.google.gms.google-services") version "4.4.2" apply false
 }
 
 include(":app")
