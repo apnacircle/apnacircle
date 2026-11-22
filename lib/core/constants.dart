@@ -35,4 +35,5 @@ class AppConstants {
   /// Method-channel names (must match MainActivity.kt exactly).
   static const String callChannel = 'apnacircle/calls';
   static const String appLockChannel = 'apnacircle/applock';
+  static const String smsChannel = 'apnacircle/sms';
 }
