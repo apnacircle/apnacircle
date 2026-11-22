@@ -54,6 +54,10 @@ class FirebaseConfig {
   ///   circles/{circleId}/chat                 — family chat messages
   ///   circles/{circleId}/events               — SOS / battery / phone-off
   ///   circles/{circleId}/info                 — name, invite code, PIN hash
+  ///   trials/{deviceHash}                    — 7-day free trial, ONCE PER
+  ///                                             DEVICE (trialUsed, trialStartedAt,
+  ///                                             trialEndsAt, epoch ms; key is the
+  ///                                             SHA-256 of the Android ID)
   ///   users/{uid}/profile                     — name, phone, email, FCM token
   ///   users/{uid}/circles/{circleId}          — this user's role in a circle
   ///   invites/{6-digit code}                  — invite code -> circleId
@@ -63,6 +67,7 @@ class FirebaseConfig {
   static const String circlesPath = 'circles';
   static const String usersPath = 'users';
   static const String invitesPath = 'invites';
+  static const String trialsPath = 'trials';
 
   static String circleInfoPath(String circleId) => 'circles/$circleId/info';
   static String circleMembersPath(String circleId) =>
@@ -81,6 +86,10 @@ class FirebaseConfig {
   static String userCircleRolePath(String uid, String circleId) =>
       'users/$uid/circles/$circleId';
   static String invitePath(String code) => 'invites/$code';
+
+  /// Free-trial node for one device. The key is the SHA-256 hash of
+  /// the Android ID (never the raw id) — see DeviceIdService.
+  static String trialPath(String deviceHash) => 'trials/$deviceHash';
 
   /// A 6-digit invite code (100000–999999). Generated on the parent
   /// phone when a circle is created; the child types it to join.
