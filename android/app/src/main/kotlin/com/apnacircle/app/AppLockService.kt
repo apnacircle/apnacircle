@@ -93,7 +93,10 @@ class AppLockService : AccessibilityService() {
     }
 
     /** Mirrors Dart TimeWindow.isActiveAt for one rule. */
-    internal fun isRuleActive(rule: Rule, now: Calendar): Boolean {
+    // private (not internal): Rule is a private class, and Kotlin 2.1
+    // rejects an internal function exposing a private-in-class type
+    // (Run #27 compile error, 22 Nov 2026). Only used inside this class.
+    private fun isRuleActive(rule: Rule, now: Calendar): Boolean {
         if (!rule.locked) return false
         if (rule.mode != "time") return true
         val mins = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
