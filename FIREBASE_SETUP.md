@@ -109,12 +109,9 @@ puri family ki live location khul jayegi.**
 > above (especially the `members/{uid}` self-write exception and
 > the `users`/`invites` blocks) before the two-phone test.**
 >
-> ⚠️ 23 Nov 2026 — RULES UPDATE STILL NEEDED: the `trials` block
-> above is NEW (7-day free trial, once per phone). It is NOT in the
-> published rules yet — update the console rules to this full text
-> BEFORE testing the trial on a signed-in phone, otherwise the
-> trial write fails with "permission denied" and the Plan screen
-> cannot start a trial (the app refuses cleanly; nothing breaks).
+> ✅ Done 23 Nov 2026 ~00:03 PKT: the `trials` block (create-only,
+> once-per-phone free trial) IS published now — the old "RULES
+> UPDATE STILL NEEDED" warning no longer applies.
 
 ## 3. Authentication
 
@@ -140,13 +137,39 @@ hai, code mein fake nahi kiya gaya.
 
 > ✅ Done 22 Nov 2026: Cloud Messaging API (V1) enabled.
 
-**Honest limit (v0.3):** app mein FCM token + foreground/background
-handlers wired hain, lekin ek phone se doosre phone ko push bhejne
-ke liye SERVER chahiye (Cloud Function) — woh abhi nahi bana. Is
-liye SOS abhi RTDB `events` node se deliver hota hai (parent ka
-phone app khula ho to foran dikhta hai). Server-side push
-Cloud Function ka follow-up hai — app mein server key kabhi nahi
-aayegi.
+### Cloud Function — asal phone-to-phone push (v0.5, code DONE, deploy BAQI)
+
+`functions/index.js` (`sendCircleEventPush`) — naye RTDB event par
+circle ke baaqi members ke FCM tokens par push bhejta hai. v1
+trigger hai (Spark free plan par chalta hai — v2 ko Blaze/card
+chahiye hota, is liye v1 hi rakha hai).
+
+**Deploy (Mujahid ka step — `firebase login` ek dafa chahiye):**
+
+```bash
+# 1. Node 20 + Firebase CLI install karein (ek dafa)
+npm install -g firebase-tools
+
+# 2. ApnaCircle project mein login (gigblow@gmail.com wala account)
+firebase login
+firebase use apnacircle-22ef3
+
+# 3. Functions deploy karein (apnacircle-app folder se)
+cd apnacircle-app
+npm --prefix functions install
+firebase deploy --only functions
+```
+
+Deploy ke baad Firebase console → Functions mein `sendCircleEventPush`
+dikhega. Test: child ke phone se SOS dabayein → parent ke phone par
+push aaye **jab app band ho** (pehle sirf khuli app par RTDB event
+se aata tha). Bina deploy ke band app par push NAHI aayega — ye
+deploy lazmi hai, optional nahi.
+
+**Honest limit (v0.5):** deploy se pehle SOS sirf RTDB `events` node
+se deliver hota hai (parent ka phone app khula ho to foran dikhta
+hai). Server-side push Cloud Function ka kaam hai — app mein server
+key kabhi nahi aayegi.
 
 ## 5. Packages (pubspec.yaml mein add karein)
 
@@ -192,3 +215,26 @@ Realtime Database 1 GB storage + 10 GB/month download free. $5/year
 plan ke andar rehne ke liye location updates 50 m / 60 s par throttled
 hain (pehle se code mein hai). Agar usage barhe to Blaze (pay-as-you-go)
 par jane se pehle Mujahid se poochna lazmi hai — **koi card nahi**.
+
+## 8. Google Play Billing — $5/year product (v0.5, code DONE, product BAQI)
+
+App mein `in_app_purchase` wired hai, product id:
+**`apnacircle_family_yearly`**. Asal khareed sirf tab chalegi jab
+product Play Console mein bane — tab tak Plan screen saaf kehti hai
+"plan is not in the Play Store yet" (charge kabhi fake nahi hota).
+
+**Play Console mein (Mujahid ka step — $25 developer account ke baad):**
+
+1. Play Console → ApnaCircle app → Monetize → Products → Subscriptions.
+2. Naya subscription banayein: Product ID **`apnacircle_family_yearly`**,
+   naam "Family plan", base plan: 1 year, price **$5.00** (Pakistan mein
+   PKR mein bhi dikhega — Google khud convert karta hai).
+3. Subscription ko Active karein. App ko Play ke test track (internal
+   testing) par upload karein — tab khareed test hogi.
+4. **JazzCash / Easypaisa se Play subscription nahi bhari ja sakti** —
+   Play Billing hi in-app rasta hai. Ye Play Store ka rule hai, app
+   ka nahi.
+
+> ⚠️ Jab tak product Active na ho, Plan screen ka Buy button
+> "not in the Play Store yet" batayega — ye sahi behaviour hai,
+> bug nahi.
