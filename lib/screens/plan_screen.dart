@@ -5,17 +5,19 @@ import 'package:provider/provider.dart';
 import '../core/language_service.dart';
 import '../l10n/strings.dart';
 import '../models/trial.dart';
+import '../services/billing_service.dart';
 import '../services/trial_service.dart';
 
 /// Family plan screen.
 ///
 /// \$5/year, paid ONLY by the parent, whole family covered, max 10
 /// members. Payment methods are SHOWN (Pakistan + international)
-/// but NO real payment is charged here — the Subscribe button is a
-/// clearly-marked placeholder ("coming soon — Google Play Billing").
-/// Real charging uses Google Play Billing (in-app subscription);
-/// JazzCash / Easypaisa cannot be used inside the Play app for the
-/// digital plan (see README).
+/// but NO real payment is charged here except through Google Play
+/// Billing (v0.5): the Subscribe button starts the real store
+/// flow. Until the product exists in Play Console the store says
+/// "product not found" and the screen says so honestly — a charge
+/// is never faked and a purchase is never claimed without the
+/// store confirming it.
 ///
 /// 7-day free trial (22 Nov 2026): the parent taps "Start 7-day
 /// free trial" once. The trial is ONCE PER PHONE (23 Nov 2026),
@@ -44,6 +46,7 @@ class PlanScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final lang = context.watch<LanguageService>();
     final trial = context.watch<TrialService>();
+    final billing = context.watch<BillingService>();
     String t(String key) => tr(lang.isUrdu, key);
 
     return ListView(
@@ -65,12 +68,22 @@ class PlanScreen extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(t('planPaidByParent')),
                 Text(t('maxMembers')),
+                if (billing.isSubscribed) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    t('subscribed'),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
         ),
         const SizedBox(height: 16),
-        _trialCard(context, trial, t),
+        _trialCard(context, trial, billing, t),
         const SizedBox(height: 16),
         Text(t('paymentMethods'),
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
@@ -82,6 +95,11 @@ class PlanScreen extends StatelessWidget {
         for (final m in _internationalMethods) ListTile(title: Text(m)),
         const SizedBox(height: 8),
         Text(t('noRealPayment')),
+        const SizedBox(height: 8),
+        TextButton(
+          onPressed: () => billing.restorePurchases(),
+          child: Text(t('restorePurchases')),
+        ),
       ],
     );
   }
@@ -89,6 +107,7 @@ class PlanScreen extends StatelessWidget {
   Widget _trialCard(
     BuildContext context,
     TrialService trial,
+    BillingService billing,
     String Function(String) t,
   ) {
     final status = trial.status;
@@ -118,10 +137,7 @@ class PlanScreen extends StatelessWidget {
                 child: Text(t('startTrial')),
               ),
               const SizedBox(height: 8),
-              OutlinedButton(
-                onPressed: () => _showSubscribeSoon(context, t),
-                child: Text(t('subscribe')),
-              ),
+              _subscribeButton(context, billing, t, filled: false),
             ] else if (status == TrialStatus.active) ...[
               Text(t('trialActive'),
                   style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -133,23 +149,91 @@ class PlanScreen extends StatelessWidget {
               ),
               Text('${t('trialEndsOn')} $endDate'),
               const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: () => _showSubscribeSoon(context, t),
-                child: Text(t('subscribe')),
-              ),
+              _subscribeButton(context, billing, t, filled: false),
             ] else ...[
               Text(t('trialExpired'),
                   style: const TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
               Text(t('trialExpiredNote')),
               const SizedBox(height: 12),
-              FilledButton(
-                onPressed: () => _showSubscribeSoon(context, t),
-                child: Text(t('subscribe')),
-              ),
+              _subscribeButton(context, billing, t, filled: true),
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  /// The Subscribe button, wired to real Play Billing (v0.5).
+  /// Every store state is shown honestly: a missing product or
+  /// an unavailable store is a message, never a fake charge.
+  Widget _subscribeButton(
+    BuildContext context,
+    BillingService billing,
+    String Function(String) t, {
+    required bool filled,
+  }) {
+    if (billing.isSubscribed) {
+      return FilledButton(
+        onPressed: null,
+        child: Text(t('subscribed')),
+      );
+    }
+    final label = billing.status == BillingStatus.purchasePending
+        ? t('billingPending')
+        : t('buyNow');
+    final onPressed = billing.status == BillingStatus.loading ||
+            billing.status == BillingStatus.purchasePending
+        ? null
+        : () => _onSubscribe(context, billing, t);
+    final button = filled
+        ? FilledButton(onPressed: onPressed, child: Text(label))
+        : OutlinedButton(onPressed: onPressed, child: Text(label));
+    return button;
+  }
+
+  Future<void> _onSubscribe(
+    BuildContext context,
+    BillingService billing,
+    String Function(String) t,
+  ) async {
+    switch (billing.status) {
+      case BillingStatus.unavailable:
+        _showMessage(context, t('billingNotAvailable'));
+        return;
+      case BillingStatus.productMissing:
+        _showMessage(context, t('billingProductMissing'));
+        return;
+      case BillingStatus.error:
+        _showMessage(context, billing.error ?? t('billingError'));
+        return;
+      case BillingStatus.loading:
+      case BillingStatus.purchasePending:
+      case BillingStatus.purchased:
+        return;
+      case BillingStatus.ready:
+        break;
+    }
+    final started = await billing.buySubscription();
+    if (!context.mounted) return;
+    if (!started) {
+      _showMessage(context, t('billingError'));
+    }
+    // On success the purchase stream fires and the screen rebuilds
+    // to "Subscribed" — nothing is claimed before the store says so.
+  }
+
+  void _showMessage(BuildContext context, String message) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
       ),
     );
   }
@@ -164,25 +248,6 @@ class PlanScreen extends StatelessWidget {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(ok ? t('trialStarted') : t('trialAlreadyUsed')),
-      ),
-    );
-  }
-
-  void _showSubscribeSoon(
-    BuildContext context,
-    String Function(String) t,
-  ) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(t('subscribe')),
-        content: Text(t('subscribeSoon')),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(t('continue')),
-          ),
-        ],
       ),
     );
   }
