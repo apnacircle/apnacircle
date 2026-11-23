@@ -6,6 +6,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/app_lock_service.dart';
 import '../core/call_distance_service.dart';
 import '../core/location_service.dart';
 import '../models/circle.dart';
@@ -67,12 +68,56 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   // button on any screen height.
   static const double membersListBottomPadding = 88;
 
+  // v0.6.3: which circle+user the child-side lock subscription is
+  // running for. Home is the landing screen after every login, so
+  // this (not the Locks tab) is where lock enforcement starts.
+  String? _lockSubscribedFor;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _afterFirstFrame();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // The active circle can change after Home is already mounted
+    // (fresh sign-in / circle switch) — re-check the subscription.
+    _ensureLockSubscription();
+  }
+
+  /// Child-side lock enforcement (v0.6.3): subscribe to MY locks
+  /// and hand them to native code. Before this, the ONLY subscriber
+  /// was LocksScreen — so if the child never opened the Locks tab,
+  /// applyLocks never ran and the native service had no rules.
+  /// Admins never enforce their own locks; the parent's phone only
+  /// publishes them. Idempotent: keyed on circle+user, so a
+  /// rebuild or a second call does not double-subscribe.
+  void _ensureLockSubscription() {
+    if (!mounted) return;
+    final sync = context.read<SyncService>();
+    if (!sync.isAvailable ||
+        sync.activeCircleId == null ||
+        sync.uid == null) {
+      return;
+    }
+    if (sync.activeCircle?.isAdmin == true) return;
+    final key = '${sync.activeCircleId}|${sync.uid}';
+    if (_lockSubscribedFor == key) return;
+    _lockSubscribedFor = key;
+    final circleId = sync.activeCircleId!;
+    final uid = sync.uid!;
+    // Apply the current list at once — do not wait for the first
+    // remote event (e.g. after an app restart).
+    sync.getLocksOnce(circleId, uid).then((apps) {
+      if (apps.isNotEmpty) AppLockService.applyLocks(apps);
+    });
+    sync.subscribeLocks(circleId, uid, (incoming) {
+      AppLockService.applyLocks(incoming);
     });
   }
 
@@ -131,6 +176,12 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     _locationTimer =
         Timer.periodic(const Duration(seconds: 60), (_) => _publishCycle());
     _publishCycle();
+
+    // Child-side App Lock enforcement (v0.6.3) — see
+    // _ensureLockSubscription: Home is the landing screen, so locks
+    // are applied at startup and on every remote change, even if
+    // the child never opens the Locks tab.
+    _ensureLockSubscription();
   }
 
   void _applySmsLocation(SmsLocation loc) {
