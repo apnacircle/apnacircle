@@ -4,9 +4,7 @@
 
 **App name:** ApnaCircle — family location safety app.
 **Developer:** Mujahid Siddique (individual developer account).
-**Contact:** [CONTACT_EMAIL] — ⚠️ **YEH EMAIL ABHI BHARNA BAAQI HAI.**
-Mujahid ko apna contact email dena hai — andaza nahi lagaya gaya. Jab
-tak yeh email na bhar jaye, is policy ko Play Console mein link NA karein.
+**Contact:** mujahidsiddique0786@gmail.com
 **Play listing:** [PLAY_STORE_URL] — launch ke baad bharni hai.
 
 ## 1. Hum kya data lete hain — aur kyon
@@ -81,7 +79,7 @@ bhi stranger ki location.
   ke members ko dikhte hain. Jo circle aap ne parent ke tor par
   banaya tha, woh baaqi members ke liye chalta rehta hai.
 - Agar aap chahte hain ke aap ka data abhi delete ho, to upar wale
-  email ([CONTACT_EMAIL] — bharna baaqi hai) par likhein — 30 din ke
+  email (mujahidsiddique0786@gmail.com) par likhein — 30 din ke
   andar delete kar diya jayega.
 
 ## 7. Data kahan rehta hai
