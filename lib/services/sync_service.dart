@@ -458,9 +458,9 @@ class SyncService extends ChangeNotifier {
   ) async {
     if (!isAvailable) return;
     try {
-      await _root
-          .child(FirebaseConfig.circleMemberPath(circleId, me.id))
-          .update({
+      // batteryAt is only written when known: an update() with a
+      // null value would DELETE the key on the server.
+      final data = <String, dynamic>{
         'lat': me.lat,
         'lon': me.lon,
         'battery': me.battery,
@@ -468,9 +468,35 @@ class SyncService extends ChangeNotifier {
         'lastSeen': me.lastSeen?.toIso8601String() ??
             DateTime.now().toIso8601String(),
         'locationSharingOn': me.locationSharingOn,
-      });
+      };
+      if (me.batteryAt != null) {
+        data['batteryAt'] = me.batteryAt!.toIso8601String();
+      }
+      await _root.child(FirebaseConfig.circleMemberPath(circleId, me.id)).update(data);
     } catch (e) {
       debugPrint('ApnaCircle: publishMyLocation failed ($e)');
+    }
+  }
+
+  /// Battery-only publish (v0.6.6): the level changed (or 15
+  /// minutes passed) while the location did not, so there is no
+  /// new fix to send — push just the battery + its timestamp.
+  /// Touches nothing else: location, lastSeen and isOnline keep
+  /// their values.
+  Future<void> publishBattery({
+    required String circleId,
+    required String uid,
+    required int battery,
+    required DateTime at,
+  }) async {
+    if (!isAvailable) return;
+    try {
+      await _root.child(FirebaseConfig.circleMemberPath(circleId, uid)).update({
+        'battery': battery,
+        'batteryAt': at.toIso8601String(),
+      });
+    } catch (e) {
+      debugPrint('ApnaCircle: publishBattery failed ($e)');
     }
   }
 
