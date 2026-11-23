@@ -21,14 +21,19 @@ import 'time_lock.dart';
 ///   hours, every working day.
 ///
 /// ANDROID REALITY (honest note, see README): a normal Flutter app
-/// cannot block other apps by itself. The real enforcement needs
-/// native code — AccessibilityService / UsageStatsManager to detect
-/// a locked app coming to foreground and show the PIN screen, plus
-/// Device Admin so the child cannot uninstall ApnaCircle. That
-/// native layer lives in android/app/src/main/kotlin/.../AppLockService.kt
-/// (partially implemented in v0.2 — foreground detection + PIN
-/// overlay launch; still needs a real phone to test, see the file).
-/// The Dart side below is the UI + list + PIN gate + schedule logic;
+/// cannot block other apps by itself. The real enforcement is native
+/// — an AccessibilityService detects a locked app coming to the
+/// foreground and shows the PIN screen (LockActivity), plus Device
+/// Admin so the child cannot uninstall ApnaCircle easily. That
+/// native layer lives in android/app/src/main/kotlin/.../:
+/// AppLockService.kt (declared in AndroidManifest.xml + res/xml/
+/// accessibility_service_config.xml since v0.6.3 — before that the
+/// service was never declared, so nothing was ever blocked) and
+/// LockActivity.kt (the PIN screen; correct PIN = 5-minute grant).
+/// The user MUST enable the service once in Settings →
+/// Accessibility → ApnaCircle App Lock; [isServiceEnabled] reports
+/// it and [openAccessibilitySettings] opens those settings. The
+/// Dart side below is the UI + list + PIN gate + schedule logic;
 /// it talks to native code over the `apnacircle/applock` channel.
 class LockedApp {
   final String name;
@@ -160,4 +165,27 @@ class AppLockService {
         packageName: 'custom:${name.trim().toLowerCase()}',
         isCustom: true,
       );
+
+  /// Is the native AccessibilityService enabled on THIS phone?
+  /// False until the user turns it on in Settings → Accessibility.
+  /// Locks cannot work on this phone while this is false.
+  static Future<bool> isServiceEnabled() async {
+    try {
+      return await _channel.invokeMethod<bool>('isLockServiceEnabled') ??
+          false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  /// Open Android Settings → Accessibility so the user can enable
+  /// ApnaCircle App Lock. Only the user's own tap there enables
+  /// it — no app can enable an AccessibilityService by itself.
+  static Future<void> openAccessibilitySettings() async {
+    try {
+      await _channel.invokeMethod<void>('openAccessibilitySettings');
+    } on PlatformException {
+      // No-op: the button just does nothing on a phone without it.
+    }
+  }
 }
