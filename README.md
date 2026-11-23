@@ -443,21 +443,60 @@ flutter build appbundle --release   # Play Store ko AAB chahiye
    all the time" (and accept the battery-optimization prompt).
    The parent cannot enable it remotely. Play needs a declaration
    + video justification for background location at launch.
-4. **Google Maps API key** — placeholder system tayyar hai (upar v0.2
+4. **Real SIM-call distance overlay — WIRED in v0.6.5 (23 Nov 2026):**
+   Root cause of "call karnay pay distance show ho" not happening:
+   CallOverlayScreen existed but its ONLY trigger was the test
+   button on the Map screen — nothing ever showed it on a real
+   call. Now: `CallStateReceiver` (manifest-registered, so it works
+   even with the app dead) listens for PHONE_STATE (incoming) and
+   NEW_OUTGOING_CALL (dialled number). It matches the number
+   against a compact member cache Dart rewrites into
+   SharedPreferences on EVERY member change
+   (`apnacircle_call_cache`: normalized phone → name + last
+   lat/lon; my location comes from my own member entry) and shows
+   a small native WindowManager overlay (CallOverlayManager) OVER
+   the call screen — name + distance ("3.6 km away" / "Location
+   unknown" when either side has no fix). It stays up while the
+   call is answered (OFFHOOK), hides on IDLE, and tapping it
+   dismisses it. A non-member caller shows NOTHING — never an
+   overlay for a stranger. **Honest limits:** (a) the overlay
+   needs "Display over other apps" — without it nothing can
+   appear, and the Settings screen says so plainly; on Oppo /
+   Xiaomi an extra "Display pop-up windows" toggle may also be
+   needed. (b) Incoming numbers need READ_CALL_LOG on Android 10+
+   (without it the number arrives empty — Android rule). (c)
+   Outgoing numbers need PROCESS_OUTGOING_CALLS; the
+   NEW_OUTGOING_CALL broadcast is deprecated on Android 10+
+   (CallRedirectionService replaces it for *redirecting* calls,
+   which needs a system role grant — NOT taken in v0.6.5) but is
+   still delivered to holders of the permission for observing the
+   number; on Android 15+ it is no longer ordered and receivers
+   cannot launch background activities — the overlay is a window,
+   not an activity, so it still works. If Android ever stops
+   delivering it, the fallback is the call-screening role. (d)
+   Dual SIM: the broadcast carries no SIM slot, so the overlay
+   cannot say which SIM the call is on. (e) WhatsApp / app calls
+   have no SIM number and never show the overlay. **WHAT THE USER
+   MUST ENABLE ON EACH PHONE:** Settings → "Call distance
+   overlay" must say ON (tap Allow → "Display over other apps"
+   → ON); Phone + Call Log permission must also be granted
+   (same screen). Test: family member calls on SIM → overlay
+   with name + distance; you call a member → same overlay.
+5. **Google Maps API key** — placeholder system tayyar hai (upar v0.2
    point 4 dekhein); real key ke liye Google Cloud billing (card)
    chahiye hoti hai — ye parent ka step hai, is build mein nahi hai.
    Bina key ke map nahi khulta.
-5. **Google Play Billing — asal khareed:** product
+6. **Google Play Billing — asal khareed:** product
    `apnacircle_family_yearly` Play Console mein banana hai (subscription,
    $5/year) + Play developer account ($25, parent khud). Tab tak Plan
    screen "not in the Play Store yet" kehti hai.
 6. **Privacy policy:** contact email bhar diya gaya (v0.5/v0.6);
    [PLAY_STORE_URL] aur [LAUNCH_DATE] launch par.
-6. **Parent-phone-loss recovery — v0.3 mein code ho gaya:** account-based
+7. **Parent-phone-loss recovery — v0.3 mein code ho gaya:** account-based
    control, Email + Phone OTP login, PIN hash circle par save, "Restore
    my circles" (Circle screen). Baaki: do-phone test (naye phone par
    login → circle + PIN wapas). Co-parent / backup admin abhi nahi bana.
-7. **Device Owner setup guide (QR, ek dafa)** — abhi nahi likha; FRP note
+8. **Device Owner setup guide (QR, ek dafa)** — abhi nahi likha; FRP note
    Features 12 mein hai. **Root / system-app raasta kabhi nahi.**
 
 ## Real-phone checklist (APK milne ke baad, launch se pehle)
@@ -482,9 +521,12 @@ Ye sab is VM par verify NAHI ho sakta — asal phone par karna lazmi hai:
 - [ ] Device Admin: Settings se protection ON karein → uninstall ki
       koshish karein (rukni chahiye) → admin band karein → parent ko
       alert mile.
-- [ ] SIM call: family member SIM se call kare — overlay par naam +
-      distance (km) dikhe. Dual SIM par dono SIMs test karein. Pehle
-      Settings mein Phone + Call Log ki ijazat dein.
+- [ ] SIM call (v0.6.5): family member SIM se call kare — overlay par naam +
+      distance (km) dikhe. Aap member ko call karein — wahi overlay dikhe.
+      Pehle Settings mein Phone + Call Log ki ijazat dein AUR "Call
+      distance overlay" ON karein (Display over other apps). Dual SIM
+      par dono SIMs test karein. Overlay par tap karne se wo band ho.
+      Non-member ki call par kuch nahi dikhna chahiye.
 - [ ] Account delete: Settings → Delete account → confirm → account
       delete ho, dobara sign in na ho.
 - [ ] App icon: home screen par naya icon (green shield + pin) dikhe.
