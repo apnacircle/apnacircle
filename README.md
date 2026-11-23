@@ -1,12 +1,57 @@
 # ApnaCircle — Real Android App (Flutter)
 
-**Status (22 Nov 2026): v0.3 source complete. `flutter analyze` clean (no issues),
-`flutter test` 29/29 pass (18 old + 11 new Firebase/SMS tests). Firebase
-console DONE (project `apnacircle-22ef3`, RTDB asia-southeast1, Auth Phone +
+**Status (23 Nov 2026): v0.5 source complete. `flutter analyze` clean (no issues),
+`flutter test` 49/49 pass. Firebase console DONE (project `apnacircle-22ef3`, RTDB asia-southeast1, Auth Phone +
 Email ON, FCM API enabled) and the code is wired for it — two-phone
 admin/child sync is implemented, NOT yet tested on real phones (see
 "Real-phone checklist"). This is the REAL native app, NOT the web demo
-(`apnacircle-shareable-demo`).**
+(`apnacircle-shareable-demo`). GitHub Actions builds the APK on push
+(runs #28, #43, #59 all SUCCESS — v0.4 APK delivered 23 Nov 2026).**
+
+## v0.5 — kya naya hai (23 Nov 2026, "complete bana do" order par)
+
+1. **SIM-call REAL number:** `MainActivity.kt` ab `READ_PHONE_STATE` +
+   `READ_CALL_LOG` dono mangta hai (pehle sirf Phone State tha — Android 10+
+   number sirf Call Log ke sath deta hai). Settings mein wazahat ke sath
+   "Allow" ka button hai; bina permission ke number khali aata hai (ye
+   Android ka rule hai, bug nahi). **Limit (sach):** dual-SIM ka
+   behaviour har phone par alag ho sakta hai — asal phone par test lazmi.
+2. **Device Admin (uninstall protection):** `ApnaCircleDeviceAdminReceiver`
+   + Settings mein enable/disable + status. Admin on ho to Android app
+   uninstall nahi hone deta — pehle admin band karna parta hai, aur band
+   karte hi parent ko RTDB event se alert milta hai. **Sach:** koi app
+   uninstall ko poori tarah BLOCK nahi kar sakti — ye extra step + alert
+   hai, na-todne-wala lock nahi.
+3. **SIM-change alert + boot auto-start:** `BootReceiver` har reboot par
+   SIM fingerprint (operator ka SHA-256 hash — ICCID/IMSI kabhi nahi,
+   Android 10+ normal apps ko woh deta hi nahi) check karta hai; badli
+   ho to pending event + notification, app khulte hi RTDB event parent
+   ko. **Limits (sach):** same-carrier SIM swap detect nahi hota; nayi
+   SIM ko alert ke liye net chahiye; factory reset se app delete ho
+   jati hai.
+4. **Cloud Function — asal phone-to-phone push:** `functions/index.js`
+   (`sendCircleEventPush`) — naye RTDB event par circle ke baaqi members
+   ke FCM tokens par push bhejta hai. v1 trigger (Spark free plan par
+   chalta hai; v2 ko Blaze/card chahiye hota — is liye v1 hi rakha hai).
+   Deploy abhi NAHI hua — `firebase login` + `firebase deploy --only
+   functions` parent ka step hai (FIREBASE_SETUP.md §4).
+5. **App icon:** asli icon (dark green shield + location pin) ab launcher
+   icon hai — mipmap sizes + adaptive icon, `assets/icon/app_icon_1024.png`
+   source.
+6. **Account delete (Play requirement):** Settings → Delete account —
+   confirm dialog, phir RTDB se apna `users/{uid}` node + apne member
+   nodes delete, phir Auth account delete, local data clear (trial cache
+   rehta hai taaki delete ke baad demo mode mein trial dobara na mile).
+   Recent-login chahiye ho to "Sign in again first" batata hai.
+7. **Play Billing ($5/year):** `in_app_purchase` + product id
+   `apnacircle_family_yearly`; Plan screen ka Subscribe button ab asal
+   store flow kholta hai. Product abhi Play Console mein NAHI hai — tab
+   tak screen saaf kehti hai "plan is not in the Play Store yet"; charge
+   kabhi fake nahi hota. Asal khareed sirf Play Console listing + $25
+   account ke baad chalegi.
+8. **Privacy policy complete:** `PRIVACY_POLICY.md` poori bhar di — sirf
+   **[CONTACT_EMAIL] baaqi hai** (Mujahid ko apna email dena hai, andaza
+   nahi lagaya). [PLAY_STORE_URL] aur [LAUNCH_DATE] launch par bharne hain.
 
 ## v0.3 — kya naya hai (22 Nov 2026, "complete karo" order par)
 
@@ -276,44 +321,40 @@ flutter build appbundle --release   # Play Store ko AAB chahiye
   (masalan App Lock ke liye Family Link jaisa tareeqa). Ye submission
   se pehle check karna lazmi hai.
 
-## Jo abhi baaki hai (v0.3 ke baad)
+## Jo abhi baaki hai (v0.5 ke baad)
 
-1. **Firebase — baaki cheezein (code ho gaya, test baaki):**
-   * Published RTDB rules ko `FIREBASE_SETUP.md` §2 ke FULL text se
-     match karein (sirf member-only block se Join circle FAIL hota
-     hai — self-write exception + `users/`/`invites/` blocks lazmi).
-   * GitHub Actions build mein `google-services.json` CI secret se
-     inject karein (gitignored hai — bina is ke runner ki APK demo
-     mode mein chalegi).
+1. **Firebase — baaki cheezein:**
+   * **Cloud Function deploy (lazmi, parent ka step):** `firebase login`
+     + `firebase deploy --only functions` (FIREBASE_SETUP.md §4) — bina
+     is ke band app par push nahi aayega, SOS sirf khuli app par dikhega.
    * **Do-phone test (lazmi):** parent circle banaye → child code se
      join kare → live location, remote lock, SOS — teeno check karein.
-   * FCM server-side push (Cloud Function) — abhi SOS RTDB events se
-     deliver hota hai; band app par push ke liye server chahiye.
    * Gmail par 6-digit OTP code (Firebase mein built-in nahi — link
      hai; code ke liye Cloud Function + email sender chahiye).
+   * Phone OTP (SMS) ke liye Firebase ko billing (Blaze) chahiye —
+     22 Nov 2026 ko `BILLING_NOT_ENABLED` error aaya tha. Bina card ke
+     Phone OTP nahi chalega; Gmail login billing ke baghair chalta hai.
 2. **Native App Lock enforcement:** `AppLockService.kt` v0.2 mein
    foreground check + time-window evaluation karta hai, lekin PIN
    overlay abhi MainActivity launch hai (dedicated LockActivity +
-   Device Admin baaki) —
-   AccessibilityService se locked app ko rokna + PIN screen, aur Device
-   Admin taaki bacha app uninstall na kar sake. Asal phone par test
-   lazmi hai.
-3. **Native SIM-call detection:** `MainActivity.kt` mein
-   `incomingNumber` abhi `null` deta hai — TelephonyManager /
-   CallScreeningService se asal ringing number lena baaki hai.
-4. **Google Maps API key** — placeholder system tayyar hai (upar v0.2
-   point 4 dekhein); real key build machine par set karni hai. **App icon**
-   abhi Flutter ka default hai.
-5. **Google Play Billing** ($5/year subscription) + **privacy policy**
-   (draft `PRIVACY_POLICY.md` mein hai, placeholders bharne hain).
-6. **Stolen-phone / SIM-change alert + anti-tamper:** SIM-change detection
-   (ICCID/IMSI), boot auto-start, Device Admin wiring, Device Owner setup
-   guide (QR, ek dafa), FRP note. Limits upar Features 10–12 mein likhe
-   hain — net ke bagair alert nahi, recovery reset nahi rukta, root nahi.
-7. **Parent-phone-loss recovery — v0.3 mein code ho gaya:** account-based
+   SYSTEM_ALERT_WINDOW overlay baaki). Asal phone par test lazmi hai.
+3. **Google Maps API key** — placeholder system tayyar hai (upar v0.2
+   point 4 dekhein); real key ke liye Google Cloud billing (card)
+   chahiye hoti hai — ye parent ka step hai, is build mein nahi hai.
+   Bina key ke map nahi khulta.
+4. **Google Play Billing — asal khareed:** product
+   `apnacircle_family_yearly` Play Console mein banana hai (subscription,
+   $5/year) + Play developer account ($25, parent khud). Tab tak Plan
+   screen "not in the Play Store yet" kehti hai.
+5. **Privacy policy:** sirf **[CONTACT_EMAIL] baaqi hai** — Mujahid apna
+   email de to bhar di jaye; [PLAY_STORE_URL] aur [LAUNCH_DATE] launch
+   par.
+6. **Parent-phone-loss recovery — v0.3 mein code ho gaya:** account-based
    control, Email + Phone OTP login, PIN hash circle par save, "Restore
    my circles" (Circle screen). Baaki: do-phone test (naye phone par
    login → circle + PIN wapas). Co-parent / backup admin abhi nahi bana.
+7. **Device Owner setup guide (QR, ek dafa)** — abhi nahi likha; FRP note
+   Features 12 mein hai. **Root / system-app raasta kabhi nahi.**
 
 ## Real-phone checklist (APK milne ke baad, launch se pehle)
 
@@ -327,13 +368,24 @@ Ye sab is VM par verify NAHI ho sakta — asal phone par karna lazmi hai:
       Parent phone se child ko lock karein → child ke phone par lock
       lage (time window ke andar bhi).
 - [ ] SOS / alerts: SOS dabane par parent ko notification (RTDB event —
-      app khula ho; band app par push abhi server ke bagair nahi).
+      app khula ho; band app par push sirf Cloud Function deploy ke
+      baad aayega — pehle deploy karein, phir test karein).
+- [ ] SIM-change: child ke phone mein dusri SIM daal kar reboot karein —
+      parent ko "SIM card changed" alert mile (nayi SIM mein net zaroori).
+- [ ] Device Admin: Settings se protection ON karein → uninstall ki
+      koshish karein (rukni chahiye) → admin band karein → parent ko
+      alert mile.
+- [ ] SIM call: family member SIM se call kare — overlay par naam +
+      distance (km) dikhe. Dual SIM par dono SIMs test karein. Pehle
+      Settings mein Phone + Call Log ki ijazat dein.
+- [ ] Account delete: Settings → Delete account → confirm → account
+      delete ho, dobara sign in na ho.
+- [ ] App icon: home screen par naya icon (green shield + pin) dikhe.
 - [ ] Offline SMS: child ka data off karein → 15 min mein parent ko
       SMS location mile, map par "SMS se aayi" dikhe. SMS sirf parent
       ke number par jaye.
 - [ ] Circles: parent naye phone par usi account se login kare → wahi
       circle + wahi PIN wapas (bache ke phone par kuch nahi karna).
-- [ ] Device Admin: bacha ApnaCircle uninstall na kar sake.
 - [ ] Account delete + privacy policy link (Play requirement).
 6. **iOS:** baad mein — iOS par SIM-call distance Apple ki pabandi ki
    wajah se nahi ho sakta.
@@ -348,22 +400,32 @@ Ye sab is VM par verify NAHI ho sakta — asal phone par karna lazmi hai:
 * Demo PIN `1234` sirf web demo mein tha — is real app mein koi
   default PIN nahi hai; parent pehli dafa apna PIN set karta hai.
 
-## APK build status — 22 Nov 2026 (fast-track attempt)
-- `flutter analyze`: clean. `flutter test`: 9/9 passed. Source is ready.
-- **No APK exists yet.** Root cause found by test (not guesswork): on this VM,
-  Java loopback TCP is intercepted — a Java program sending `ABCDEFGH12345678`
-  over 127.0.0.1 receives `muse: Other TCP ...` instead, while the same test in
-  Python works fine. Gradle's daemon talks to its client over loopback TCP, so
-  every build dies with `Could not receive a message from the daemon`
-  (`Unexpected type tag 109` = 'm' of "muse"). No Gradle setting can fix this
-  here. Also the egress-proxy password rotates, so any proxy password saved in
-  gradle.properties goes stale (and Gradle reads /root/.gradle, not ~/.gradle).
+## APK build status — 23 Nov 2026 (update)
+- GitHub Actions builds the APK on every push (`.github/workflows/build-apk.yml`).
+  Runs #28 (v0.2), #43 (v0.3) aur #59 (v0.4, trial) — teeno SUCCESS.
+  APK: run ke Artifacts (`apnacircle-apk`) se download karein.
+- Is VM par `flutter build apk` ABHI BHI NAHI chalta (Gradle daemon ka
+  loopback TCP intercept hota hai — neeche purani tafseel). Local proof:
+  `flutter analyze` clean + `flutter test` 49/49 + `flutter build bundle` exit 0.
+- **Purani tafseel (22 Nov 2026, fast-track attempt):** is VM mein shuru mein
+  Flutter / Dart / Java / Android SDK kuch nahi tha. Flutter 3.24.5 download
+  kar ke install kiya (`~/flutter-sdk`), JDK 17 (Temurin) bhi install kiya —
+  `flutter analyze` clean aur `flutter test` 9/9 pass ho gaye. Android SDK
+  bhi manual install kar liya (`~/android-sdk`: platform-tools, platform-34,
+  build-tools 34.0.0, licenses) — `sdkmanager` ka Java HTTP stack is VM ke
+  authenticated egress proxy (CONNECT tunnel) se guzar nahi pata
+  (`HttpURLConnection.doTunneling` mein `NoSuchElementException`), is liye
+  packages `curl` se download kiye. Gradle daemon ka IPC bhi pehle fail hua
+  (`Could not receive a message from the daemon`) — ye
+  `-Djava.net.preferIPv4Stack=true` se theek ho gaya aur build 77 second tak
+  chala. **Aakhri blocker:** Gradle ke dependency downloads (Android Gradle
+  Plugin 8.3.2, `dl.google.com` aur `repo.maven.apache.org` se) mein
+  `java.net.SocketException: Connection reset` aata hai — Java ka TLS is VM
+  ke egress proxy se reset ho jata hai, jab ke `curl` se wahi URLs 200 OK
+  dete hain. Ye is VM ke network/proxy ki pabandi hai, code ki ghalti nahi.
 - **Fastest way to get the APK (about 10 minutes, no card, no new account
   needed if you already have a free GitHub account):**
   1. Push this folder to a free GitHub repo.
   2. The file `.github/workflows/build-apk.yml` is already in the project —
      GitHub Actions builds the APK automatically on push.
   3. Download it from the run's Artifacts (`apnacircle-apk`).
-  - Or on any normal PC/Mac: install Flutter 3.24.5 + JDK 17 + Android SDK 34,
-    then run `flutter pub get && flutter build apk --release` in this folder.
-    The wrapper now points at the local Gradle 8.4 zip, so no wrapper download.
