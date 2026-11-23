@@ -8,6 +8,49 @@ admin/child sync is implemented, NOT yet tested on real phones (see
 (`apnacircle-shareable-demo`). GitHub Actions builds the APK on push
 (runs #28, #43, #59 all SUCCESS — v0.4 APK delivered 23 Nov 2026).**
 
+## v0.6 — kya naya hai (23 Nov 2026, "abhi bana do" order par)
+
+**Gmail par 6-digit OTP code — AB BAN GAYA.** Firebase Auth mein
+6-digit EMAIL code built-in nahi hota (sirf verification LINK hota
+hai) — is liye code ka poora flow khud banaya gaya hai: Cloud
+Function + email sender.
+
+1. **Cloud Function (`functions/index.js` — naya):**
+   `requestEmailCode` + `verifyEmailCode` (https.onCall, v1 — Spark
+   plan par chalte hain). Code sirf SHA-256 hash ki shakal mein
+   RTDB `emailCodes/{sha256(email)}` mein save hota hai — code khud
+   kabhi save nahi hota, kabhi log nahi hota; email bhi raw nahi
+   save hoti (key us ka hash hai). **Limits:** code 10 minute ka,
+   5 ghalat try par lock (code delete), aik email par 1 ghante mein
+   max 5 code. Sahi code par function Auth user find-or-create kar
+   ke custom token deta hai.
+2. **Email sender (nodemailer, SMTP):** code Gmail inbox mein
+   nodemailer se bheja jata hai. SMTP sirf environment se aata hai
+   (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`)
+   — repo mein koi password ya email hardcode NAHI hai. SMTP set na
+   ho to function saaf error deta hai (`email-not-configured`) aur
+   kabhi ye nahi kehta ke code bhej diya.
+3. **App — "Email code se login" (login screen ka teesra option):**
+   Phone (SMS OTP) aur Gmail (password + link) waisi ki waisi hain —
+   kuch nahi badla. Naya flow: email likho → "Send code to Gmail"
+   → 6-digit code likho → "Verify code & Sign in". Ghalat/expired/
+   zyada try ki plain-language messages EN + UR dono mein hain.
+   Resend button rate limit manta hai (jaldi dobara bhejo to saaf
+   error dikhta hai).
+4. **Tests:** Dart 8 naye tests (code format, hash, expiry, attempt
+   limit, EN+UR messages, login screen par teesra option) + Node 8
+   tests (`functions/email_otp.test.js`). Kul: analyze clean,
+   **57/57 Flutter tests pass**, `flutter build bundle` exit 0.
+5. **Deploy + SMTP setup baaqi hai (FIREBASE_SETUP.md §4 dekhein):**
+   `firebase deploy --only functions` + SMTP env set karna hai —
+   tab tak code wala login "not set up yet" kahega (password wala
+   login chalta rehta hai). **Spark-plan sach:** free Spark plan
+   sirf Google services tak outbound traffic deta hai, aur SMTP
+   sending Spark par routinely block hoti hai — pehli asal code
+   email `email-send-failed` de to Blaze (billing) hi hal hai; ye
+   Mujahid ka faisla hai (Phone OTP wala hi sawal), card Lucky
+   kabhi nahi lagati.
+
 ## v0.5 — kya naya hai (23 Nov 2026, "complete bana do" order par)
 
 1. **SIM-call REAL number:** `MainActivity.kt` ab `READ_PHONE_STATE` +
@@ -49,14 +92,17 @@ admin/child sync is implemented, NOT yet tested on real phones (see
    tak screen saaf kehti hai "plan is not in the Play Store yet"; charge
    kabhi fake nahi hota. Asal khareed sirf Play Console listing + $25
    account ke baad chalegi.
-8. **Privacy policy complete:** `PRIVACY_POLICY.md` poori bhar di — sirf
-   **[CONTACT_EMAIL] baaqi hai** (Mujahid ko apna email dena hai, andaza
-   nahi lagaya). [PLAY_STORE_URL] aur [LAUNCH_DATE] launch par bharne hain.
+8. **Privacy policy complete:** `PRIVACY_POLICY.md` poori bhar di —
+   contact email **mujahidsiddique0786@gmail.com** (Mujahid ne diya,
+   23 Nov 2026 ~07:58 PKT). [PLAY_STORE_URL] aur [LAUNCH_DATE]
+   launch par bharne hain.
 
 ## v0.3 — kya naya hai (22 Nov 2026, "complete karo" order par)
 
 1. **Firebase Auth — account-based:** sign in with **Phone (6-digit SMS
-   OTP to the SIM)** or **Gmail (email + password)**. A circle belongs
+   OTP to the SIM)**, **Gmail (email + password)** ya **Email code
+   (v0.6 — Gmail inbox mein 6-digit code, password nahi chahiye)**.
+   A circle belongs
    to an ACCOUNT, not a phone — parent naye phone par usi account se
    login kare to wahi circles + wahi PIN wapas. Auth screen pehli
    dafa khulti hai (ya Settings → Account & Circles). "Continue in
@@ -191,7 +237,9 @@ Family location safety app — Mujahid's idea, name FINAL: **ApnaCircle**.
     bhi AUR Gmail par bhi** (user, 22 Nov 2026 ~13:23 PKT): number gum ho jaye
     to SIM foran nikal bhi sakti hai, is liye OTP sirf SIM par nahi, Gmail par
     bhi aana chahiye — login/recovery ke liye dono option hon. Firebase Auth
-    mein Phone + Email/Password dono ON rakhne hain. (3) Parent PIN account ke saath cloud mein save hona
+    mein Phone + Email/Password dono ON rakhne hain — aur v0.6 se Gmail par
+    6-digit code bhi aata hai ("Email code se login", Cloud Function + SMTP;
+    deploy + SMTP setup baaqi hai). (3) Parent PIN account ke saath cloud mein save hona
     chahiye, taake naye phone par wahi PIN chale (sirf phone mein save nahi).
     (4) Optional: aik dusra trusted family member **co-parent / backup admin**
     ho, taake parent ka phone gum hote hi foran control us ke paas ho — naye
@@ -321,7 +369,7 @@ flutter build appbundle --release   # Play Store ko AAB chahiye
   (masalan App Lock ke liye Family Link jaisa tareeqa). Ye submission
   se pehle check karna lazmi hai.
 
-## Jo abhi baaki hai (v0.5 ke baad)
+## Jo abhi baaki hai (v0.6 ke baad)
 
 1. **Firebase — baaki cheezein:**
    * **Cloud Function deploy (lazmi, parent ka step):** `firebase login`
@@ -329,8 +377,11 @@ flutter build appbundle --release   # Play Store ko AAB chahiye
      is ke band app par push nahi aayega, SOS sirf khuli app par dikhega.
    * **Do-phone test (lazmi):** parent circle banaye → child code se
      join kare → live location, remote lock, SOS — teeno check karein.
-   * Gmail par 6-digit OTP code (Firebase mein built-in nahi — link
-     hai; code ke liye Cloud Function + email sender chahiye).
+   * **Email-code login (v0.6) — deploy + SMTP baaqi:** code ban gaya
+     (functions + app + tests), lekin live code tabhi aayega jab
+     `firebase deploy --only functions` ho aur SMTP env set ho
+     (FIREBASE_SETUP.md §4). Spark plan par SMTP block ho sakti hai —
+     Blaze/billing Mujahid ka faisla hai.
    * Phone OTP (SMS) ke liye Firebase ko billing (Blaze) chahiye —
      22 Nov 2026 ko `BILLING_NOT_ENABLED` error aaya tha. Bina card ke
      Phone OTP nahi chalega; Gmail login billing ke baghair chalta hai.
@@ -346,9 +397,8 @@ flutter build appbundle --release   # Play Store ko AAB chahiye
    `apnacircle_family_yearly` Play Console mein banana hai (subscription,
    $5/year) + Play developer account ($25, parent khud). Tab tak Plan
    screen "not in the Play Store yet" kehti hai.
-5. **Privacy policy:** sirf **[CONTACT_EMAIL] baaqi hai** — Mujahid apna
-   email de to bhar di jaye; [PLAY_STORE_URL] aur [LAUNCH_DATE] launch
-   par.
+5. **Privacy policy:** contact email bhar diya gaya (v0.5/v0.6);
+   [PLAY_STORE_URL] aur [LAUNCH_DATE] launch par.
 6. **Parent-phone-loss recovery — v0.3 mein code ho gaya:** account-based
    control, Email + Phone OTP login, PIN hash circle par save, "Restore
    my circles" (Circle screen). Baaki: do-phone test (naye phone par
