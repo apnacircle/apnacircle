@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- App Lock AccessibilityService config (v0.6.3).
+     This file + the <service> block in AndroidManifest.xml are what
+     was MISSING in v0.2–v0.6.2: AppLockService.kt existed but was
+     never declared, so Android could never bind it, it never
+     appeared in Settings → Accessibility, and no locked app was
+     ever blocked. That is the root cause of "App lock nhi ho rhi".
+     - typeWindowStateChanged only: we only need to know which app
+       came to the foreground (its package name). Nothing else.
+     - canRetrieveWindowContent="false": we never read screen
+       content — minimal data, better for Play review.
+     - feedbackGeneric: plain foreground detection, no spoken/braille
+       feedback. -->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/accessibility_service_description"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:notificationTimeout="100"
+    android:canRetrieveWindowContent="false"
+    android:settingsActivity="com.apnacircle.app.MainActivity" />
