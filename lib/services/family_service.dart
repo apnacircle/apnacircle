@@ -143,14 +143,42 @@ class FamilyService extends ChangeNotifier {
       _members.add(mine);
     }
     updateLocation(uid, lat, lon, DateTime.now());
-    // Battery rides on the same node.
+    // Battery rides on the same node — stamped with when it was
+    // read, so viewers can tell a live level from a stale one
+    // (v0.6.6).
+    final now = DateTime.now();
     final i = _members.indexWhere((m) => m.id == uid);
     if (i >= 0) {
-      _members[i] = _members[i].copyWith(battery: battery);
+      _members[i] =
+          _members[i].copyWith(battery: battery, batteryAt: now);
       _save();
       unawaited(_sync!.publishMyLocation(circleId, _members[i]));
       notifyListeners();
     }
+  }
+
+  /// Publish ONLY my battery (v0.6.6): the level changed (or 15
+  /// minutes passed) while I have not moved, so there is no new
+  /// location to send. Unknown levels never publish — there is
+  /// nothing new to share, and -1 must never overwrite a real
+  /// level (v0.6.2). No-op in demo mode.
+  Future<void> publishSelfBattery(int battery) async {
+    if (!isSynced) return;
+    if (battery < 0 || battery > 100) return;
+    final circleId = activeCircleId!;
+    final uid = _sync!.uid!;
+    final i = _members.indexWhere((m) => m.id == uid);
+    if (i < 0) return;
+    final now = DateTime.now();
+    _members[i] = _members[i].copyWith(battery: battery, batteryAt: now);
+    _save();
+    unawaited(_sync!.publishBattery(
+      circleId: circleId,
+      uid: uid,
+      battery: battery,
+      at: now,
+    ));
+    notifyListeners();
   }
 
   /// Parent-only: change one alert for one member. The caller (UI)
