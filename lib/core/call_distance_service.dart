@@ -46,4 +46,36 @@ class CallDistanceService {
       return null;
     }
   }
+
+  /// True when the app holds READ_CALL_LOG. On Android 10+ the
+  /// ringing number is only delivered with this permission — with
+  /// only READ_PHONE_STATE the listener runs but the number comes
+  /// back empty. That is an Android rule, not a bug here.
+  static Future<bool> hasCallLogPermission() async {
+    try {
+      return await _channel.invokeMethod<bool>('hasCallLogPermission') ??
+          false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  /// Ask Android for READ_PHONE_STATE + READ_CALL_LOG (native
+  /// permission dialog). The CALLER must show a plain explanation
+  /// first — never request silently. Returns which permissions
+  /// were granted. After a grant, re-registers the listener so
+  /// numbers start flowing.
+  static Future<Map<String, bool>> requestCallPermissions() async {
+    try {
+      final raw = await _channel
+          .invokeMethod<Map<Object?, Object?>>('requestCallPermissions');
+      final out = <String, bool>{};
+      raw?.forEach((k, v) {
+        if (k is String && v is bool) out[k] = v;
+      });
+      return out;
+    } on PlatformException {
+      return {};
+    }
+  }
 }
