@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/chat_paging.dart';
 import '../models/chat_message.dart';
 import '../services/auth_service.dart';
 import '../services/family_service.dart';
@@ -20,7 +21,7 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  final _messages = <ChatMessage>[
+  var _messages = <ChatMessage>[
     ChatMessage(
       id: '1',
       senderId: 'ali',
@@ -31,6 +32,12 @@ class _ChatScreenState extends State<ChatScreen> {
   ];
   final _ctrl = TextEditingController();
   bool _subscribed = false;
+  // v0.6.7 pagination: the live subscription only carries the
+  // newest chatPageSize messages. Older pages are fetched on demand
+  // and merged in — a live update must never drop them again.
+  bool _livePageReceived = false;
+  bool _hasMoreOlder = false;
+  bool _loadingOlder = false;
 
   @override
   void initState() {
@@ -44,11 +51,41 @@ class _ChatScreenState extends State<ChatScreen> {
       sync.subscribeChat(sync.activeCircleId!, (remote) {
         if (!mounted) return;
         setState(() {
-          _messages
-            ..clear()
-            ..addAll(remote);
+          if (!_livePageReceived) {
+            // First live page replaces the local demo seed message,
+            // exactly as before v0.6.7.
+            _livePageReceived = true;
+            _messages = List.of(remote);
+          } else {
+            // Later updates merge in — older pages the user loaded
+            // stay visible, and a new message never wipes them.
+            _messages = mergeChatMessages(_messages, remote);
+          }
+          // A full page means there may be older messages to load.
+          _hasMoreOlder = remote.length >= chatPageSize;
         });
       });
+    });
+  }
+
+  Future<void> _loadOlder() async {
+    if (_loadingOlder || _messages.isEmpty) return;
+    final sync = context.read<SyncService>();
+    if (!sync.isAvailable || sync.activeCircleId == null) return;
+    setState(() => _loadingOlder = true);
+    final older = await sync.loadOlderChatMessages(
+      sync.activeCircleId!,
+      beforeId: _messages.first.id,
+    );
+    if (!mounted) return;
+    setState(() {
+      _loadingOlder = false;
+      if (older.isEmpty) {
+        _hasMoreOlder = false;
+        return;
+      }
+      _messages = mergeChatMessages(_messages, older);
+      _hasMoreOlder = older.length >= chatPageSize;
     });
   }
 
@@ -101,6 +138,20 @@ class _ChatScreenState extends State<ChatScreen> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              if (_hasMoreOlder)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Center(
+                    child: TextButton(
+                      onPressed: _loadingOlder ? null : _loadOlder,
+                      child: Text(
+                        _loadingOlder
+                            ? 'Loading…'
+                            : 'Load older messages',
+                      ),
+                    ),
+                  ),
+                ),
               for (final m in _messages)
                 ListTile(
                   title: Text(m.senderName),
