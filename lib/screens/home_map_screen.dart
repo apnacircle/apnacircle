@@ -393,7 +393,11 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     if (m.locationViaSms) {
       status = 'SMS se aayi · ${_fmtTime(m.lastSeen)} · $distance away';
     } else if (m.isOnline) {
-      status = 'Online · $distance away · Battery ${m.battery}%';
+      // Unknown battery (-1) shows no battery part at all — never
+      // "-1%" (v0.6.2). A real level keeps showing "Battery 81%".
+      status = m.hasKnownBattery
+          ? 'Online · $distance away · ${m.batteryLabel}'
+          : 'Online · $distance away';
     } else {
       status = 'Offline since ${_fmtTime(m.lastSeen)} · $distance away';
     }
