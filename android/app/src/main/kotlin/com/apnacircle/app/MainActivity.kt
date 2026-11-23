@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Bundle
 import android.provider.Settings
 import android.telephony.PhoneStateListener
 import android.telephony.SmsManager
@@ -53,17 +54,26 @@ import org.json.JSONObject
  *   SharedPreferences ("apnacircle_locks") so AppLockService can read
  *   it even after a reboot, and "isLockServiceEnabled" reports
  *   whether the user has enabled the Accessibility service.
+ *   v0.6.3: "applyLocks" also resolves custom apps added by name
+ *   ("custom:<name>") to real package names via PackageManager, and
+ *   stamps a version so the service reloads changed rules live.
+ *   "openAccessibilitySettings" opens Settings → Accessibility —
+ *   the service can only be enabled by the user's own tap there.
  *
  * WHAT STILL NEEDS A REAL PHONE (do NOT claim these work until tested):
  * 1. SIM-call number on Android 10+ with READ_CALL_LOG granted, on
  *    both SIMs of a dual-SIM phone. CallScreeningService would be
  *    more robust but requires the call-screening role — a big UX +
  *    Play-permission decision, NOT taken in v0.5.
- * 2. AppLockService must be enabled by the user in Settings >
- *    Accessibility (Android shows a warning — that is normal).
- *    The PIN overlay is currently a launch of MainActivity with a
- *    "locked_package" extra; a true SYSTEM_ALERT_WINDOW overlay and
- *    a dedicated LockActivity are still to be built.
+ * 2. AppLockService (v0.6.3: declared in the manifest + config,
+ *    LockActivity PIN screen, Dart subscribes to locks at Home):
+ *    enable it in Settings > Accessibility (Android shows a
+ *    warning — that is normal); the Locks screen shows ON/OFF.
+ *    The child can still turn it OFF in Settings (Android rule);
+ *    Device Admin + the deactivation alert are the tripwire.
+ *    Test on a real phone: lock an app, open it, PIN screen must
+ *    appear; correct PIN = 5-minute grant; time windows across
+ *    midnight and across a day boundary.
  * 3. Device Admin (v0.5): enabling must be tested end-to-end —
  *    system admin screen, uninstall blocked while active, alert on
  *    deactivation. Honest limit: admin cannot truly BLOCK uninstall,
@@ -107,6 +117,33 @@ class MainActivity : FlutterActivity() {
 
     private fun devicePolicyManager(): DevicePolicyManager =
         getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        forwardLockedPackage(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        forwardLockedPackage(intent)
+    }
+
+    /**
+     * Compatibility: if MainActivity is ever launched with a
+     * "locked_package" extra (old service builds did that), hand it
+     * to the dedicated LockActivity instead of showing Home.
+     */
+    private fun forwardLockedPackage(intent: Intent?) {
+        val pkg = intent?.getStringExtra("locked_package") ?: return
+        val lock = Intent(this, LockActivity::class.java).apply {
+            putExtra(LockActivity.EXTRA_PACKAGE, pkg)
+            intent.getStringExtra("locked_app_name")?.let {
+                putExtra(LockActivity.EXTRA_APP_NAME, it)
+            }
+        }
+        startActivity(lock)
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -232,20 +269,48 @@ class MainActivity : FlutterActivity() {
                     // Dart sends {packages: [...], schedule: [{name, package,
                     // mode, window, ...}]}. Persist the schedule so
                     // AppLockService can enforce it after reboot.
+                    // v0.6.3: custom apps added by name ("custom:<name>")
+                    // are resolved to real package names here, and a
+                    // version timestamp is stamped so the service
+                    // reloads changed rules without restarting.
                     "applyLocks" -> {
                         val schedule = call.argument<List<Map<String, Any>>>("schedule")
+                        val resolved = (schedule ?: emptyList()).map { entry ->
+                            val pkg = entry["package"] as? String ?: ""
+                            if (pkg.startsWith("custom:")) {
+                                val real = resolvePackageForName(
+                                    pkg.removePrefix("custom:")
+                                )
+                                if (real != null) entry + ("package" to real) else entry
+                            } else {
+                                entry
+                            }
+                        }
                         val prefs = getSharedPreferences(
                             AppLockService.PREFS_NAME, Context.MODE_PRIVATE
                         )
                         prefs.edit()
                             .putString(
                                 AppLockService.KEY_SCHEDULE,
-                                org.json.JSONArray(schedule ?: emptyList<Map<String, Any>>()).toString()
+                                org.json.JSONArray(resolved).toString()
+                            )
+                            .putLong(
+                                AppLockService.KEY_SCHEDULE_VERSION,
+                                System.currentTimeMillis()
                             )
                             .apply()
                         result.success(isLockServiceEnabled())
                     }
                     "isLockServiceEnabled" -> result.success(isLockServiceEnabled())
+                    // Open Settings → Accessibility. Only the user's own
+                    // tap there can enable the service — no app can
+                    // enable an AccessibilityService by itself.
+                    "openAccessibilitySettings" -> {
+                        startActivity(
+                            Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                        )
+                        result.success(null)
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -398,10 +463,42 @@ class MainActivity : FlutterActivity() {
 
     private fun isLockServiceEnabled(): Boolean {
         val am = getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
+        // ALL_MASK (not FEEDBACK_GENERIC): our service declares
+        // feedbackGeneric, but the check must not depend on it.
         val enabled = am.getEnabledAccessibilityServiceList(
-            android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_GENERIC
+            android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK
         )
         return enabled.any { it.resolveInfo.serviceInfo.packageName == packageName }
+    }
+
+    /**
+     * Resolve a parent-typed app name ("Snapchat") to its real
+     * package name on THIS phone. Exact label match wins, then a
+     * "contains" match. Null when the app is not installed — the
+     * entry stays "custom:<name>" and can resolve on a later call.
+     */
+    private fun resolvePackageForName(name: String): String? {
+        val wanted = name.trim().lowercase()
+        if (wanted.isEmpty()) return null
+        val apps = try {
+            packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
+        } catch (e: Exception) {
+            return null
+        }
+        var contains: String? = null
+        for (app in apps) {
+            val label = try {
+                packageManager.getApplicationLabel(app)?.toString()?.lowercase()
+                    ?: ""
+            } catch (e: Exception) {
+                ""
+            }
+            if (label == wanted) return app.packageName
+            if (contains == null && label.contains(wanted)) {
+                contains = app.packageName
+            }
+        }
+        return contains
     }
 
     override fun onDestroy() {
