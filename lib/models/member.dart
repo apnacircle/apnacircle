@@ -11,6 +11,10 @@ class Member {
   final double? lon;
   final DateTime? lastSeen;
   final int battery; // 0-100, -1 = unknown
+
+  /// When this battery level was published (v0.6.6). Null =
+  /// written by an older app version that did not stamp it.
+  final DateTime? batteryAt;
   final bool isOnline;
   final bool locationSharingOn;
   final Map<AlertType, bool> alerts;
@@ -29,6 +33,7 @@ class Member {
     this.lon,
     this.lastSeen,
     this.battery = -1,
+    this.batteryAt,
     this.isOnline = false,
     this.locationSharingOn = true,
     this.locationViaSms = false,
@@ -47,11 +52,21 @@ class Member {
   /// Display text for the battery, or empty when unknown.
   String get batteryLabel => hasKnownBattery ? 'Battery $battery%' : '';
 
+  /// True when the shown battery level is older than 30 minutes
+  /// (v0.6.6) — the row marks it "(old)" so a stale value is never
+  /// mistaken for a live one. A missing timestamp (older app
+  /// versions) is never called stale.
+  bool get batteryIsStale =>
+      batteryAt != null &&
+      DateTime.now().difference(batteryAt!) >
+          const Duration(minutes: 30);
+
   Member copyWith({
     double? lat,
     double? lon,
     DateTime? lastSeen,
     int? battery,
+    DateTime? batteryAt,
     bool? isOnline,
     bool? locationSharingOn,
     bool? locationViaSms,
@@ -66,6 +81,7 @@ class Member {
         lon: lon ?? this.lon,
         lastSeen: lastSeen ?? this.lastSeen,
         battery: battery ?? this.battery,
+        batteryAt: batteryAt ?? this.batteryAt,
         isOnline: isOnline ?? this.isOnline,
         locationSharingOn: locationSharingOn ?? this.locationSharingOn,
         locationViaSms: locationViaSms ?? this.locationViaSms,
@@ -81,6 +97,7 @@ class Member {
         'lon': lon,
         'lastSeen': lastSeen?.toIso8601String(),
         'battery': battery,
+        'batteryAt': batteryAt?.toIso8601String(),
         'isOnline': isOnline,
         'locationSharingOn': locationSharingOn,
         'locationViaSms': locationViaSms,
@@ -98,6 +115,9 @@ class Member {
             ? null
             : DateTime.parse(j['lastSeen'] as String),
         battery: j['battery'] as int? ?? -1,
+        batteryAt: j['batteryAt'] == null
+            ? null
+            : DateTime.parse(j['batteryAt'] as String),
         isOnline: j['isOnline'] as bool? ?? false,
         locationSharingOn: j['locationSharingOn'] as bool? ?? true,
         locationViaSms: j['locationViaSms'] as bool? ?? false,
