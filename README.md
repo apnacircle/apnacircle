@@ -500,7 +500,30 @@ flutter build appbundle --release   # Play Store ko AAB chahiye
    member node now carries `batteryAt`, and a level older than
    30 minutes is marked "(old)" on the member row so a stale
    value is never mistaken for a live one.
-6. **Google Maps API key** — placeholder system tayyar hai (upar v0.2
+6. **Invisible-only performance — v0.6.7 (23 Nov 2026):** accuracy-first
+   rule (user order): NOTHING in this version may make any live
+   value look delayed or stale. (a) Faster cold start: the
+   network-bound startup work (FCM token fetch + notification
+   permission prompt, circle-list server refresh, SIM-change and
+   Device Admin pending-alert publishes) now runs AFTER the first
+   frame (`_runPostFrameStartup` in main.dart); before the first
+   frame only local SharedPreferences loads + Firebase init run.
+   (b) Chat pagination: the live subscription loads only the
+   newest 50 messages (was: the whole history, re-downloaded in
+   full on every new message); older pages load via "Load older
+   messages" (`loadOlderChatMessages`, `mergeChatMessages` —
+   a live update merges, never drops loaded older pages).
+   (c) Map tab is built lazily: `_mapTab` (GoogleMap + markers +
+   member cards) used to be constructed on EVERY build even on
+   other tabs; now only the selected tab is built.
+   Deliberately NOT changed: the 60 s / 50 m location rule, the
+   15-min battery rule, any publish timing, and no stale value is
+   ever shown as live. Skipped: APK minify/R8 (runtime safety
+   cannot be proven by tests + CI build alone on a safety app),
+   per-ABI APK splits (would change the CI artifact / delivery),
+   payload trimming (publish payloads already carry only fields
+   screens read), unused assets (pubspec declares none).
+7. **Google Maps API key** — placeholder system tayyar hai (upar v0.2
    point 4 dekhein); real key ke liye Google Cloud billing (card)
    chahiye hoti hai — ye parent ka step hai, is build mein nahi hai.
    Bina key ke map nahi khulta.
