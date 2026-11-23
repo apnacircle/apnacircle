@@ -60,26 +60,17 @@ Future<void> main() async {
     FirebaseMessaging.onBackgroundMessage(
       firebaseMessagingBackgroundHandler,
     );
-    await notifications.initialize();
   }
 
   // Load persisted state BEFORE the first frame, so AppRoot sees
   // the real language/PIN/auth/circle state (v0.2 never called
-  // load() — the PIN screen showed on every launch).
+  // load() — the PIN screen showed on every launch). These are all
+  // local SharedPreferences reads — fast, no network.
   await auth.loadDemoSkip();
   await pin.load();
   await sync.load();
   await trial.load();
   await family.load();
-
-  // v0.5 startup checks (do not block the first frame on them):
-  // * SIM-change: publish a pending boot event / live mismatch.
-  // * Device Admin: publish a pending deactivation alert.
-  // * Play Billing: connect in the background; the Plan screen
-  //   shows the state when it is ready.
-  await simChange.checkOnStart(sync: sync, auth: auth);
-  await deviceAdmin.publishPendingAlertIfAny(sync: sync, auth: auth);
-  unawaited(billing.initialize());
 
   runApp(
     MultiProvider(
@@ -100,6 +91,43 @@ Future<void> main() async {
       child: const ApnaCircleApp(),
     ),
   );
+
+  // v0.6.7: everything below touches the network (or shows a system
+  // permission prompt), and NONE of it gates the first screen — so
+  // it runs after the first frame instead of delaying the app
+  // opening. Before v0.6.7 these were awaited above runApp, so on
+  // a slow network the FCM token fetch alone could hold the app
+  // closed for seconds. Order matters: the circle list is
+  // refreshed first, because the SIM-change / Device Admin checks
+  // iterate it.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(_runPostFrameStartup(
+      notifications: notifications,
+      sync: sync,
+      auth: auth,
+      simChange: simChange,
+      deviceAdmin: deviceAdmin,
+      billing: billing,
+    ));
+  });
+}
+
+/// Post-first-frame startup (v0.6.7) — see main() above.
+Future<void> _runPostFrameStartup({
+  required NotificationService notifications,
+  required SyncService sync,
+  required AuthService auth,
+  required SimChangeService simChange,
+  required DeviceAdminService deviceAdmin,
+  required BillingService billing,
+}) async {
+  if (FirebaseBootstrap.available) {
+    await notifications.initialize();
+  }
+  await sync.refreshMyCircles();
+  await simChange.checkOnStart(sync: sync, auth: auth);
+  await deviceAdmin.publishPendingAlertIfAny(sync: sync, auth: auth);
+  unawaited(billing.initialize());
 }
 
 class ApnaCircleApp extends StatelessWidget {
