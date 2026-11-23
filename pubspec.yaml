@@ -1,7 +1,7 @@
 name: apnacircle
 description: "ApnaCircle - family location safety app. Live location, SIM-call caller distance, SOS, parent-PIN locks. Family plan 5 USD/year, parent pays only."
 publish_to: "none"
-version: 0.6.3+9
+version: 0.6.4+10
 
 environment:
   sdk: ">=3.5.0 <4.0.0"
@@ -48,6 +48,7 @@ dependencies:
   # fall back to SMS location sharing (GPS + SMS need no data).
   connectivity_plus: ^6.1.0
   in_app_purchase: ^3.2.3
+  flutter_foreground_task: ^9.2.2
 
 dev_dependencies:
   flutter_test:
