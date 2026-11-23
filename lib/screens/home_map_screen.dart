@@ -518,18 +518,34 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     return '$h:$m';
   }
 
+  /// Build ONLY the selected tab (v0.6.7). Before this, `build()`
+  /// called `_mapTab(members)` on EVERY build — constructing the
+  /// GoogleMap widget, computing all markers and building every
+  /// member card — even while the user was on Chat, Locks or
+  /// Settings. The map platform view was never mounted for other
+  /// tabs, but the widget subtree + marker work was wasted on
+  /// every setState. The selected tab renders exactly as before.
+  Widget _pageFor(int tab, List<Member> members) {
+    switch (tab) {
+      case 0:
+        return _mapTab(members);
+      case 1:
+        return const AlertsScreen();
+      case 2:
+        return const LocksScreen();
+      case 3:
+        return const ChatScreen();
+      case 4:
+        return const PlanScreen();
+      default:
+        return const SettingsScreen();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final family = context.watch<FamilyService>();
     final members = family.members;
-    final pages = [
-      _mapTab(members),
-      const AlertsScreen(),
-      const LocksScreen(),
-      const ChatScreen(),
-      const PlanScreen(),
-      const SettingsScreen(),
-    ];
     return Scaffold(
       appBar: AppBar(
         title: const Text('ApnaCircle'),
@@ -553,7 +569,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
           ),
         ],
       ),
-      body: pages[_tab],
+      body: _pageFor(_tab, members),
       floatingActionButton: _tab == 0
           ? FloatingActionButton.extended(
               onPressed: () => _sendSos(context),
