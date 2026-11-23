@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/alerts.dart';
 import '../core/app_lock_service.dart';
+import '../core/chat_paging.dart';
 import '../models/chat_message.dart';
 import '../models/circle.dart';
 import '../models/member.dart';
@@ -80,7 +81,11 @@ class SyncService extends ChangeNotifier {
       ).ref();
 
   /// Load the locally cached active circle + circle list (so the UI
-  /// shows them instantly), then refresh from RTDB when available.
+  /// shows them instantly). The server refresh is NOT done here any
+  /// more (v0.6.7): it is a network read, and it used to delay the
+  /// first frame. main() runs [refreshMyCircles] after the first
+  /// frame instead — the cached list is shown until then, which is
+  /// what the first screen (Map) shows anyway.
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
     _activeCircleId = prefs.getString(_activeCircleKey);
@@ -97,7 +102,6 @@ class SyncService extends ChangeNotifier {
       }
     }
     notifyListeners();
-    if (isAvailable) await refreshMyCircles();
   }
 
   Future<void> _saveLocal() async {
@@ -717,14 +721,21 @@ class SyncService extends ChangeNotifier {
     _subs.add(sub);
   }
 
-  /// Live family chat of a circle (whole list, oldest first).
+  /// Live family chat of a circle (newest [limit] messages, oldest
+  /// first). v0.6.7: the subscription used to download the WHOLE
+  /// history — and re-download all of it on every new message.
+  /// Now it is capped at [chatPageSize]; older pages come from
+  /// [loadOlderChatMessages]. The newest messages arrive exactly
+  /// as before.
   void subscribeChat(
     String circleId,
-    void Function(List<ChatMessage>) onData,
-  ) {
+    void Function(List<ChatMessage>) onData, {
+    int limit = chatPageSize,
+  }) {
     if (!isAvailable) return;
     final sub = _root
         .child(FirebaseConfig.circleChatPath(circleId))
+        .limitToLast(limit)
         .onValue
         .listen((event) {
       final raw = event.snapshot.value;
@@ -745,6 +756,41 @@ class SyncService extends ChangeNotifier {
       onData(msgs);
     });
     _subs.add(sub);
+  }
+
+  /// One older page of chat history: the [limit] messages sent
+  /// just before the message with RTDB push key [beforeId].
+  /// Returns oldest first. Used by the "Load older messages"
+  /// button — the live subscription only keeps the newest page.
+  Future<List<ChatMessage>> loadOlderChatMessages(
+    String circleId, {
+    required String beforeId,
+    int limit = chatPageSize,
+  }) async {
+    if (!isAvailable) return const [];
+    try {
+      final snap = await _root
+          .child(FirebaseConfig.circleChatPath(circleId))
+          .orderByKey()
+          .endBefore(beforeId)
+          .limitToLast(limit)
+          .get();
+      if (!snap.exists || snap.value == null) return const [];
+      final map = asMap(snap.value);
+      final msgs = <ChatMessage>[];
+      for (final e in map.entries) {
+        try {
+          msgs.add(ChatMessage.fromJson(asMap(e.value), id: e.key));
+        } catch (err) {
+          debugPrint('ApnaCircle: bad chat message ($err)');
+        }
+      }
+      msgs.sort((a, b) => a.at.compareTo(b.at));
+      return msgs;
+    } catch (e) {
+      debugPrint('ApnaCircle: loadOlderChatMessages failed ($e)');
+      return const [];
+    }
   }
 
   /// New SOS / alert events only (childAdded — old events are not
