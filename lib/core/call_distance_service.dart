@@ -60,6 +60,39 @@ class CallDistanceService {
     }
   }
 
+  /// True when the app holds PROCESS_OUTGOING_CALLS — the dialled
+  /// number for the outgoing-call overlay (v0.6.5).
+  static Future<bool> hasOutgoingCallPermission() async {
+    try {
+      return await _channel.invokeMethod<bool>('hasOutgoingCallPermission') ??
+          false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  /// True when the app may draw over other apps — the overlay
+  /// permission the call-distance card needs (v0.6.5). Only the
+  /// user's own tap on Android's system page can grant it.
+  static Future<bool> canDrawOverlays() async {
+    try {
+      return await _channel.invokeMethod<bool>('canDrawOverlays') ?? false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  /// Open Android's "Display over other apps" page for this app.
+  /// The CALLER must show a plain explanation first — never open
+  /// the system page silently.
+  static Future<void> openOverlaySettings() async {
+    try {
+      await _channel.invokeMethod<void>('openOverlaySettings');
+    } on PlatformException {
+      // Nothing to open on this platform — ignore.
+    }
+  }
+
   /// Ask Android for READ_PHONE_STATE + READ_CALL_LOG (native
   /// permission dialog). The CALLER must show a plain explanation
   /// first — never request silently. Returns which permissions
