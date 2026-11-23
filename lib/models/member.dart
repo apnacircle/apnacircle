@@ -39,6 +39,14 @@ class Member {
   bool get isParent => role == 'parent';
   bool get isElderly => role == 'elderly';
 
+  /// True only for a real level (0–100). The battery plugin returns
+  /// -1 when it cannot read a level — that sentinel must never be
+  /// shown to the user as "-1%" (v0.6.2).
+  bool get hasKnownBattery => battery >= 0 && battery <= 100;
+
+  /// Display text for the battery, or empty when unknown.
+  String get batteryLabel => hasKnownBattery ? 'Battery $battery%' : '';
+
   Member copyWith({
     double? lat,
     double? lon,
