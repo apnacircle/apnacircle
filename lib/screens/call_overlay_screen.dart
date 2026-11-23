@@ -7,11 +7,14 @@ import '../models/member.dart';
 /// What the parent sees when a family member calls on a NORMAL SIM
 /// call: name, number and distance in km from MY location.
 ///
-/// Real Android path: MainActivity detects the incoming call, looks
-/// the number up in the family circle, and shows this screen as a
-/// full-screen intent / overlay (SYSTEM_ALERT_WINDOW permission).
-/// This screen is also reachable from the home screen's phone button
-/// for testing without a real call.
+/// Real Android path (v0.6.5): CallStateReceiver (manifest-registered,
+/// so it works with the app dead) matches the number against the
+/// member cache Dart keeps in SharedPreferences and shows a small
+/// native overlay window OVER the call screen (CallOverlayManager).
+/// This Flutter screen is the PREVIEW of that overlay — reachable
+/// from the home screen's phone button for testing without a real
+/// call — and the in-app view of a call. It does NOT answer or
+/// decline the real call; those buttons just close this preview.
 class CallOverlayScreen extends StatelessWidget {
   final Member caller;
   const CallOverlayScreen({super.key, required this.caller});
