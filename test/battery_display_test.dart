@@ -154,6 +154,35 @@ void main() {
     await tester.pump();
   }
 
+  testWidgets('stale battery (older than 30 min) is marked "(old)"',
+      (tester) async {
+    final family = FamilyService();
+    // Fresh level: shows plain "Battery 81%".
+    family.addMember(Member(
+      id: 'bilal',
+      name: 'Bilal',
+      phone: '+923002222222',
+      isOnline: true,
+      battery: 81,
+      batteryAt: DateTime.now().subtract(const Duration(minutes: 5)),
+    ));
+    // Stale level: the same 82% the user saw frozen for 3.5 hours.
+    family.addMember(Member(
+      id: 'mujahid',
+      name: 'Mujahid',
+      phone: '+923001111111',
+      isOnline: true,
+      battery: 82,
+      batteryAt: DateTime.now().subtract(const Duration(minutes: 200)),
+    ));
+    await pumpHome(tester, family);
+
+    expect(find.textContaining('Battery 81%'), findsOneWidget);
+    expect(find.textContaining('Battery 82% (old)'), findsOneWidget);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+  });
+
   testWidgets('unknown battery renders no "-1%" text',
       (tester) async {
     final family = FamilyService();
