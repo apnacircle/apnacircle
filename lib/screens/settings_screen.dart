@@ -35,6 +35,9 @@ class _SettingsScreenState extends State<SettingsScreen>
   bool? _adminActive;
   bool? _simReadable;
   bool? _callLogGranted;
+  // v0.6.5: call distance overlay statuses (null = still loading).
+  bool? _overlayGranted;
+  bool? _outgoingGranted;
   bool _deleting = false;
 
   @override
@@ -66,11 +69,15 @@ class _SettingsScreenState extends State<SettingsScreen>
     final admin = await DeviceAdminService().isAdminActive();
     final simHash = await SimChangeService().currentHash();
     final callLog = await CallDistanceService.hasCallLogPermission();
+    final overlay = await CallDistanceService.canDrawOverlays();
+    final outgoing = await CallDistanceService.hasOutgoingCallPermission();
     if (!mounted) return;
     setState(() {
       _adminActive = admin;
       _simReadable = simHash != null;
       _callLogGranted = callLog;
+      _overlayGranted = overlay;
+      _outgoingGranted = outgoing;
     });
   }
 
@@ -155,6 +162,40 @@ class _SettingsScreenState extends State<SettingsScreen>
       );
     }
     await _refreshProtectionStatuses();
+  }
+
+  /// Call distance overlay (v0.6.5): plain explanation FIRST, then
+  /// Android's "Display over other apps" page. Only the user's own
+  /// tap there can grant it — no app can grant it itself. Without
+  /// it, no distance can appear over a call screen.
+  Future<void> _requestOverlayPermission() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Show distance during calls?'),
+        content: const Text(
+          'When a family member calls on a normal SIM call — or you '
+          'call them — ApnaCircle shows their name and distance on '
+          'top of the call screen. For that, Android needs "Display '
+          'over other apps" turned on for ApnaCircle. The overlay '
+          'only ever appears for family members, never for strangers.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Open settings'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await CallDistanceService.openOverlaySettings();
+    // The system page opens; status refreshes when the user comes
+    // back (lifecycle observer).
   }
 
   /// Account delete (Play Store requirement). Order: remove my
@@ -365,6 +406,37 @@ class _SettingsScreenState extends State<SettingsScreen>
                   onPressed: _requestCallPermissions,
                   child: Text(t('allowPermissions')),
                 ),
+        ),
+        // v0.6.5: call distance overlay — shows name + distance on
+        // top of the SIM call screen, for family members only.
+        ListTile(
+          leading: Icon(
+            Icons.picture_in_picture_alt,
+            color: _overlayGranted == true ? Colors.green : Colors.grey,
+          ),
+          title: const Text('Call distance overlay'),
+          subtitle: Text(
+            _overlayGranted == null
+                ? '…'
+                : _overlayGranted!
+                    ? 'ON — distance shows on top of SIM calls'
+                    : 'OFF — no distance can appear during a call',
+          ),
+          trailing: _overlayGranted == true
+              ? null
+              : FilledButton.tonal(
+                  onPressed: _requestOverlayPermission,
+                  child: const Text('Allow'),
+                ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            _outgoingGranted == true
+                ? 'Incoming + outgoing calls: distance shows for family members only. Tap the card to dismiss it; it hides when the call ends.'
+                : 'Incoming calls need Phone + Call Log (above); outgoing calls also need the outgoing-call permission, granted together with them. Without "Display over other apps" above, nothing appears during a call.',
+            style: const TextStyle(fontSize: 13, color: Colors.grey),
+          ),
         ),
         const Divider(),
         if (live)
