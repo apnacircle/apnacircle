@@ -61,7 +61,7 @@ class CircleInfo {
 /// / Cloud Function (see NotificationService) — RTDB events are the
 /// in-app delivery channel that works with no server at all.
 class CircleEvent {
-  final String type; // 'sos' | 'lowBattery' | 'phoneOff' | 'internetOff'
+  final String type; // 'sos' | 'lowBattery' | 'phoneOff' | 'internetOff' | 'locationOff'
   final String fromUid;
   final String fromName;
   final DateTime at;
