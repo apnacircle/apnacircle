@@ -2,33 +2,75 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/call_distance_service.dart';
 import '../core/language_service.dart';
+import '../l10n/strings.dart';
 import '../services/auth_service.dart';
+import '../services/device_admin_service.dart';
 import '../services/family_service.dart';
 import '../services/firebase_bootstrap.dart';
+import '../services/sim_change_service.dart';
 import '../services/sms_location_service.dart';
+import '../services/sync_service.dart';
 import 'auth_screen.dart';
 import 'circle_screen.dart';
 
 /// Settings: language, member count (max 10), lite mode.
-/// Account delete (required by Play Store) is a v0.2 Firebase step.
+///
+/// v0.5 additions: Device Admin (uninstall protection), SIM-change
+/// alert status, SIM-call permissions, and account delete (Play
+/// Store requirement — Settings → Delete account).
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _SettingsScreenState extends State<SettingsScreen>
+    with WidgetsBindingObserver {
   static const _smsEnabledKey = 'sms_fallback_enabled';
   bool _smsOn = false;
+
+  // v0.5 statuses (null = still loading).
+  bool? _adminActive;
+  bool? _simReadable;
+  bool? _callLogGranted;
+  bool _deleting = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     SharedPreferences.getInstance().then((prefs) {
       if (mounted) {
         setState(() => _smsOn = prefs.getBool(_smsEnabledKey) ?? false);
       }
+    });
+    _refreshProtectionStatuses();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Coming back from Android's system screens (Device Admin,
+    // permission dialogs) — re-read the real statuses.
+    if (state == AppLifecycleState.resumed) _refreshProtectionStatuses();
+  }
+
+  Future<void> _refreshProtectionStatuses() async {
+    final admin = await DeviceAdminService().isAdminActive();
+    final simHash = await SimChangeService().currentHash();
+    final callLog = await CallDistanceService.hasCallLogPermission();
+    if (!mounted) return;
+    setState(() {
+      _adminActive = admin;
+      _simReadable = simHash != null;
+      _callLogGranted = callLog;
     });
   }
 
@@ -82,12 +124,111 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _smsOn = false);
   }
 
+  /// SIM-call permissions: plain explanation FIRST, then the
+  /// Android permission dialog. Never request silently.
+  Future<void> _requestCallPermissions() async {
+    final lang = context.read<LanguageService>();
+    String t(String key) => tr(lang.isUrdu, key);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(t('callPermissions')),
+        content: Text(t('callPermissionsWhy')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(t('cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(t('allowPermissions')),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final granted = await CallDistanceService.requestCallPermissions();
+    if (!mounted) return;
+    if (granted['callLog'] != true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t('callPermissionsOff'))),
+      );
+    }
+    await _refreshProtectionStatuses();
+  }
+
+  /// Account delete (Play Store requirement). Order: remove my
+  /// RTDB data first, then delete the Auth account, then clear
+  /// local data — EXCEPT the per-device trial cache, so a deleted
+  /// account cannot restart the free trial in demo mode.
+  Future<void> _deleteAccount() async {
+    final lang = context.read<LanguageService>();
+    String t(String key) => tr(lang.isUrdu, key);
+    final auth = context.read<AuthService>();
+    final sync = context.read<SyncService>();
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(t('deleteAccount')),
+        content: Text(
+          '${t('deleteAccountConfirm')}\n\n${t('deleteAccountNote')}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(t('cancel')),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(t('delete')),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    setState(() => _deleting = true);
+    if (sync.isAvailable) await sync.deleteMyAccountData();
+    final err = await auth.deleteAccount();
+    if (!mounted) return;
+    if (err == null) {
+      final prefs = await SharedPreferences.getInstance();
+      final trialCache = <String, String>{};
+      for (final key in prefs.getKeys()) {
+        if (key.startsWith('trial_state_v1')) {
+          final value = prefs.getString(key);
+          if (value != null) trialCache[key] = value;
+        }
+      }
+      await prefs.clear();
+      for (final e in trialCache.entries) {
+        await prefs.setString(e.key, e.value);
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t('deleteAccountDone'))),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            err == 'Sign in again first, then delete the account.'
+                ? t('signInAgainFirst')
+                : t('deleteAccountFailed'),
+          ),
+        ),
+      );
+    }
+    setState(() => _deleting = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final lang = context.watch<LanguageService>();
     final family = context.watch<FamilyService>();
     final auth = context.watch<AuthService>();
     final live = FirebaseBootstrap.available && auth.signedIn;
+    String t(String key) => tr(lang.isUrdu, key);
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -149,6 +290,100 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           trailing: Icon(Icons.battery_saver),
         ),
+        const Divider(),
+        // --- v0.5: protection ---
+        ListTile(
+          leading: Icon(
+            Icons.shield,
+            color: _adminActive == true ? Colors.green : Colors.grey,
+          ),
+          title: Text(t('deviceAdmin')),
+          subtitle: Text(
+            _adminActive == null
+                ? '…'
+                : _adminActive!
+                    ? t('deviceAdminOn')
+                    : t('deviceAdminOff'),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            t('deviceAdminNote'),
+            style: const TextStyle(fontSize: 13, color: Colors.grey),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: _adminActive == true
+              ? OutlinedButton(
+                  onPressed: () async {
+                    await DeviceAdminService().removeAdmin();
+                    await _refreshProtectionStatuses();
+                  },
+                  child: Text(t('disableProtection')),
+                )
+              : FilledButton(
+                  onPressed: () async {
+                    await DeviceAdminService().requestAdmin();
+                    // The system screen opens; status refreshes
+                    // when the user comes back (lifecycle observer).
+                  },
+                  child: Text(t('enableProtection')),
+                ),
+        ),
+        ListTile(
+          leading: Icon(
+            Icons.sim_card,
+            color: _simReadable == true ? Colors.green : Colors.grey,
+          ),
+          title: Text(t('simCheck')),
+          subtitle: Text(
+            _simReadable == null
+                ? '…'
+                : _simReadable!
+                    ? t('simCheckOn')
+                    : t('simCheckOff'),
+          ),
+        ),
+        ListTile(
+          leading: Icon(
+            Icons.phone_in_talk,
+            color: _callLogGranted == true ? Colors.green : Colors.grey,
+          ),
+          title: Text(t('callPermissions')),
+          subtitle: Text(
+            _callLogGranted == null
+                ? '…'
+                : _callLogGranted!
+                    ? t('callPermissionsOn')
+                    : t('callPermissionsOff'),
+          ),
+          trailing: _callLogGranted == true
+              ? null
+              : FilledButton.tonal(
+                  onPressed: _requestCallPermissions,
+                  child: Text(t('allowPermissions')),
+                ),
+        ),
+        const Divider(),
+        if (live)
+          ListTile(
+            leading: const Icon(Icons.delete_forever, color: Colors.red),
+            title: Text(
+              t('deleteAccount'),
+              style: const TextStyle(color: Colors.red),
+            ),
+            subtitle: Text(t('deleteAccountNote')),
+            trailing: _deleting
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : null,
+            onTap: _deleting ? null : _deleteAccount,
+          ),
         const ListTile(
           title: Text('About ApnaCircle'),
           subtitle: Text(
