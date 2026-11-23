@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Adaptive launcher icon background (v0.5). -->
+    <color name="ic_launcher_background">#004B22</color>
+</resources>
