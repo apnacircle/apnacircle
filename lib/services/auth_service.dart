@@ -21,8 +21,9 @@ import 'firebase_bootstrap.dart';
 ///   built-in 6-digit email OTP — the Gmail channel is the email
 ///   verification link + password-reset email sent to the Gmail
 ///   inbox ([sendEmailVerification] after sign-up). A 6-digit code
-///   in Gmail would need a Cloud Function + email sender; that is
-///   documented as a follow-up in FIREBASE_SETUP.md, NOT faked here.
+///   in Gmail is built separately (v0.6): the Cloud Function +
+///   SMTP sender behind [EmailOtpService] — NOT faked here, and
+///   NOT part of this class.
 ///
 /// Every method is a no-op returning an error string when Firebase
 /// is not configured (demo mode) — the UI shows the message and
