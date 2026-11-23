@@ -121,12 +121,16 @@ puri family ki live location khul jayegi.**
 
 > ✅ Done 22 Nov 2026: Phone + Email/Password ON, Anonymous OFF.
 
-**Gmail OTP — honest note:** Firebase Auth mein 6-digit EMAIL OTP
-nahi hota. Gmail channel ye hai: sign-up par verification LINK
-Gmail inbox mein, aur password-reset email. SIM number par 6-digit
-SMS OTP aata hai (Phone Auth). Agar Gmail par bhi 6-digit code
-chahiye to Cloud Function + email sender lagna hoga — ye follow-up
-hai, code mein fake nahi kiya gaya.
+**Gmail OTP — v0.6 mein BAN GAYA (23 Nov 2026):** Firebase Auth mein
+6-digit EMAIL OTP nahi hota — is liye code ka flow Cloud Function +
+email sender se banaya gaya hai: `requestEmailCode` /
+`verifyEmailCode` (`functions/index.js`), nodemailer SMTP se code
+Gmail inbox mein, sirf SHA-256 hash RTDB mein save hota hai (code
+kabhi save/log nahi hota). Login screen par teesra option
+"Email code se login" hai. Deploy + SMTP setup neeche §4 mein —
+bina in ke code wala login "not set up yet" kahega; password wala
+login tab bhi chalta hai. SIM number par 6-digit SMS OTP aata hai
+(Phone Auth).
 
 ## 4. Cloud Messaging (FCM) — alerts ke liye
 
@@ -171,6 +175,76 @@ se deliver hota hai (parent ka phone app khula ho to foran dikhta
 hai). Server-side push Cloud Function ka kaam hai — app mein server
 key kabhi nahi aayegi.
 
+### Email OTP — 6-digit Gmail code (v0.6, code DONE, deploy + SMTP BAQI)
+
+`functions/index.js` (`requestEmailCode` / `verifyEmailCode`) +
+`functions/email_otp.js` (pure logic) — login screen ka teesra
+option "Email code se login" inhi ko call karta hai. Flow:
+
+1. App `requestEmailCode({email})` call karti hai → function
+   random 6-digit code banata hai, sirf us ka SHA-256 hash RTDB
+   `emailCodes/{sha256(email)}` mein save karta hai (code khud
+   kabhi save nahi hota, kabhi log nahi hota), phir code nodemailer
+   SMTP se Gmail inbox mein bhejta hai.
+2. User code likhta hai → app `verifyEmailCode({email, code})`
+   call karti hai → function hash milata hai, sahi ho to Auth user
+   find-or-create kar ke custom token deta hai → app
+   `signInWithCustomToken` se sign in ho jati hai. Code entry phir
+   delete ho jati hai.
+
+**Limits (code + app dono mein same):** code 10 minute ka; 5
+ghalat try par lock (code delete, naya code mangwana parta hai);
+aik email par 1 ghante mein max 5 code. RTDB rules badalne ki
+zaroorat nahi — ye nodes sirf Admin SDK (function) parhta/likhta
+hai, app kabhi seedha nahi.
+
+**SMTP setup (deploy se pehle, parent ka step):** SMTP sirf
+environment se aata hai — repo mein koi password ya email hardcode
+NAHI hai. `functions/.env` file banayein (ye gitignored hai —
+kabhi commit nahi hogi):
+
+```bash
+# functions/.env — sirf deploy machine par, repo mein NAHI
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=apnacircle@gmail.com
+SMTP_FROM=ApnaCircle <apnacircle@gmail.com>
+```
+
+Password secret ke tor par set karein (kabhi `.env` ya chat mein
+nahi — Gmail ke liye **App Password** use karein, asal password
+nahi; Google account mein 2-Step Verification ON kar ke App
+Passwords se 16-harf wala password banayein):
+
+```bash
+firebase functions:secrets:set SMTP_PASS
+# prompt par App Password paste karein
+```
+
+Phir wahi deploy command — dono functions (push + email OTP)
+aik saath deploy hote hain:
+
+```bash
+cd apnacircle-app
+npm --prefix functions install
+firebase deploy --only functions
+```
+
+Deploy ke baad console → Functions mein `requestEmailCode` aur
+`verifyEmailCode` dikhenge. Test: login screen → "Email code" →
+email → "Send code to Gmail" → code inbox mein aaye → verify →
+sign in. **SMTP set na ho to** function saaf error deta hai
+(`email-not-configured`) aur app "Email codes are not set up yet"
+dikhati hai — kabhi fake "code bhej diya" nahi hota.
+
+**Spark-plan sach (zaroori):** free Spark plan sirf Google
+services tak outbound traffic deta hai, aur SMTP sending Spark par
+routinely block hoti hai — is liye pehli asal code email
+`email-send-failed` de sakti hai jab tak Blaze (billing) na lage.
+Deploy + code Spark par chalte hain; live email ka faisla Blaze
+ka hai — Mujahid ka faisla (Phone OTP wala hi sawal), card Lucky
+kabhi nahi lagati.
+
 ## 5. Packages (pubspec.yaml mein add karein)
 
 ```yaml
@@ -178,6 +252,7 @@ firebase_core: ^3.6.0
 firebase_auth: ^5.3.1
 firebase_database: ^11.1.4
 firebase_messaging: ^15.1.3
+cloud_functions: ^5.1.3 # v0.6: email OTP callable functions ke liye
 ```
 
 Phir `flutter pub get`, aur `main.dart` mein `main()` ke start mein:
