@@ -130,6 +130,21 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service_config" />
         </service>
+        <!-- Background location service (v0.6.4) — the plugin
+             (flutter_foreground_task) does NOT declare its own
+             service, so the app must. Android 14+ REQUIRES
+             android:foregroundServiceType="location" or the service
+             cannot start. No stopWithTask="true" on purpose: the
+             service must survive the app being swiped away — that
+             is the whole point for a family safety app. The
+             service runs only while the member is in a circle with
+             "Allow all the time" (see BackgroundLocationService);
+             FOREGROUND_SERVICE_LOCATION permission is declared
+             above. -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="location"
+            android:exported="false" />
         <!-- Dedicated PIN lock screen (v0.6.3): shown OVER a locked
              app by AppLockService. Native (not Flutter) so it opens
              instantly. noHistory + excludeFromRecents: leaving it
