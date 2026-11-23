@@ -10,6 +10,12 @@ class AppConstants {
   static const String planPriceUsdPerYear = '\$5/year';
   static const double planPriceUsd = 5;
 
+  /// Google Play Billing product id for the Family plan (v0.5).
+  /// The product must exist in Play Console before a REAL purchase
+  /// works — until then the store reports "product not found" and
+  /// the Plan screen says so honestly, never faking a charge.
+  static const String billingProductId = 'apnacircle_family_yearly';
+
   /// Demo PIN for the web demo only. The real app forces the parent
   /// to set their own PIN on first run (PinService) — no default PIN.
   static const String demoPin = '1234';
@@ -37,4 +43,6 @@ class AppConstants {
   static const String appLockChannel = 'apnacircle/applock';
   static const String smsChannel = 'apnacircle/sms';
   static const String deviceChannel = 'apnacircle/device';
+  static const String deviceAdminChannel = 'apnacircle/deviceadmin';
+  static const String simChannel = 'apnacircle/sim';
 }
