@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.telephony.PhoneStateListener
@@ -62,9 +63,16 @@ import org.json.JSONObject
  *
  * WHAT STILL NEEDS A REAL PHONE (do NOT claim these work until tested):
  * 1. SIM-call number on Android 10+ with READ_CALL_LOG granted, on
- *    both SIMs of a dual-SIM phone. CallScreeningService would be
- *    more robust but requires the call-screening role — a big UX +
- *    Play-permission decision, NOT taken in v0.5.
+ *    both SIMs of a dual-SIM phone. v0.6.5: the real distance overlay
+ *    is now wired — CallStateReceiver (manifest-registered, so it
+ *    works with the app dead) matches the number against the member
+ *    cache Dart keeps in SharedPreferences and shows a WindowManager
+ *    overlay (CallOverlayManager) over the call screen; it hides on
+ *    IDLE. It needs, on the phone: READ_CALL_LOG (incoming number),
+ *    PROCESS_OUTGOING_CALLS (dialled number) and "Display over other
+ *    apps" (the overlay itself). Test both directions on a real
+ *    phone; outgoing delivery is deprecated-but-working (see
+ *    CallStateReceiver for the limits).
  * 2. AppLockService (v0.6.3: declared in the manifest + config,
  *    LockActivity PIN screen, Dart subscribes to locks at Home):
  *    enable it in Settings > Accessibility (Android shows a
@@ -175,6 +183,37 @@ class MainActivity : FlutterActivity() {
                         startCallListener()
                         result.success(null)
                     }
+                    // v0.6.5 — call distance overlay permission.
+                    // "Display over other apps": without it the
+                    // overlay cannot appear over the call screen.
+                    // Only the user's own tap on Android's system
+                    // page can grant it — no app can grant it itself.
+                    "canDrawOverlays" -> result.success(
+                        if (android.os.Build.VERSION.SDK_INT >=
+                            android.os.Build.VERSION_CODES.M
+                        ) {
+                            Settings.canDrawOverlays(this)
+                        } else {
+                            true
+                        }
+                    )
+                    "openOverlaySettings" -> {
+                        startActivity(
+                            Intent(
+                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:$packageName"),
+                            )
+                        )
+                        result.success(null)
+                    }
+                    // Outgoing-call number (NEW_OUTGOING_CALL) needs
+                    // PROCESS_OUTGOING_CALLS — requested together
+                    // with the call permissions below.
+                    "hasOutgoingCallPermission" -> result.success(
+                        ContextCompat.checkSelfPermission(
+                            this, Manifest.permission.PROCESS_OUTGOING_CALLS
+                        ) == PackageManager.PERMISSION_GRANTED
+                    )
                     else -> result.notImplemented()
                 }
             }
@@ -404,6 +443,10 @@ class MainActivity : FlutterActivity() {
             arrayOf(
                 Manifest.permission.READ_PHONE_STATE,
                 Manifest.permission.READ_CALL_LOG,
+                // v0.6.5: the dialled number for the outgoing-call
+                // overlay (NEW_OUTGOING_CALL). Same Play CALL_LOG
+                // declaration as READ_CALL_LOG.
+                Manifest.permission.PROCESS_OUTGOING_CALLS,
             ),
             CALL_PERMISSIONS_REQUEST_CODE,
         )
@@ -420,16 +463,25 @@ class MainActivity : FlutterActivity() {
         pendingCallPermissionResult = null
         var phoneState = false
         var callLog = false
+        var outgoingCall = false
         for (i in permissions.indices) {
             val granted = i < grantResults.size &&
                 grantResults[i] == PackageManager.PERMISSION_GRANTED
             when (permissions[i]) {
                 Manifest.permission.READ_PHONE_STATE -> phoneState = granted
                 Manifest.permission.READ_CALL_LOG -> callLog = granted
+                Manifest.permission.PROCESS_OUTGOING_CALLS ->
+                    outgoingCall = granted
             }
         }
         if (phoneState) startCallListener()
-        pending.success(mapOf("phoneState" to phoneState, "callLog" to callLog))
+        pending.success(
+            mapOf(
+                "phoneState" to phoneState,
+                "callLog" to callLog,
+                "outgoingCall" to outgoingCall,
+            )
+        )
     }
 
     private fun startCallListener() {
