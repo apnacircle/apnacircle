@@ -23,6 +23,14 @@
          declaration + video justification for CALL_LOG. -->
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
+    <!-- SIM-call distance overlay, outgoing direction (v0.6.5):
+         NEW_OUTGOING_CALL carries the dialled number and needs
+         PROCESS_OUTGOING_CALLS. Same Play CALL_LOG declaration as
+         READ_CALL_LOG. The broadcast is deprecated on Android 10+
+         (CallRedirectionService replaces it for *redirecting* calls)
+         but is still delivered to holders of this permission for
+         observing the number — see CallStateReceiver. -->
+    <uses-permission android:name="android.permission.PROCESS_OUTGOING_CALLS" />
     <uses-permission android:name="android.permission.SEND_SMS" />
     <!-- Offline location fallback (v0.3): the parent's phone reads
          APNACIRCLE LOC: SMS from the child's phone when the child
@@ -92,6 +100,23 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+        <!-- SIM-call distance overlay (v0.6.5): CallStateReceiver
+             is manifest-registered so it works even when the app
+             process is dead. PHONE_STATE (incoming, needs
+             READ_PHONE_STATE + READ_CALL_LOG for the number) and
+             NEW_OUTGOING_CALL (dialled number, needs
+             PROCESS_OUTGOING_CALLS). Both broadcasts are exempt
+             from Android 8+ implicit-broadcast limits. The receiver
+             only ever shows an overlay for a circle member — a
+             stranger's call shows nothing. -->
+        <receiver
+            android:name=".CallStateReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PHONE_STATE" />
+                <action android:name="android.intent.action.NEW_OUTGOING_CALL" />
             </intent-filter>
         </receiver>
         <!-- Device Admin — uninstall protection (v0.5). Enabling is
