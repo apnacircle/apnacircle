@@ -15,8 +15,10 @@ import '../screens/alerts_screen.dart';
 import '../screens/call_overlay_screen.dart';
 import '../screens/chat_screen.dart';
 import '../screens/locks_screen.dart';
+import '../screens/location_status_card.dart';
 import '../screens/plan_screen.dart';
 import '../screens/settings_screen.dart';
+import '../services/background_location_service.dart';
 import '../services/family_service.dart';
 import '../services/notification_service.dart';
 import '../services/sms_location_service.dart';
@@ -54,6 +56,18 @@ class _HomeMapScreenState extends State<HomeMapScreen>
 
   static const _smsAskedKey = 'sms_fallback_asked';
   static const _smsEnabledKey = 'sms_fallback_enabled';
+  static const _batteryOptAskedKey = 'battery_opt_asked';
+
+  // v0.6.4: background location sharing state on THIS phone
+  // (null = still checking) + whether the foreground service is
+  // running. Shown in the status card at the top of the Map tab.
+  LocationSharingState? _sharingState;
+  bool _serviceRunning = false;
+
+  // v0.6.4: which circle+user the background service was last
+  // (re)started for — re-run only when the circle changes, so a
+  // provider rebuild does not re-check permissions every frame.
+  String? _bgSharingKey;
 
   Timer? _locationTimer;
   StreamSubscription<bool>? _offlineSub;
@@ -88,6 +102,9 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     // The active circle can change after Home is already mounted
     // (fresh sign-in / circle switch) — re-check the subscription.
     _ensureLockSubscription();
+    // v0.6.4: same for background location — a circle switch
+    // restarts the service so it publishes to the new circle.
+    _ensureBackgroundSharingForCurrentCircle();
   }
 
   /// Child-side lock enforcement (v0.6.3): subscribe to MY locks
@@ -119,6 +136,159 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     sync.subscribeLocks(circleId, uid, (incoming) {
       AppLockService.applyLocks(incoming);
     });
+  }
+
+  /// Background location (v0.6.4): re-check the sharing state +
+  /// service state shown in the status card.
+  Future<void> _checkSharingState() async {
+    final state = await LocationService().sharingState();
+    final running = await BackgroundLocationService.isRunning;
+    if (mounted) {
+      setState(() {
+        _sharingState = state;
+        _serviceRunning = running;
+      });
+    }
+  }
+
+  /// Background location (v0.6.4): (re)start or stop the
+  /// foreground service for the CURRENT circle only. Keyed on
+  /// circle+user so a rebuild does not re-check permissions every
+  /// time — a circle switch is the only thing that re-runs it.
+  void _ensureBackgroundSharingForCurrentCircle() {
+    if (!mounted) return;
+    final sync = context.read<SyncService>();
+    final key = sync.isAvailable && sync.activeCircleId != null
+        ? '${sync.activeCircleId}|${sync.uid}'
+        : null;
+    if (key == null) {
+      if (_bgSharingKey != null) {
+        _bgSharingKey = null;
+        unawaited(BackgroundLocationService.stop());
+      }
+      return;
+    }
+    if (key == _bgSharingKey) return;
+    _bgSharingKey = key;
+    unawaited(_ensureBackgroundSharing());
+  }
+
+  /// Start (or stop) the background service for the current login,
+  /// then update the card. The service runs only with "Allow all
+  /// the time" — with while-in-use/off it is stopped, never left
+  /// running uselessly with a permanent notification.
+  Future<void> _ensureBackgroundSharing() async {
+    if (!mounted) return;
+    final sync = context.read<SyncService>();
+    final family = context.read<FamilyService>();
+    // Android 13+: the service's permanent notification needs the
+    // notification permission. Best effort — sharing starts either
+    // way (see LocationService.ensureNotificationPermission).
+    await LocationService().ensureNotificationPermission();
+    final running = await BackgroundLocationService.ensureRunning(
+      sync: sync,
+      displayName: family.myMember?.name ?? 'Me',
+    );
+    if (mounted) setState(() => _serviceRunning = running);
+    if (running) await _maybeAskBatteryOptimization();
+  }
+
+  /// Ask ONCE about the battery-optimization exemption (a phone
+  /// that silently kills the background service is worse than one
+  /// dialog). Only asked when the service is actually running.
+  Future<void> _maybeAskBatteryOptimization() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_batteryOptAskedKey) ?? false) return;
+    if (!mounted) return;
+    await prefs.setBool(_batteryOptAskedKey, true);
+    if (!mounted) return;
+    final turnOff = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Keep location sharing running?'),
+        content: const Text(
+          'Some phones stop apps running in the background to save '
+          'battery. Turn off battery optimization for ApnaCircle so '
+          'your family can keep seeing your location when the app '
+          'is closed.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Turn off'),
+          ),
+        ],
+      ),
+    );
+    if (turnOff == true && mounted) {
+      await LocationService().requestBatteryOptimizationExemption();
+    }
+  }
+
+  /// The "Turn on always" fix flow from the status card.
+  ///
+  /// 1. No permission at all -> ask for while-in-use first (the
+  ///    system dialog can grant that much).
+  /// 2. While-in-use -> show the plain-words reason FIRST (Play
+  ///    Store rule), then open the app's Settings page, where the
+  ///    user picks "Allow all the time". On Android 11+ no dialog
+  ///    can grant it — Settings is the only way.
+  /// 3. Already "always" -> just make sure the service is running.
+  /// Coming back from Settings is a resume, and
+  /// didChangeAppLifecycleState re-checks the state + starts the
+  /// service then.
+  Future<void> _fixLocationSharing() async {
+    final loc = LocationService();
+    var state = await loc.sharingState();
+    if (state == LocationSharingState.off) {
+      final p = await loc.ensureWhileInUse();
+      state = locationStateFromPermission(p);
+      if (state == LocationSharingState.off) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Location permission is needed to share your location with your family.',
+            ),
+          ),
+        );
+        return;
+      }
+    }
+    if (state == LocationSharingState.whileInUse) {
+      if (!mounted) return;
+      final go = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Share location even when the app is closed?'),
+          content: const Text(
+            'Your parent needs to see your location anytime, even '
+            'when ApnaCircle is closed — for example if you are on '
+            'your way home late. On the next screen, tap Location '
+            'and choose "Allow all the time". ApnaCircle only shares '
+            'your location with your own family circle, nobody else.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Not now'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Open Settings'),
+            ),
+          ],
+        ),
+      );
+      if (go == true && mounted) await loc.openAppSettings();
+      return;
+    }
+    await _ensureBackgroundSharing();
+    await _checkSharingState();
   }
 
   Future<void> _afterFirstFrame() async {
@@ -182,6 +352,14 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     // are applied at startup and on every remote change, even if
     // the child never opens the Locks tab.
     _ensureLockSubscription();
+
+    // Background location (v0.6.4): show the sharing state on this
+    // phone and keep the foreground service in the right state.
+    // Before v0.6.4 the app only fetched location while the Map
+    // screen was open, so members went stale the moment the app
+    // went to background.
+    _checkSharingState();
+    _ensureBackgroundSharingForCurrentCircle();
   }
 
   void _applySmsLocation(SmsLocation loc) {
@@ -291,6 +469,11 @@ class _HomeMapScreenState extends State<HomeMapScreen>
           _applySmsLocation(loc);
         }
       });
+      // v0.6.4: the user may have just come back from Settings
+      // ("Allow all the time") — re-check the sharing state and
+      // start the background service if it is now allowed.
+      _checkSharingState();
+      _ensureBackgroundSharingForCurrentCircle();
     }
   }
 
@@ -391,6 +574,18 @@ class _HomeMapScreenState extends State<HomeMapScreen>
 
   Widget _mapTab(List<Member> members) => Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            child: LocationStatusCard(
+              state: _sharingState,
+              serviceRunning: _serviceRunning,
+              onFix: _fixLocationSharing,
+              onRefresh: () {
+                unawaited(_checkSharingState());
+                unawaited(_ensureBackgroundSharing());
+              },
+            ),
+          ),
           if (_iAmOffline)
             Container(
               width: double.infinity,
