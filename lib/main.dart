@@ -10,6 +10,7 @@ import 'core/language_service.dart';
 import 'services/auth_service.dart';
 import 'services/billing_service.dart';
 import 'services/device_admin_service.dart';
+import 'services/email_otp_service.dart';
 import 'services/family_service.dart';
 import 'services/firebase_bootstrap.dart';
 import 'services/notification_service.dart';
@@ -47,6 +48,7 @@ Future<void> main() async {
   final billing = BillingService();
   final simChange = SimChangeService();
   final deviceAdmin = DeviceAdminService();
+  final emailOtp = EmailOtpService();
 
   if (FirebaseBootstrap.available) {
     FirebaseMessaging.onBackgroundMessage(
@@ -82,6 +84,7 @@ Future<void> main() async {
         ChangeNotifierProvider.value(value: sync),
         ChangeNotifierProvider.value(value: trial),
         ChangeNotifierProvider.value(value: billing),
+        ChangeNotifierProvider.value(value: emailOtp),
         ChangeNotifierProvider.value(value: notifications),
         ChangeNotifierProvider.value(value: family),
         Provider.value(value: sms),
