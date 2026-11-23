@@ -26,11 +26,18 @@ class LocksScreen extends StatefulWidget {
   State<LocksScreen> createState() => _LocksScreenState();
 }
 
-class _LocksScreenState extends State<LocksScreen> {
+class _LocksScreenState extends State<LocksScreen>
+    with WidgetsBindingObserver {
   final List<LockedApp> _apps = List.of(AppLockService.presets);
   final _customName = TextEditingController();
   bool _locationLocked = true;
   bool _internetLockAlert = true;
+
+  /// App Lock service on THIS phone (v0.6.3): null = still checking.
+  /// The service must be ON here or locked apps are never blocked —
+  /// before v0.6.3 nothing showed this, so a parent could set locks
+  /// that silently did nothing.
+  bool? _serviceOn;
 
   static const _dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -43,11 +50,27 @@ class _LocksScreenState extends State<LocksScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _afterFirstFrame());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Back from Settings → Accessibility: re-check immediately,
+    // so the card flips to ON without reopening the screen.
+    if (state == AppLifecycleState.resumed) _checkService();
+  }
+
+  /// Ask native code whether the AccessibilityService is enabled
+  /// on this phone. Safe when the channel is missing (demo/web).
+  Future<void> _checkService() async {
+    final on = await AppLockService.isServiceEnabled();
+    if (mounted) setState(() => _serviceOn = on);
   }
 
   Future<void> _afterFirstFrame() async {
     if (!mounted) return;
+    _checkService();
     final sync = context.read<SyncService>();
     final family = context.read<FamilyService>();
     if (!sync.isAvailable || sync.activeCircleId == null) return;
@@ -106,6 +129,7 @@ class _LocksScreenState extends State<LocksScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _customName.dispose();
     super.dispose();
   }
@@ -253,6 +277,91 @@ class _LocksScreenState extends State<LocksScreen> {
     );
   }
 
+  /// v0.6.3 — App Lock service status on THIS phone. Locks only
+  /// work while the service is ON; before this card existed, a
+  /// parent could set locks that silently did nothing on the
+  /// child's phone. The button opens Settings → Accessibility —
+  /// only the user's own tap there can turn the service on.
+  Widget _serviceStatusCard() {
+    final on = _serviceOn;
+    final isOn = on == true;
+    return Card(
+      color: on == null
+          ? null
+          : isOn
+              ? Colors.green.shade50
+              : Colors.red.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  on == null
+                      ? Icons.help_outline
+                      : isOn
+                          ? Icons.check_circle
+                          : Icons.warning_amber,
+                  color: on == null
+                      ? Colors.grey
+                      : isOn
+                          ? Colors.green
+                          : Colors.red,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    on == null
+                        ? 'Checking App Lock service…'
+                        : isOn
+                            ? 'App Lock is ON on this phone'
+                            : 'App Lock is OFF on this phone',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  tooltip: 'Check again',
+                  onPressed: _checkService,
+                ),
+              ],
+            ),
+            Text(
+              on == null
+                  ? ''
+                  : isOn
+                      ? 'Locked apps will be blocked on this phone.'
+                      : 'Locked apps will NOT be blocked until this is '
+                          'turned on. Tap Enable, then in Settings → '
+                          'Accessibility turn ON "ApnaCircle App Lock".',
+            ),
+            if (on == false) ...[
+              const SizedBox(height: 8),
+              FilledButton(
+                onPressed: () async {
+                  await AppLockService.openAccessibilitySettings();
+                },
+                child: const Text('Enable App Lock'),
+              ),
+            ],
+            const SizedBox(height: 4),
+            const Text(
+              'Every child\'s phone needs this ON — it can only be '
+              'turned on from that phone itself, never from the '
+              'parent phone.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final family = context.watch<FamilyService>();
@@ -276,6 +385,8 @@ class _LocksScreenState extends State<LocksScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        _serviceStatusCard(),
+        const SizedBox(height: 8),
         if (sync.isAvailable && amAdmin && targets.isNotEmpty) ...[
           const Text(
             'Locks for',
