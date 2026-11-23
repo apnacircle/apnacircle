@@ -385,10 +385,26 @@ flutter build appbundle --release   # Play Store ko AAB chahiye
    * Phone OTP (SMS) ke liye Firebase ko billing (Blaze) chahiye —
      22 Nov 2026 ko `BILLING_NOT_ENABLED` error aaya tha. Bina card ke
      Phone OTP nahi chalega; Gmail login billing ke baghair chalta hai.
-2. **Native App Lock enforcement:** `AppLockService.kt` v0.2 mein
-   foreground check + time-window evaluation karta hai, lekin PIN
-   overlay abhi MainActivity launch hai (dedicated LockActivity +
-   SYSTEM_ALERT_WINDOW overlay baaki). Asal phone par test lazmi hai.
+2. **Native App Lock enforcement — WIRED in v0.6.3 (23 Nov 2026):**
+   `AppLockService.kt` is now declared in AndroidManifest.xml +
+   res/xml/accessibility_service_config.xml, with a dedicated native
+   LockActivity (parent PIN screen; correct PIN = 5-minute grant for
+   that app only). Dart subscribes to locks at Home (not only when
+   the Locks tab opens) and the service reloads rules whenever the
+   parent changes them. Custom apps added by name are resolved to
+   real packages on the child's phone. **Root cause of "App lock nhi
+   ho rhi" (23 Nov 2026): the service was never declared before
+   v0.6.3, so Android could never run it. WHAT THE USER MUST ENABLE
+   ON THE CHILD'S PHONE (nothing else works without this): Settings
+   → Accessibility → ApnaCircle App Lock → ON (Android shows a
+   warning — normal). The Locks screen shows ON/OFF + an Enable
+   button. Honest limits: the child CAN turn the service off in
+   Settings (Android rule — Device Admin + the deactivation alert
+   are the tripwire, not a lock); it cannot block uninstall; a
+   grant expiring while an app is open does not kick the child out
+   (blocks re-entry only); an app not installed yet cannot be
+   blocked by name. Play needs a declaration + video for
+   Accessibility + QUERY_ALL_PACKAGES.
 3. **Google Maps API key** — placeholder system tayyar hai (upar v0.2
    point 4 dekhein); real key ke liye Google Cloud billing (card)
    chahiye hoti hai — ye parent ka step hai, is build mein nahi hai.
@@ -410,8 +426,11 @@ flutter build appbundle --release   # Play Store ko AAB chahiye
 
 Ye sab is VM par verify NAHI ho sakta — asal phone par karna lazmi hai:
 
-- [ ] App Lock: Accessibility service enable karein, locked app kholein —
-      PIN screen aaye. Time lock: 08:00 par lock, 14:00 par auto-unlock.
+- [ ] App Lock: child's phone — Settings → Accessibility →
+      ApnaCircle App Lock ON (Locks screen must show ON). Lock an
+      app, open it — PIN screen must appear (LockActivity). Correct
+      PIN = 5-minute grant, then it locks again. Time lock: 08:00
+      par lock, 14:00 par auto-unlock; overnight window bhi test karein.
 - [ ] SIM call: family member SIM se call kare — overlay par naam +
       distance (km) dikhe. Dual SIM par dono SIMs test karein.
 - [ ] Location: do phones, ek ki live location doosre ke map par.
