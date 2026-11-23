@@ -376,6 +376,49 @@ class SyncService extends ChangeNotifier {
     }
   }
 
+  /// RTDB paths deleted when an account is deleted (pure, tested):
+  /// the user's own `users/{uid}` node + their own member node in
+  /// every circle. Nothing of any other user is ever in this list.
+  static List<String> accountCleanupPaths(
+    String uid,
+    List<String> circleIds,
+  ) => [
+        'users/$uid',
+        for (final id in circleIds)
+          FirebaseConfig.circleMemberPath(id, uid),
+      ];
+
+  /// Delete MY data from the Realtime Database (v0.5, account
+  /// delete — Play Store requirement). Removes the user's own
+  /// `users/{uid}` node (profile + circle roles) and their own
+  /// member node from every circle they belong to. Best effort:
+  /// a failed remove is logged, not fatal — the Auth account
+  /// delete that follows is what actually closes the account.
+  /// What is NOT deleted here, honestly: chat messages and events
+  /// the user already sent (they belong to the circle's shared
+  /// history), and circles the user created as parent (other
+  /// members still use them — the parent should hand the circle
+  /// over or delete it first). The privacy policy says the same.
+  Future<void> deleteMyAccountData() async {
+    if (!isAvailable) return;
+    final myUid = uid!;
+    final paths = accountCleanupPaths(
+      myUid,
+      _myCircles.map((c) => c.id).toList(),
+    );
+    for (final path in paths) {
+      try {
+        await _root.child(path).remove();
+      } catch (e) {
+        debugPrint('ApnaCircle: deleteMyAccountData $path failed ($e)');
+      }
+    }
+    _myCircles.clear();
+    _activeCircleId = null;
+    await _saveLocal();
+    notifyListeners();
+  }
+
   /// One-time read of a member's app locks (the parent's Locks
   /// screen loads the target child's current list before editing).
   Future<List<LockedApp>> getLocksOnce(
