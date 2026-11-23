@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Device Admin policies (v0.5, 23 Nov 2026).
+     Only force-lock is requested: the admin exists to make uninstall
+     take an extra deactivation step + alert (see
+     ApnaCircleDeviceAdminReceiver). No password / wipe policies —
+     the app must never be able to lock or wipe the phone. -->
+<device-admin xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-policies>
+        <force-lock />
+    </uses-policies>
+</device-admin>
