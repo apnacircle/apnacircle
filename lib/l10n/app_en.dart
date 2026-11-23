@@ -66,4 +66,49 @@ const Map<String, String> enStrings = {
   'subscribe': 'Subscribe — \$5/year',
   'subscribeSoon':
       'Subscriptions are coming soon with Google Play Billing. No payment is taken here yet.',
+  // Device Admin — uninstall protection (v0.5).
+  'deviceAdmin': 'Uninstall protection (Device Admin)',
+  'deviceAdminOn':
+      'Protection ON — the app cannot be uninstalled without turning this off first.',
+  'deviceAdminOff': 'Protection OFF — the app can be uninstalled normally.',
+  'deviceAdminNote':
+      'Device Admin cannot truly block uninstall on modern Android — it forces an extra deactivation step and alerts your parent when that happens.',
+  'enableProtection': 'Turn on protection',
+  'disableProtection': 'Turn off protection',
+  'adminDisabledAlert':
+      'Device admin was turned off — your parent has been alerted.',
+  // SIM-change alert (v0.5).
+  'simCheck': 'SIM-change alert',
+  'simCheckOn': 'ON — a different SIM after reboot alerts your family.',
+  'simCheckOff': 'Could not read the SIM — check the Phone permission.',
+  'simChanged': 'SIM card changed — your family has been alerted.',
+  // SIM-call permissions (v0.5).
+  'callPermissions': 'SIM-call caller distance',
+  'callPermissionsOn': 'ON — incoming SIM calls show the caller’s distance.',
+  'callPermissionsOff':
+      'OFF — allow Phone + Call Log to see caller distance.',
+  'callPermissionsWhy':
+      'ApnaCircle needs Phone and Call Log permission to see who is calling on a normal SIM call, so it can show how far the caller is from you. WhatsApp calls are not used. The number is only used for the distance on your screen.',
+  'allowPermissions': 'Allow',
+  // Account delete (v0.5).
+  'deleteAccount': 'Delete account',
+  'deleteAccountNote':
+      'Deletes your account, your profile and your member entries. Sent chat messages stay in the circle’s shared history.',
+  'deleteAccountConfirm':
+      'Delete your account for good? This cannot be undone.',
+  'deleteAccountDone': 'Your account was deleted.',
+  'deleteAccountFailed': 'Could not delete the account.',
+  'signInAgainFirst': 'Sign in again first, then delete the account.',
+  'delete': 'Delete',
+  'cancel': 'Cancel',
+  // Play Billing (v0.5).
+  'billingNotAvailable':
+      'Google Play Billing is not available on this device.',
+  'billingProductMissing':
+      'The \$5/year plan is not in the Play Store yet — it is created in Play Console before launch.',
+  'billingError': 'Play Billing failed. Please try again later.',
+  'billingPending': 'Purchase pending — finishing in Google Play…',
+  'subscribed': 'Subscribed — Family plan active.',
+  'restorePurchases': 'Restore purchases',
+  'buyNow': 'Buy — \$5/year',
 };
