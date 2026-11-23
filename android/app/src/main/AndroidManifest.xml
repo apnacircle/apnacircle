@@ -32,7 +32,11 @@
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
-    <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE" />
+    <!-- NOTE (v0.6.3): BIND_ACCESSIBILITY_SERVICE is NOT a
+         <uses-permission> — it belongs on the AppLockService
+         <service> declaration below (it is a signature-level
+         permission the system grants to the service). Listing it
+         here did nothing and is removed. -->
 
     <application
         android:label="ApnaCircle"
@@ -106,6 +110,37 @@
                 <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
             </intent-filter>
         </receiver>
+        <!-- App Lock enforcement (v0.6.3) — THIS WAS THE MISSING
+             PIECE in v0.2–v0.6.2: AppLockService.kt existed but was
+             never declared here, so Android could never bind it, it
+             never appeared in Settings → Accessibility, and no
+             locked app was ever blocked ("App lock nhi ho rhi").
+             The user must enable it once in Settings → Accessibility
+             → ApnaCircle App Lock; the app's Locks screen shows
+             whether it is ON and opens those settings. -->
+        <service
+            android:name=".AppLockService"
+            android:exported="true"
+            android:label="@string/accessibility_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+        <!-- Dedicated PIN lock screen (v0.6.3): shown OVER a locked
+             app by AppLockService. Native (not Flutter) so it opens
+             instantly. noHistory + excludeFromRecents: leaving it
+             never leaves the locked app behind in Recents. -->
+        <activity
+            android:name=".LockActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@style/NormalTheme" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
