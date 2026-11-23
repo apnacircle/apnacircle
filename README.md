@@ -482,7 +482,25 @@ flutter build appbundle --release   # Play Store ko AAB chahiye
    → ON); Phone + Call Log permission must also be granted
    (same screen). Test: family member calls on SIM → overlay
    with name + distance; you call a member → same overlay.
-5. **Google Maps API key** — placeholder system tayyar hai (upar v0.2
+5. **Battery on its own schedule — v0.6.6 (23 Nov 2026):**
+   Root cause of the user's frozen battery (his phone: status
+   bar 59%, app still showing the 82% from 09:24): the battery
+   used to ride ONLY on a location publish, and location
+   publishes are throttled to "moved >= 50 m" — a member sitting
+   at home never moved, so no publish ever happened. Now the
+   battery is published on its OWN schedule, independent of the
+   movement throttle: at least every 15 minutes, and immediately
+   on any >= 2% change (BatteryPublishTracker, pure + tested).
+   Both publish paths use it: the background task publishes a
+   battery-only update (`battery` + `batteryAt`, never location)
+   when the fix is unchanged or missing, and the foreground loop
+   does the same when there is no GPS fix. The 60 s / 50 m
+   throttle still applies to LOCATION only. A failed battery
+   read (-1) never overwrites a real level on the server. The
+   member node now carries `batteryAt`, and a level older than
+   30 minutes is marked "(old)" on the member row so a stale
+   value is never mistaken for a live one.
+6. **Google Maps API key** — placeholder system tayyar hai (upar v0.2
    point 4 dekhein); real key ke liye Google Cloud billing (card)
    chahiye hoti hai — ye parent ka step hai, is build mein nahi hai.
    Bina key ke map nahi khulta.
@@ -513,6 +531,9 @@ Ye sab is VM par verify NAHI ho sakta — asal phone par karna lazmi hai:
 - [ ] Location: do phones, ek ki live location doosre ke map par.
       Parent phone se child ko lock karein → child ke phone par lock
       lage (time window ke andar bhi).
+- [ ] Battery (v0.6.6): ghar par baithe member ki battery 15 min
+      mein update honi chahiye (bina hile); 30 min purani battery
+      "(old)" ke saath dikhe.
 - [ ] SOS / alerts: SOS dabane par parent ko notification (RTDB event —
       app khula ho; band app par push sirf Cloud Function deploy ke
       baad aayega — pehle deploy karein, phir test karein).
