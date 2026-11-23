@@ -111,4 +111,24 @@ const Map<String, String> enStrings = {
   'subscribed': 'Subscribed — Family plan active.',
   'restorePurchases': 'Restore purchases',
   'buyNow': 'Buy — \$5/year',
+  // 6-digit email OTP login (v0.6).
+  'emailCodeTitle': 'Email code',
+  'emailCodeInfo':
+      'A 6-digit code will come to your Gmail inbox — no password needed.',
+  'emailCodeSend': 'Send code to Gmail',
+  'emailCodeSent': 'Code sent to your Gmail — it works for 10 minutes.',
+  'emailCodeHint': 'Type the 6-digit code from your Gmail inbox.',
+  'emailCodeVerify': 'Verify code & Sign in',
+  'emailCodeResend': 'Resend code',
+  'emailCodeInvalidEmail': 'That email address does not look right.',
+  'emailCodeWrong': 'Wrong code — check the Gmail and try again.',
+  'emailCodeExpired': 'The code expired — ask for a new one.',
+  'emailCodeNotFound': 'No code was sent to this email — ask for a new one.',
+  'emailCodeTooMany': 'Too many tries — ask for a new code.',
+  'emailCodeRateLimited': 'Too many codes sent — wait a while, then try again.',
+  'emailCodeNotConfigured':
+      'Email codes are not set up yet — sign in with your password instead.',
+  'emailCodeSendFailed':
+      'The code could not be sent — check your internet and try again.',
+  'emailCodeNetwork': 'No internet — check the connection and try again.',
 };
