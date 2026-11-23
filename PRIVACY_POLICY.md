@@ -1,13 +1,12 @@
-# ApnaCircle — Privacy Policy (DRAFT, v0.2)
+# ApnaCircle — Privacy Policy
 
-**Draft date: 22 Nov 2026. Ye final legal text NAHI hai — Play Store par
-submit karne se pehle is ko ek dafa parh kar confirm karna hai, aur
-[CONTACT_EMAIL] aur app ki Play listing URL bharni hai. Jab tak ye
-placeholders bhare na hon, is file ko Play Console mein link NA karein.**
+**Last updated: 23 Nov 2026 (v0.5).**
 
 **App name:** ApnaCircle — family location safety app.
 **Developer:** Mujahid Siddique (individual developer account).
-**Contact:** [CONTACT_EMAIL] — yahan apna email likhein.
+**Contact:** [CONTACT_EMAIL] — ⚠️ **YEH EMAIL ABHI BHARNA BAAQI HAI.**
+Mujahid ko apna contact email dena hai — andaza nahi lagaya gaya. Jab
+tak yeh email na bhar jaye, is policy ko Play Console mein link NA karein.
 **Play listing:** [PLAY_STORE_URL] — launch ke baad bharni hai.
 
 ## 1. Hum kya data lete hain — aur kyon
@@ -18,12 +17,20 @@ placeholders bhare na hon, is file ko Play Console mein link NA karein.**
 | Last location + time | Net band ho to aakhri location dikhana | Net off hone par, local save hoti hai |
 | Battery level + online/offline | Battery-low aur phone-off alerts | Location update ke sath |
 | Phone number | Family circle mein member pehchan aur SIM-call distance | Account banate waqt |
+| Email address | Account sign-in aur verification link | Account banate waqt |
 | App lock list | Parent jo apps lock kare (e.g. YouTube) | Sirf parent set karta hai |
 | Chat messages | Family chat | Sirf circle ke members dekhte hain |
+| Parent PIN (hash only) | Settings lock — PIN khud kabhi save nahi hota, sirf us ka SHA-256 hash | Parent PIN set karte waqt |
+| SIM fingerprint (hash only) | SIM badalne par family ko alert | SIM check par — sirf operator ka hash, ICCID/IMSI kabhi nahi liye jate |
+| Device hash (trial) | 7-day free trial sirf ek dafa per phone | Trial shuru karte waqt — Android ID ka SHA-256 hash, raw ID kabhi nahi |
+| FCM push token | SOS / alerts ki push notification bhejna | Sign-in ke baad, sirf aap ke apne account par |
+| Purchase status | Family plan subscription active hai ya nahi | Google Play Billing se khareed par (card details hum tak kabhi nahi aati) |
 
 **Hum ye data NAHI lete:** contacts list, photos, browsing history,
-bank / payment details (payment Google Play Billing se hoti hai, card
-ki details hum tak nahi aati), aur kisi bhi stranger ki location.
+bank / card details (payment Google Play Billing se hoti hai, card ki
+details hum tak nahi aati), call recordings, SMS ka content (sirf
+hamari apni "APNACIRCLE LOC:" location SMS parhi jati hai), aur kisi
+bhi stranger ki location.
 
 ## 2. Location ka data kis ko dikhta hai
 
@@ -40,29 +47,42 @@ ki details hum tak nahi aati), aur kisi bhi stranger ki location.
 - Location Lock sirf family circle ke andar kaam karta hai, aur
   parent hi is ko laga / hata sakta hai.
 
-## 4. App Lock aur permissions
+## 4. App Lock, Device Admin aur permissions
 
-App Lock ke liye app ko Accessibility permission chahiye hoti hai —
-ye sirf ye dekhne ke liye hai ke locked app khuli ya nahi, aur kuch
-parhne / likhne ke liye nahi. Phone-call permission sirf SIM call par
-caller ki distance dikhane ke liye hai. SMS permission sirf net band
-hone par aakhri location SMS se bhejne ke liye hai (parent ki marzi se).
+- **App Lock** ke liye app ko Accessibility permission chahiye hoti
+  hai — ye sirf ye dekhne ke liye hai ke locked app khuli ya nahi,
+  aur kuch parhne / likhne ke liye nahi.
+- **Device Admin (uninstall protection):** agar parent is ko on kare
+  to app uninstall karne se pehle admin band karna parta hai, aur
+  band karte hi parent ko alert milta hai. Ye uninstall ko poori
+  tarah rok nahi sakta — ye Android ki had hai, aur hum is se zyada
+  ka daawa nahi karte.
+- **Phone / Call Log permission** sirf SIM call par caller ki distance
+  dikhane ke liye hai — number sirf aap ki apni screen par fasilah
+  dikhane ke liye use hota hai.
+- **SMS permission** sirf net band hone par aakhri location SMS se
+  parent ko bhejne ke liye hai (parent ki marzi se), aur sirf hamari
+  apni location SMS parhne ke liye hai.
 
 ## 5. Bachon ka data (Children)
 
 - App family ke liye hai — bache sirf parent ki nigrani mein use karein.
 - Parent apne bache ka account banata hai aur us ki settings control
   karta hai. Hum bache se seedha koi data nahi mangte.
+- Bache ki location sirf us ke apne family circle ko dikhti hai.
 
 ## 6. Data kitne arse rehta hai aur delete kaise karein
 
-- Location history: circle ke liye zaroori arse tak (history screen).
-- **Account delete:** Settings → Delete account. Delete karte hi aap ka
-  account, location history aur chat 30 din ke andar delete ho jayenge.
-  Ye option Play Store ki requirement hai — launch se pehle is ko
-  app mein lagana lazmi hai (v0.2 task).
+- Location history: circle ke liye zaroori arse tak.
+- **Account delete:** Settings → Delete account. Delete karte hi aap
+  ka account, aap ki profile aur aap ke member entries delete ho
+  jate hain. Jo chat messages aur alerts aap pehle bhej chuke hain,
+  woh circle ki shared history mein reh sakte hain — woh sirf circle
+  ke members ko dikhte hain. Jo circle aap ne parent ke tor par
+  banaya tha, woh baaqi members ke liye chalta rehta hai.
 - Agar aap chahte hain ke aap ka data abhi delete ho, to upar wale
-  email par likhein — 30 din ke andar delete kar diya jayega.
+  email ([CONTACT_EMAIL] — bharna baaqi hai) par likhein — 30 din ke
+  andar delete kar diya jayega.
 
 ## 7. Data kahan rehta hai
 
@@ -70,6 +90,10 @@ hone par aakhri location SMS se bhejne ke liye hai (parent ki marzi se).
   [Firebase ki privacy policy](https://firebase.google.com/support/privacy)
   ke under hai. Aap ka data kisi aur mulk mein transfer ho sakta hai
   jahan Google ke server hon.
+- Push notifications Google Firebase Cloud Messaging se bheji jati
+  hain (Cloud Function ke zariye — server key kabhi app mein nahi hoti).
+- Trial aur SIM-check ke hashes bhi Firebase Realtime Database mein
+  rehte hain — raw Android ID, ICCID ya IMSI kabhi save nahi hote.
 
 ## 8. Tabdeeli
 
