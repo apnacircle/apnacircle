@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/alerts.dart';
+import '../core/call_member_cache.dart';
 import '../core/constants.dart';
 import '../models/circle.dart';
 import '../models/member.dart';
@@ -273,6 +274,11 @@ class FamilyService extends ChangeNotifier {
       _membersKey,
       jsonEncode(_members.map((m) => m.toJson()).toList()),
     );
+    // v0.6.5: keep the native SIM-call overlay cache fresh — the
+    // native receiver reads it without the Flutter engine running,
+    // so it must be rewritten on EVERY member change, not just on
+    // location updates. Every mutation flows through _save().
+    await CallMemberCache.save(_members, myId: _sync?.uid);
   }
 
   Future<void> _pushMemberNode(Member member) async {
