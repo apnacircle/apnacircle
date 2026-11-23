@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -6,10 +8,13 @@ import 'package:provider/provider.dart';
 import 'app.dart';
 import 'core/language_service.dart';
 import 'services/auth_service.dart';
+import 'services/billing_service.dart';
+import 'services/device_admin_service.dart';
 import 'services/family_service.dart';
 import 'services/firebase_bootstrap.dart';
 import 'services/notification_service.dart';
 import 'services/pin_service.dart';
+import 'services/sim_change_service.dart';
 import 'services/sms_location_service.dart';
 import 'services/sync_service.dart';
 import 'services/trial_service.dart';
@@ -39,6 +44,9 @@ Future<void> main() async {
   final pin = PinService();
   final family = FamilyService()..attachSync(sync);
   final trial = TrialService()..attachSync(sync);
+  final billing = BillingService();
+  final simChange = SimChangeService();
+  final deviceAdmin = DeviceAdminService();
 
   if (FirebaseBootstrap.available) {
     FirebaseMessaging.onBackgroundMessage(
@@ -56,6 +64,15 @@ Future<void> main() async {
   await trial.load();
   await family.load();
 
+  // v0.5 startup checks (do not block the first frame on them):
+  // * SIM-change: publish a pending boot event / live mismatch.
+  // * Device Admin: publish a pending deactivation alert.
+  // * Play Billing: connect in the background; the Plan screen
+  //   shows the state when it is ready.
+  await simChange.checkOnStart(sync: sync, auth: auth);
+  await deviceAdmin.publishPendingAlertIfAny(sync: sync, auth: auth);
+  unawaited(billing.initialize());
+
   runApp(
     MultiProvider(
       providers: [
@@ -64,9 +81,12 @@ Future<void> main() async {
         ChangeNotifierProvider.value(value: auth),
         ChangeNotifierProvider.value(value: sync),
         ChangeNotifierProvider.value(value: trial),
+        ChangeNotifierProvider.value(value: billing),
         ChangeNotifierProvider.value(value: notifications),
         ChangeNotifierProvider.value(value: family),
         Provider.value(value: sms),
+        Provider.value(value: simChange),
+        Provider.value(value: deviceAdmin),
       ],
       child: const ApnaCircleApp(),
     ),
