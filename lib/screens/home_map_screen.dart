@@ -433,7 +433,9 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     final sms = context.read<SmsLocationService>();
     final loc = LocationService();
     final fix = await loc.currentFix();
-    if (fix == null) return;
+    // The battery is read on EVERY cycle, even when there is no
+    // new fix: it is published on its own schedule (v0.6.6) and
+    // must not be dropped together with a missing/throttled fix.
     int battery = -1;
     try {
       battery = await Battery().batteryLevel;
@@ -444,6 +446,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     final offline = await sms.isOffline;
     if (mounted) setState(() => _iAmOffline = offline);
     if (offline) {
+      if (fix == null) return;
       // No data: SMS fallback (only when the user turned it on).
       final prefs = await SharedPreferences.getInstance();
       if (!(prefs.getBool(_smsEnabledKey) ?? false)) return;
@@ -453,6 +456,13 @@ class _HomeMapScreenState extends State<HomeMapScreen>
         lon: fix.longitude,
         at: fix.timestamp,
       );
+      return;
+    }
+    // Online: no GPS fix right now, but the battery is still
+    // readable — share it on its own schedule (v0.6.6) instead of
+    // dropping it with the missing fix.
+    if (fix == null) {
+      await family.publishSelfBattery(battery);
       return;
     }
     // Online: publish to the circle (no-op in demo mode).
@@ -641,9 +651,14 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     } else if (m.isOnline) {
       // Unknown battery (-1) shows no battery part at all — never
       // "-1%" (v0.6.2). A real level keeps showing "Battery 81%".
-      status = m.hasKnownBattery
-          ? 'Online · $distance away · ${m.batteryLabel}'
-          : 'Online · $distance away';
+      // A level older than 30 minutes is marked "(old)" so a stale
+      // value is never mistaken for a live one (v0.6.6).
+      final batteryPart = m.hasKnownBattery
+          ? (m.batteryIsStale ? '${m.batteryLabel} (old)' : m.batteryLabel)
+          : '';
+      status = batteryPart.isEmpty
+          ? 'Online · $distance away'
+          : 'Online · $distance away · $batteryPart';
     } else {
       status = 'Offline since ${_fmtTime(m.lastSeen)} · $distance away';
     }
