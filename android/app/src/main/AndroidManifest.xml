@@ -17,6 +17,11 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <!-- SIM-call caller distance (v0.5): Android 10+ only delivers
+         the ringing number to apps holding READ_CALL_LOG. Dart
+         explains why first, then requests it. Play Store needs a
+         declaration + video justification for CALL_LOG. -->
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.SEND_SMS" />
     <!-- Offline location fallback (v0.3): the parent's phone reads
@@ -32,7 +37,8 @@
     <application
         android:label="ApnaCircle"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -70,6 +76,34 @@
             android:permission="android.permission.BROADCAST_SMS">
             <intent-filter>
                 <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+        <!-- SIM-change + boot auto-start (v0.5): BootReceiver checks
+             the SIM fingerprint after every reboot and stores a
+             pending event when it changed; the SMS receiver is
+             manifest-registered, so offline SMS location works
+             after a reboot without the app opening. -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+        <!-- Device Admin — uninstall protection (v0.5). Enabling is
+             the user's own tap on Android's system screen. Honest
+             limit: admin cannot truly BLOCK uninstall — it forces
+             deactivation first + an alert (see
+             ApnaCircleDeviceAdminReceiver). -->
+        <receiver
+            android:name=".ApnaCircleDeviceAdminReceiver"
+            android:exported="false"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
             </intent-filter>
         </receiver>
     </application>
