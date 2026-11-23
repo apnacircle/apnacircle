@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:apnacircle/core/language_service.dart';
 import 'package:apnacircle/models/trial.dart';
 import 'package:apnacircle/screens/plan_screen.dart';
+import 'package:apnacircle/services/billing_service.dart';
 import 'package:apnacircle/services/device_id_service.dart';
 import 'package:apnacircle/services/trial_service.dart';
 import 'package:flutter/material.dart';
@@ -188,6 +189,11 @@ void main() {
           providers: [
             ChangeNotifierProvider(create: (_) => LanguageService()),
             ChangeNotifierProvider.value(value: trial),
+            // PlanScreen watches BillingService since v0.5 (real
+            // Play Billing flow). Not initialized here — the
+            // uninitialized service reports loading, which is the
+            // state the widget must handle gracefully.
+            ChangeNotifierProvider(create: (_) => BillingService()),
           ],
           child: const MaterialApp(
             home: Scaffold(body: PlanScreen()),
@@ -224,7 +230,9 @@ void main() {
       final trial = widgetTrial();
       await pumpPlan(tester, trial);
       expect(find.text('Your free trial has ended'), findsOneWidget);
-      expect(find.text('Subscribe — \$5/year'), findsOneWidget);
+      // v0.5: the subscribe button is the real Play Billing flow
+      // and is labelled "Buy — $5/year".
+      expect(find.text('Buy — \$5/year'), findsOneWidget);
       expect(find.text('Start 7-day free trial'), findsNothing);
     });
   });
