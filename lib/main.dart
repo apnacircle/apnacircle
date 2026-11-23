@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'app.dart';
 import 'core/language_service.dart';
 import 'services/auth_service.dart';
+import 'services/background_location_service.dart';
 import 'services/billing_service.dart';
 import 'services/device_admin_service.dart';
 import 'services/email_otp_service.dart';
@@ -34,6 +35,11 @@ import 'services/trial_service.dart';
 /// stays the same while sync happens underneath.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // v0.6.4: configure the background location service (plugin
+  // init only — sharing starts later, from Home, once the member
+  // is in a circle with "Allow all the time" permission).
+  BackgroundLocationService.init();
 
   // Guarded: false when no Firebase project exists yet (demo mode).
   await FirebaseBootstrap.initialize();
