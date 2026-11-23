@@ -122,7 +122,7 @@ class LockActivity : Activity() {
             gravity = Gravity.CENTER
             setPadding(0, 24, 0, 8)
         }
-        val hint = TextView(this).apply {
+        val hintText = TextView(this).apply {
             text = "Enter the parent PIN to open it."
             textSize = 15f
             setTextColor(Color.parseColor("#FFD9D9"))
@@ -164,12 +164,12 @@ class LockActivity : Activity() {
         root.addView(subtitle)
         if (pinHash == null) {
             // No PIN on this phone — never unlock blind.
-            hint.text = "No parent PIN is set on this phone yet. " +
+            hintText.text = "No parent PIN is set on this phone yet. " +
                 "Ask your parent to open ApnaCircle and set a PIN first."
-            root.addView(hint)
+            root.addView(hintText)
             root.addView(homeButton)
         } else {
-            root.addView(hint)
+            root.addView(hintText)
             root.addView(errorText)
             root.addView(
                 pinInput,
