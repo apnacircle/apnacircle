@@ -1,18 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/language_service.dart';
+import '../l10n/strings.dart';
 import '../services/auth_service.dart';
+import '../services/email_otp_service.dart';
 
-/// Sign in / sign up (v0.3, 22 Nov 2026).
+/// Sign in / sign up (v0.3, 22 Nov 2026; email-code login v0.6).
 ///
-/// Two channels, per Mujahid's standing decision — OTP on BOTH the
-/// SIM number AND Gmail:
+/// THREE channels, per Mujahid's standing decision — OTP on BOTH
+/// the SIM number AND Gmail:
 /// * **Phone (SIM):** Firebase sends a 6-digit SMS OTP to the SIM
 ///   number. Type the number -> "Send OTP" -> type the code.
 /// * **Gmail:** Email + password. After sign-up a verification
-///   LINK is sent to the Gmail inbox (Firebase Auth has no
-///   built-in 6-digit email OTP — the link IS the Gmail channel;
-///   see AuthService).
+///   LINK is sent to the Gmail inbox.
+/// * **Email code (v0.6):** a real 6-digit code in the Gmail inbox
+///   — no password needed. Cloud Function + SMTP sender (see
+///   EmailOtpService): "Send code to Gmail" -> type the code ->
+///   the function mints a custom token and the app signs in.
+///   Same limits as the server: 10-minute code, 5 wrong tries,
+///   5 codes/hour per email.
 ///
 /// Shown only when Firebase is configured and nobody is signed in
 /// (see AppRoot). "Continue in demo mode" skips sign-in — the app
@@ -25,7 +32,8 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
-  bool _isPhone = true;
+  /// 0 = Phone (SMS OTP), 1 = Gmail (password), 2 = Email code.
+  int _mode = 0;
   bool _isSignUp = false;
   bool _busy = false;
   String? _error;
@@ -36,6 +44,7 @@ class _AuthScreenState extends State<AuthScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   final _name = TextEditingController();
+  final _emailCode = TextEditingController();
 
   @override
   void dispose() {
@@ -44,6 +53,7 @@ class _AuthScreenState extends State<AuthScreen> {
     _email.dispose();
     _password.dispose();
     _name.dispose();
+    _emailCode.dispose();
     super.dispose();
   }
 
@@ -112,9 +122,56 @@ class _AuthScreenState extends State<AuthScreen> {
     });
   }
 
+  /// Email-code login (v0.6): step 1 — send the 6-digit code.
+  /// Errors come back as slugs; they are shown in the user's
+  /// language via the l10n keys (see EmailOtpLogic.messageKeyFor).
+  Future<void> _sendEmailCode() async {
+    final email = _email.text.trim();
+    if (email.isEmpty) {
+      setState(() => _error = tr(
+          context.read<LanguageService>().isUrdu,
+          'emailCodeInvalidEmail'));
+      return;
+    }
+    final lang = context.read<LanguageService>();
+    await _run(() async {
+      final slug = await context
+          .read<EmailOtpService>()
+          .requestCode(email);
+      if (slug == null && mounted) {
+        setState(() => _info = tr(lang.isUrdu, 'emailCodeSent'));
+        return null;
+      }
+      return slug == null ? null : tr(lang.isUrdu,
+          EmailOtpLogic.messageKeyFor(slug));
+    });
+  }
+
+  /// Email-code login (v0.6): step 2 — verify the code, sign in.
+  Future<void> _verifyEmailCode() async {
+    if (_emailCode.text.trim().length < 6) {
+      setState(() => _error = tr(
+          context.read<LanguageService>().isUrdu, 'emailCodeHint'));
+      return;
+    }
+    final lang = context.read<LanguageService>();
+    await _run(() async {
+      final slug = await context.read<EmailOtpService>().verifyCode(
+            _email.text,
+            _emailCode.text,
+          );
+      return slug == null
+          ? null
+          : tr(lang.isUrdu, EmailOtpLogic.messageKeyFor(slug));
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthService>();
+    final emailOtp = context.watch<EmailOtpService>();
+    final lang = context.watch<LanguageService>();
+    String t(String key) => tr(lang.isUrdu, key);
     return Scaffold(
       appBar: AppBar(title: const Text('Sign in — ApnaCircle')),
       body: ListView(
@@ -127,17 +184,18 @@ class _AuthScreenState extends State<AuthScreen> {
             style: TextStyle(fontSize: 16),
           ),
           const SizedBox(height: 16),
-          SegmentedButton<bool>(
-            segments: const [
-              ButtonSegment(value: true, label: Text('Phone (SMS OTP)')),
-              ButtonSegment(value: false, label: Text('Gmail')),
+          SegmentedButton<int>(
+            segments: [
+              const ButtonSegment(value: 0, label: Text('Phone (SMS OTP)')),
+              const ButtonSegment(value: 1, label: Text('Gmail')),
+              ButtonSegment(
+                  value: 2, label: Text(t('emailCodeTitle'))),
             ],
-            selected: {_isPhone},
-            onSelectionChanged: (v) =>
-                setState(() => _isPhone = v.first),
+            selected: {_mode},
+            onSelectionChanged: (v) => setState(() => _mode = v.first),
           ),
           const SizedBox(height: 20),
-          if (_isPhone) ...[
+          if (_mode == 0) ...[
             TextField(
               controller: _phone,
               keyboardType: TextInputType.phone,
@@ -175,7 +233,7 @@ class _AuthScreenState extends State<AuthScreen> {
               'Check the number, then ask for a new code.',
               style: TextStyle(fontSize: 13, color: Colors.grey),
             ),
-          ] else ...[
+          ] else if (_mode == 1) ...[
             if (_isSignUp)
               TextField(
                 controller: _name,
@@ -218,10 +276,58 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
             const Text(
               'After sign-up a verification link is sent to your '
-              'Gmail inbox — open it to verify. (Firebase has no '
-              '6-digit Gmail OTP; the link is the Gmail channel.)',
+              'Gmail inbox — open it to verify. No password? Use '
+              '"Email code" above — a 6-digit code comes to the '
+              'same Gmail inbox instead.',
               style: TextStyle(fontSize: 13, color: Colors.grey),
             ),
+          ] else ...[
+            // Email-code login (v0.6): no password needed.
+            Text(
+              t('emailCodeInfo'),
+              style: const TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _email,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: 'Gmail address',
+                hintText: 'you@gmail.com',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: _busy ? null : _sendEmailCode,
+              child: Text(t('emailCodeSend')),
+            ),
+            if (emailOtp.codeSent) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _emailCode,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                decoration: InputDecoration(
+                  labelText: t('emailCodeHint'),
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: _busy ? null : _verifyEmailCode,
+                child: Text(t('emailCodeVerify')),
+              ),
+              TextButton(
+                onPressed: _busy ? null : _sendEmailCode,
+                child: Text(t('emailCodeResend')),
+              ),
+              const Text(
+                'The code works for 10 minutes. 5 wrong tries lock '
+                'it — then ask for a new code.',
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+              ),
+            ],
           ],
           if (_busy)
             const Padding(
