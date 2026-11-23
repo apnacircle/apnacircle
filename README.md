@@ -405,15 +405,53 @@ flutter build appbundle --release   # Play Store ko AAB chahiye
    (blocks re-entry only); an app not installed yet cannot be
    blocked by name. Play needs a declaration + video for
    Accessibility + QUERY_ALL_PACKAGES.
-3. **Google Maps API key** — placeholder system tayyar hai (upar v0.2
+3. **Background location — WIRED in v0.6.4 (23 Nov 2026):**
+   Root cause of members going stale ("— away", "Offline since
+   08:38"): the app only ever asked for while-in-use location and
+   only fetched it while the Map screen was open. Now: after
+   while-in-use is granted, the app explains why in plain words
+   and sends the user to the app's Settings page to pick "Allow all
+   the time" (Android 11+ cannot grant it from a dialog); a
+   foreground service (flutter_foreground_task, type `location`,
+   declared in AndroidManifest.xml — the plugin does NOT declare
+   its own service) then publishes the member's location every
+   60 s (same 50 m / 60 s throttle) even when the app is closed,
+   with a permanent notification "ApnaCircle is sharing your
+   location with your family". The Map screen shows a status card
+   — "Location sharing ON (always)" green / "Only while using the
+   app" amber / "OFF" red — re-checked on every resume. The
+   service starts automatically in a circle with "always"
+   permission and stops when the user leaves all circles.
+   **Child cannot turn location off (parent order, 23 Nov 2026
+   ~10:34 PKT):** the in-app Location Lock switch is parent-PIN
+   gated, and the service deliberately does NOT stop on the in-app
+   sharing flag. **Honest limit:** NO app can block the phone's
+   system GPS switch (Settings / quick panel) — Android does not
+   allow it. Instead, the background task detects the switch-off
+   at once and publishes ONE `locationOff` alert to the circle
+   (with the last known location), so the parent is told
+   immediately. Other honest limits: the service can still be
+   stopped by swiping the app away on some phones, by aggressive
+   battery savers (Xiaomi / Oppo / Vivo), or by Android under
+   memory pressure — the battery-optimization exemption (asked
+   once) lowers the risk, it does not remove it; auto-restart on
+   boot is best-effort (Android 12+ restricts BOOT_COMPLETED
+   foreground-service starts). The SMS offline fallback still
+   needs the app open. **WHAT THE USER MUST ENABLE ON EACH
+   CHILD'S PHONE:** Map tab → card must say "Location sharing ON
+   (always)"; if not, tap "Turn on always" → Location → "Allow
+   all the time" (and accept the battery-optimization prompt).
+   The parent cannot enable it remotely. Play needs a declaration
+   + video justification for background location at launch.
+4. **Google Maps API key** — placeholder system tayyar hai (upar v0.2
    point 4 dekhein); real key ke liye Google Cloud billing (card)
    chahiye hoti hai — ye parent ka step hai, is build mein nahi hai.
    Bina key ke map nahi khulta.
-4. **Google Play Billing — asal khareed:** product
+5. **Google Play Billing — asal khareed:** product
    `apnacircle_family_yearly` Play Console mein banana hai (subscription,
    $5/year) + Play developer account ($25, parent khud). Tab tak Plan
    screen "not in the Play Store yet" kehti hai.
-5. **Privacy policy:** contact email bhar diya gaya (v0.5/v0.6);
+6. **Privacy policy:** contact email bhar diya gaya (v0.5/v0.6);
    [PLAY_STORE_URL] aur [LAUNCH_DATE] launch par.
 6. **Parent-phone-loss recovery — v0.3 mein code ho gaya:** account-based
    control, Email + Phone OTP login, PIN hash circle par save, "Restore
