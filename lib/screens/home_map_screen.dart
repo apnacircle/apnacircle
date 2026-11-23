@@ -60,6 +60,13 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   bool _iAmOffline = false;
   bool _smsFallbackOn = false;
 
+  // Bottom padding of the members list, so the floating SOS button
+  // can NEVER cover the last member row (v0.6.1: it used to cover
+  // Ammi's row). FAB height 56 + 16 bottom margin + 16 spare = 88.
+  // With this padding the last row scrolls fully clear of the
+  // button on any screen height.
+  static const double membersListBottomPadding = 88;
+
   @override
   void initState() {
     super.initState();
@@ -307,7 +314,11 @@ class _HomeMapScreenState extends State<HomeMapScreen>
           ? FloatingActionButton.extended(
               onPressed: () => _sendSos(context),
               backgroundColor: Colors.red,
-              icon: const Icon(Icons.sos),
+              // v0.6.1: was Icons.sos — that icon IS the letters "SOS",
+              // so next to the "SOS" label the button read "SOS SOS".
+              // Icons.emergency is a siren glyph, so the label "SOS"
+              // now appears exactly once.
+              icon: const Icon(Icons.emergency),
               label: const Text('SOS'),
             )
           : null,
@@ -357,6 +368,11 @@ class _HomeMapScreenState extends State<HomeMapScreen>
           SizedBox(
             height: 220,
             child: ListView(
+              // Bottom padding clears the floating SOS button —
+              // see membersListBottomPadding above.
+              padding: const EdgeInsets.only(
+                bottom: membersListBottomPadding,
+              ),
               children: [
                 for (final m in members) _memberCard(m),
               ],
