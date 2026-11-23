@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Label + description shown by Android in Settings → Accessibility
+         for the App Lock service (v0.6.3). The description must say in
+         plain words what the service does — Android shows it on the
+         enable screen, and Play reviews it too. -->
+    <string name="accessibility_service_label">ApnaCircle App Lock</string>
+    <string name="accessibility_service_description">ApnaCircle blocks apps your parent locked (for example games or YouTube) and asks for the parent PIN to open them. It only watches which app comes to the foreground — it never reads screen content. Turn this on so App Lock works.</string>
+</resources>
