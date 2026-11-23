@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../core/battery_schedule.dart';
 import '../core/location_service.dart';
 import '../models/circle.dart';
 import 'firebase_config.dart';
@@ -232,6 +233,14 @@ void backgroundLocationTaskCallback() {
 class BackgroundLocationTaskHandler extends TaskHandler {
   final LocationService _loc = LocationService();
   final LocationOffDetector _offDetector = LocationOffDetector();
+  // Battery has its OWN schedule (v0.6.6): it is published every
+  // 15 minutes and on a >= 2% change, even when the location has
+  // not moved and the movement throttle says "do not send the fix
+  // again". Before this, the battery rode only on a location
+  // publish, so a member sitting at home kept the first-published
+  // value for hours (user's phone: 82% at 09:24, still 82% at
+  // 12:47 while the real level was 59%).
+  final BatteryPublishTracker _batteryTracker = BatteryPublishTracker();
 
   DatabaseReference? _db;
   String? _circleId;
@@ -299,33 +308,50 @@ class BackgroundLocationTaskHandler extends TaskHandler {
       return;
     }
     final fix = await _loc.currentFix();
-    if (fix == null) return;
-    // LocationService throttles (50 m / 60 s) by returning the
-    // previous fix — do not publish the same fix twice.
-    if (_lastPublishedFixAt != null &&
-        fix.timestamp == _lastPublishedFixAt) {
-      return;
-    }
+    // The battery is read on EVERY cycle, even when there is no
+    // new fix: it is published on its own schedule (v0.6.6) and
+    // must not be dropped together with a throttled location.
     int battery = -1;
     try {
       battery = await Battery().batteryLevel;
     } catch (_) {
       battery = -1; // Unknown battery shows no battery text (v0.6.2).
     }
+    final now = DateTime.now();
+    if (fix == null) {
+      // No GPS fix right now, but the battery is still readable —
+      // share it on its own schedule instead of dropping it.
+      await _publishBatteryIfDue(battery, now);
+      return;
+    }
+    // LocationService throttles (50 m / 60 s) by returning the
+    // previous fix — do not publish the same fix twice. But the
+    // battery still goes out on its own schedule (v0.6.6).
+    if (_lastPublishedFixAt != null && fix.timestamp == _lastPublishedFixAt) {
+      await _publishBatteryIfDue(battery, now);
+      return;
+    }
     try {
-      await _db!
-          .child(FirebaseConfig.circleMemberPath(_circleId!, _uid!))
-          .update({
+      // A failed battery read (-1) must never overwrite a real
+      // level on the server: the battery fields are only written
+      // when the level is known (v0.6.2).
+      final update = <String, dynamic>{
         'lat': fix.latitude,
         'lon': fix.longitude,
-        'battery': battery,
         'isOnline': true,
-        'lastSeen': DateTime.now().toIso8601String(),
+        'lastSeen': now.toIso8601String(),
         'locationSharingOn': true,
-      });
+      };
+      if (battery >= 0 && battery <= 100) {
+        update['battery'] = battery;
+        update['batteryAt'] = now.toIso8601String();
+      }
+      await _db!
+          .child(FirebaseConfig.circleMemberPath(_circleId!, _uid!))
+          .update(update);
       _lastPublishedFixAt = fix.timestamp;
+      _batteryTracker.markPublished(battery: battery, now: now);
       try {
-        final now = DateTime.now();
         final hh = now.hour.toString().padLeft(2, '0');
         final mm = now.minute.toString().padLeft(2, '0');
         await FlutterForegroundTask.updateService(
@@ -337,6 +363,27 @@ class BackgroundLocationTaskHandler extends TaskHandler {
       }
     } catch (e) {
       debugPrint('ApnaCircle: background location publish failed ($e)');
+    }
+  }
+
+  /// Battery-only publish (v0.6.6) — see [BatteryPublishTracker].
+  /// Writes only `battery` + `batteryAt`, never location or
+  /// lastSeen: a member who has not moved keeps the last fix, but
+  /// the family still sees a fresh battery level.
+  Future<void> _publishBatteryIfDue(int battery, DateTime now) async {
+    if (!_batteryTracker.shouldPublish(battery: battery, now: now)) {
+      return;
+    }
+    try {
+      await _db!
+          .child(FirebaseConfig.circleMemberPath(_circleId!, _uid!))
+          .update({
+        'battery': battery,
+        'batteryAt': now.toIso8601String(),
+      });
+      _batteryTracker.markPublished(battery: battery, now: now);
+    } catch (e) {
+      debugPrint('ApnaCircle: background battery publish failed ($e)');
     }
   }
 
