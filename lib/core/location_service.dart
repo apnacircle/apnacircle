@@ -1,8 +1,37 @@
 import 'dart:math';
 import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart' as ph;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'constants.dart';
+
+/// What level of location sharing this phone has right now.
+///
+/// * [off] — permission denied / denied forever, or the phone's
+///   location services are switched off entirely.
+/// * [whileInUse] — "Allow only while using the app": the parent
+///   sees the child ONLY while ApnaCircle is open on the child's
+///   phone. Background tracking cannot run.
+/// * [always] — "Allow all the time": the background service can
+///   keep sharing even when the app is closed (v0.6.4).
+enum LocationSharingState { off, whileInUse, always }
+
+/// Pure mapping from the system permission to the sharing state —
+/// unit-tested (test/background_location_test.dart). The "location
+/// services switched off" case is handled by [LocationService.sharingState],
+/// not here, because it needs a platform call.
+LocationSharingState locationStateFromPermission(LocationPermission p) {
+  switch (p) {
+    case LocationPermission.always:
+      return LocationSharingState.always;
+    case LocationPermission.whileInUse:
+      return LocationSharingState.whileInUse;
+    case LocationPermission.denied:
+    case LocationPermission.deniedForever:
+    case LocationPermission.unableToDetermine:
+      return LocationSharingState.off;
+  }
+}
 
 /// Location, with last-known fallback.
 ///
@@ -25,23 +54,88 @@ class LocationService {
   Position? _lastFix;
   DateTime _lastSent = DateTime.fromMillisecondsSinceEpoch(0);
 
-  /// Ask for permission (while-in-use first; background only after
-  /// the user understands why — Play Store requires a video + prompt
-  /// for background location, see README).
-  Future<bool> ensurePermission() async {
+  /// Raw system permission (no request). The UI maps it with
+  /// [locationStateFromPermission].
+  Future<LocationPermission> checkPermission() =>
+      Geolocator.checkPermission();
+
+  /// The sharing state on THIS phone right now. Returns [off] when
+  /// the permission is denied/denied-forever OR when the phone's
+  /// location services are switched off entirely — in both cases
+  /// the parent sees nothing live, and the status card must say so.
+  Future<LocationSharingState> sharingState() async {
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      return LocationSharingState.off;
+    }
+    return locationStateFromPermission(await checkPermission());
+  }
+
+  /// Ask for while-in-use permission only (the first step). Returns
+  /// the permission that resulted. Background ("always") is NEVER
+  /// requested here: on Android 11+ it can only be granted from
+  /// Settings, not from a dialog — see [openAppSettings].
+  Future<LocationPermission> ensureWhileInUse() async {
     var p = await Geolocator.checkPermission();
     if (p == LocationPermission.denied) {
       p = await Geolocator.requestPermission();
     }
-    return p == LocationPermission.whileInUse ||
-        p == LocationPermission.always;
+    return p;
+  }
+
+  /// Open THIS app's page in Android Settings, where the user picks
+  /// "Allow all the time" (Location permission → "Allow all the
+  /// time"). This is the ONLY way to get background location on
+  /// Android 11+: a request dialog cannot grant it, and the app
+  /// must show a plain-words reason BEFORE sending the user there
+  /// (Play Store rule — the rationale dialog lives in
+  /// HomeMapScreen._fixLocationSharing).
+  Future<bool> openAppSettings() async {
+    try {
+      return await ph.openAppSettings();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Ask Android to exempt ApnaCircle from battery optimization, so
+  /// the phone does not kill the background location service to
+  /// save battery. Returns true when exempt. Some phones (notably
+  /// Xiaomi / Oppo / Vivo with aggressive killers) still stop
+  /// background work even when exempt — that limit is documented
+  /// in README, never hidden.
+  Future<bool> requestBatteryOptimizationExemption() async {
+    try {
+      final status =
+          await ph.Permission.ignoreBatteryOptimizations.request();
+      return status.isGranted;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Android 13+: the foreground service shows a permanent
+  /// notification ("sharing your location with your family"), which
+  /// needs the notification permission. Best effort — the service
+  /// is started either way; a denied notification permission only
+  /// hides the notification, it does not stop the sharing.
+  Future<bool> ensureNotificationPermission() async {
+    try {
+      final status = await ph.Permission.notification.request();
+      return status.isGranted;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Current fix, throttled: at most every 60 s and only after the
   /// member moved >= 50 m (keeps the \$5/year plan affordable).
   /// Returns null when there is no fix — caller must use lastKnown().
   Future<Position?> currentFix() async {
-    if (!await ensurePermission()) return null;
+    final p = await ensureWhileInUse();
+    if (p != LocationPermission.whileInUse &&
+        p != LocationPermission.always) {
+      return null;
+    }
     if (!await Geolocator.isLocationServiceEnabled()) return null;
     final pos = await Geolocator.getCurrentPosition(
       locationSettings: const LocationSettings(
