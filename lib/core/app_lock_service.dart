@@ -6,8 +6,9 @@ import 'time_lock.dart';
 /// App Lock — parent locks ANY app from the parent phone.
 ///
 /// The lock list is NOT a fixed list. It starts with presets
-/// (YouTube, Facebook, WhatsApp, Chrome, games) and the parent can
-/// ADD ANY app by name (custom app add, 21 Nov 2026).
+/// (YouTube, Facebook, WhatsApp, WhatsApp Business, Play Store,
+/// Chrome, TikTok, games) and the parent can ADD ANY app by name
+/// (custom app add, 21 Nov 2026).
 /// A locked app cannot be opened on the child's phone without the
 /// parent PIN. Unlocking / removing is parent-only, from the parent
 /// phone (remote control).
@@ -117,10 +118,18 @@ class AppLockService {
   /// Preset list — the parent can lock/unlock any of these, and add more.
   /// PUBG is the company example: time-locked Mon–Fri 08:00–14:00,
   /// set once, repeats every working day.
+  /// v0.6.8: Play Store + WhatsApp Business added — both were
+  /// reported NOT locking on 24 Nov 2026 because they were not in
+  /// this list, so they could only be added by name, and the name
+  /// match failed ("WA Business" is not the real label
+  /// "WhatsApp Business"). With exact package names here, they lock
+  /// like every other preset, no name matching needed.
   static const List<LockedApp> presets = [
     LockedApp(name: 'YouTube', packageName: 'com.google.android.youtube'),
     LockedApp(name: 'Facebook', packageName: 'com.facebook.katana'),
     LockedApp(name: 'WhatsApp', packageName: 'com.whatsapp'),
+    LockedApp(name: 'WhatsApp Business', packageName: 'com.whatsapp.w4b'),
+    LockedApp(name: 'Play Store', packageName: 'com.android.vending'),
     LockedApp(name: 'Chrome', packageName: 'com.android.chrome'),
     LockedApp(name: 'TikTok', packageName: 'com.zhiliaoapp.musically'),
     LockedApp(
@@ -157,14 +166,45 @@ class AppLockService {
     }
   }
 
+  /// Well-known short forms (v0.6.8) — the parent types these, the
+  /// real label differs, and no normalization can bridge them:
+  /// "WA Business" is not "WhatsApp Business" with the spaces
+  /// removed, so plain label matching can never find it. Returns
+  /// the real package, or null when the name is not a known alias.
+  /// The child's phone runs the same map natively (MainActivity),
+  /// so entries the parent already added by name heal there too.
+  static String? knownPackageForName(String name) {
+    switch (_normalizeAppName(name)) {
+      case 'wabusiness':
+      case 'whatsappbusiness':
+        return 'com.whatsapp.w4b';
+      case 'playstore':
+      case 'googleplaystore':
+        return 'com.android.vending';
+    }
+    return null;
+  }
+
+  /// Lowercase, letters/digits only: "Play Store" -> "playstore".
+  /// Used only for matching — display names keep their spaces.
+  static String _normalizeAppName(String s) =>
+      s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+
   /// Custom app: parent types a name (e.g. "Snapchat"). The package
   /// name is resolved on the child's phone from installed apps;
   /// until then the entry is stored by name and matched by name.
-  static LockedApp customApp(String name) => LockedApp(
-        name: name.trim(),
-        packageName: 'custom:${name.trim().toLowerCase()}',
-        isCustom: true,
-      );
+  /// v0.6.8: a known short form resolves IMMEDIATELY to the real
+  /// package here, so it locks without waiting for the child's
+  /// phone to resolve it.
+  static LockedApp customApp(String name) {
+    final trimmed = name.trim();
+    return LockedApp(
+      name: trimmed,
+      packageName:
+          knownPackageForName(trimmed) ?? 'custom:${trimmed.toLowerCase()}',
+      isCustom: true,
+    );
+  }
 
   /// Is the native AccessibilityService enabled on THIS phone?
   /// False until the user turns it on in Settings → Accessibility.
