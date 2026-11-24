@@ -2,7 +2,9 @@ import 'dart:convert';
 
 import 'package:apnacircle/core/alerts.dart';
 import 'package:apnacircle/core/app_lock_service.dart';
+import 'package:apnacircle/core/chat_paging.dart';
 import 'package:apnacircle/core/location_service.dart';
+import 'package:apnacircle/models/chat_message.dart';
 import 'package:apnacircle/models/circle.dart';
 import 'package:apnacircle/models/member.dart';
 import 'package:apnacircle/screens/location_status_card.dart';
@@ -513,4 +515,18 @@ class _FakeSync extends SyncService {
     String circleId,
     void Function(CircleEvent) onData,
   ) {}
+
+  // v0.6.11: FamilyService also subscribes to chat — the fake
+  // must stub it, or the real implementation hits Firebase and
+  // the test crashes (no Firebase app in tests).
+  void Function(List<ChatMessage>)? chatCallback;
+
+  @override
+  void subscribeChat(
+    String circleId,
+    void Function(List<ChatMessage>) onData, {
+    int limit = chatPageSize,
+  }) {
+    chatCallback = onData;
+  }
 }
