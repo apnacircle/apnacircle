@@ -16,6 +16,7 @@ class LocationStatusCard extends StatelessWidget {
     super.key,
     required this.state,
     required this.serviceRunning,
+    this.locationLocked = false,
     required this.onFix,
     required this.onRefresh,
   });
@@ -25,6 +26,15 @@ class LocationStatusCard extends StatelessWidget {
 
   /// Whether the background location service is running.
   final bool serviceRunning;
+
+  /// v0.6.9: the parent's Location Lock for THIS member. When it is
+  /// on and sharing is not "always", the card says the parent
+  /// locked it — so the child sees they must turn sharing back on.
+  /// There is no in-app off-switch to disable (sharing is governed
+  /// by the OS permission); the lock's enforcement is this prompt
+  /// plus the locationOff parent alert the background service
+  /// already sends when sharing goes off.
+  final bool locationLocked;
 
   /// Runs the fix flow (rationale -> Settings -> "Allow all the
   /// time"), owned by HomeMapScreen.
@@ -100,9 +110,11 @@ class LocationStatusCard extends StatelessWidget {
                       ? serviceRunning
                           ? 'Your family can see you even when the app is closed.'
                           : 'Permission is "always", but the background service is not running — tap Refresh.'
-                      : isWhileInUse
-                          ? 'Your family can see you ONLY while ApnaCircle is open on this phone. Turn on "Allow all the time" to keep sharing when the app is closed.'
-                          : 'Your family cannot see your location at all. Turn location sharing on.',
+                      : locationLocked
+                          ? 'Location is locked by your parent — turn sharing back on.'
+                          : isWhileInUse
+                              ? 'Your family can see you ONLY while ApnaCircle is open on this phone. Turn on "Allow all the time" to keep sharing when the app is closed.'
+                              : 'Your family cannot see your location at all. Turn location sharing on.',
             ),
             if (s != null && !isAlways) ...[
               const SizedBox(height: 8),
