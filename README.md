@@ -655,7 +655,8 @@ flutter build appbundle --release   # Play Store ko AAB chahiye
    `flutter_local_notifications` needs core library desugaring.
    Fixed in `android/app/build.gradle.kts`:
    `isCoreLibraryDesugaringEnabled = true` +
-   `coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")`.
+   `coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")`.
+   (First tried 2.0.4 — run #215 proved the plugin needs 2.1.4+.)
    Local checks cannot catch this (they never run Gradle) — CI is
    the only proof.
 11. **Google Maps API key** — placeholder system tayyar hai (upar v0.2
