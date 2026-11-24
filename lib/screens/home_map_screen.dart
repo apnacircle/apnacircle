@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/alert_notification.dart';
 import '../core/app_lock_service.dart';
 import '../core/call_distance_service.dart';
+import '../core/chat_notification.dart';
 import '../core/location_service.dart';
 import '../models/circle.dart';
 import '../models/member.dart';
@@ -346,16 +347,27 @@ class _HomeMapScreenState extends State<HomeMapScreen>
         );
       });
       // v0.6.10: tapping an alert notification opens the Alerts tab.
+      // v0.6.11: tapping a chat notification opens the Chat tab.
       // A tap that arrived before Home was listening (cold start)
       // is drained from the pending slot once, below.
       notifications.tapRequests.listen((payload) {
         if (!mounted) return;
-        if (payload == AlertNotifications.tapPayload) setState(() => _tab = 1);
+        if (payload == AlertNotifications.tapPayload) {
+          setState(() => _tab = 1);
+        }
+        if (payload == ChatNotifications.tapPayload) {
+          setState(() => _tab = 3);
+        }
       });
       final pendingTap = notifications.takePendingTap();
       if (pendingTap == AlertNotifications.tapPayload) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) setState(() => _tab = 1);
+        });
+      }
+      if (pendingTap == ChatNotifications.tapPayload) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _tab = 3);
         });
       }
       family.circleEvents.listen((event) {
@@ -382,6 +394,19 @@ class _HomeMapScreenState extends State<HomeMapScreen>
             content: Text(label),
             backgroundColor: Colors.red,
           ),
+        );
+      });
+      // v0.6.11: family chat notifications — a new message from
+      // another member rings on the normal chat channel (sender
+      // name + preview, like WhatsApp). Own messages are already
+      // filtered in FamilyService; the open-chat suppression lives
+      // in NotificationService (ChatScreen sets openChatCircleId).
+      family.newChatMessages.listen((msg) {
+        if (!mounted) return;
+        final circleId = family.activeCircleId;
+        if (circleId == null) return;
+        unawaited(
+          notifications.showChatMessage(msg, circleId: circleId),
         );
       });
     }
