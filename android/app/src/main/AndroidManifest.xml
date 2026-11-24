@@ -75,6 +75,15 @@
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="${MAPS_API_KEY}" />
+        <!-- v0.6.10: FCM notification messages with no channel set
+             are shown by the system on this channel, so a push that
+             arrives while the app is closed/killed still rings loud
+             on "ApnaCircle Alerts" (sound + vibration) instead of
+             the silent default channel. The channel itself is
+             created at startup by NotificationService. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="apnacircle_alerts" />
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
