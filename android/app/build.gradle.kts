@@ -28,6 +28,10 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // Run #204 fix (24 Nov 2026): flutter_local_notifications
+        // (v0.6.10) needs core library desugaring — without this the
+        // release build fails at :app:checkReleaseAarMetadata.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -86,4 +90,8 @@ flutter {
 dependencies {
     // Keep in step with the Kotlin plugin version in settings.gradle.kts (2.1.0).
     implementation("org.jetbrains.kotlin:kotlin-stdlib:2.1.0")
+    // Run #204 fix (24 Nov 2026): desugaring library required by
+    // flutter_local_notifications (v0.6.10) — pairs with
+    // isCoreLibraryDesugaringEnabled above.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }
