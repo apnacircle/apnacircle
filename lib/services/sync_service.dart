@@ -423,33 +423,26 @@ class SyncService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// One-time read of a member's app locks (the parent's Locks
+  /// One-time read of a member's lock settings (the parent's Locks
   /// screen loads the target child's current list before editing).
-  Future<List<LockedApp>> getLocksOnce(
+  /// Null when the node does not exist yet (or cannot be read) —
+  /// the caller keeps its local defaults then, instead of wiping
+  /// the preset list with an empty one (v0.6.9). Old nodes (apps
+  /// only) read back with both switches ON.
+  Future<LockSettings?> getLocksOnce(
     String circleId,
     String memberId,
   ) async {
-    if (!isAvailable) return const [];
+    if (!isAvailable) return null;
     try {
       final snap = await _root
           .child(FirebaseConfig.circleLocksPath(circleId, memberId))
           .get();
-      if (!snap.exists || snap.value == null) return const [];
-      final appsRaw = asMap(snap.value)['apps'];
-      if (appsRaw is! List) return const [];
-      return appsRaw
-          .map((a) {
-            try {
-              return LockedApp.fromJson(asMap(a));
-            } catch (_) {
-              return null;
-            }
-          })
-          .whereType<LockedApp>()
-          .toList();
+      if (!snap.exists || snap.value == null) return null;
+      return LockSettings.fromJson(asMap(snap.value));
     } catch (e) {
       debugPrint('ApnaCircle: getLocksOnce failed ($e)');
-      return const [];
+      return null;
     }
   }
 
@@ -506,35 +499,47 @@ class SyncService extends ChangeNotifier {
 
   /// Parent changes one member's alerts -> RTDB (child's phone
   /// gets it live). Alerts are a flat {name: bool} map.
-  Future<void> publishAlerts(
+  /// Returns true only when the write landed (v0.6.9): callers
+  /// retry when it returns false, instead of assuming a
+  /// fire-and-forget write arrived.
+  Future<bool> publishAlerts(
     String circleId,
     String memberId,
     Map<AlertType, bool> alerts,
   ) async {
-    if (!isAvailable) return;
+    if (!isAvailable) return false;
     try {
       await _root
           .child(FirebaseConfig.circleAlertsPath(circleId, memberId))
           .set({for (final e in alerts.entries) e.key.name: e.value});
+      return true;
     } catch (e) {
       debugPrint('ApnaCircle: publishAlerts failed ($e)');
+      return false;
     }
   }
 
-  /// Parent changes one member's app locks -> RTDB (child's phone
-  /// enforces them live via AppLockService).
-  Future<void> publishLocks(
+  /// Parent changes one member's app locks + lock switches -> RTDB
+  /// (child's phone enforces them live via AppLockService).
+  /// v0.6.9: the whole [LockSettings] object is written — before,
+  /// only `{'apps': [...]}` was written and the two switches
+  /// (Location Lock, Internet-off alert) were never saved anywhere.
+  /// Returns true only when the write landed, so callers can retry
+  /// a publish that never arrived.
+  Future<bool> publishLocks(
     String circleId,
     String memberId,
-    List<LockedApp> apps,
+    LockSettings settings,
   ) async {
-    if (!isAvailable) return;
+    if (!isAvailable) return false;
     try {
       await _root
           .child(FirebaseConfig.circleLocksPath(circleId, memberId))
-          .set({'apps': apps.map((a) => a.toJson()).toList()});
+          .set(settings.toJson());
+      return true;
     } catch (e) {
       debugPrint('ApnaCircle: publishLocks failed ($e)');
+      return false;
     }
   }
 
@@ -667,11 +672,13 @@ class SyncService extends ChangeNotifier {
     _subs.add(sub);
   }
 
-  /// Live app locks for one member (the child's phone enforces).
+  /// Live lock settings for one member (the child's phone
+  /// enforces). Delivers the whole [LockSettings] object — apps
+  /// plus the two switches (v0.6.9).
   void subscribeLocks(
     String circleId,
     String memberId,
-    void Function(List<LockedApp>) onData,
+    void Function(LockSettings) onData,
   ) {
     if (!isAvailable) return;
     final sub = _root
@@ -680,18 +687,7 @@ class SyncService extends ChangeNotifier {
         .listen((event) {
       final raw = event.snapshot.value;
       if (raw == null) return;
-      final map = asMap(raw);
-      final appsRaw = map['apps'];
-      if (appsRaw is! List) return;
-      final apps = <LockedApp>[];
-      for (final a in appsRaw) {
-        try {
-          apps.add(LockedApp.fromJson(asMap(a)));
-        } catch (err) {
-          debugPrint('ApnaCircle: bad lock entry ($err)');
-        }
-      }
-      onData(apps);
+      onData(LockSettings.fromJson(asMap(raw)));
     });
     _subs.add(sub);
   }
