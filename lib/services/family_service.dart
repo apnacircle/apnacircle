@@ -29,6 +29,14 @@ import 'sync_service.dart';
 class FamilyService extends ChangeNotifier {
   static const _membersKey = 'family_members_v1';
 
+  /// Alert changes whose RTDB publish has not been confirmed yet
+  /// (v0.6.9): memberId -> newest local alert map. Kept in memory
+  /// AND in SharedPreferences, so an app restart does not lose the
+  /// fact that the server never got the change. A stale server
+  /// value must never overwrite one of these (see _subscribeRemote).
+  static const _pendingAlertsKey = 'family_pending_alerts_v1';
+  final Map<String, Map<AlertType, bool>> _pendingAlerts = {};
+
   final List<Member> _members = [];
   List<Member> get members => List.unmodifiable(_members);
   int get memberCount => _members.length;
@@ -185,6 +193,12 @@ class FamilyService extends ChangeNotifier {
   /// must already have verified the parent PIN — see AlertsScreen.
   /// In synced mode the change is pushed to RTDB, so the member's
   /// phone gets it live.
+  ///
+  /// v0.6.9 — the toggle used to flip back OFF by itself: the
+  /// publish was fire-and-forget, and the members refresh (below)
+  /// wiped the local ON before the server value arrived. Now the
+  /// newest local intent is kept as pending until its publish is
+  /// confirmed, and a stale server value can never clobber it.
   void setAlert(String memberId, AlertType type, bool value) {
     final i = _members.indexWhere((m) => m.id == memberId);
     if (i < 0) return;
@@ -193,8 +207,115 @@ class FamilyService extends ChangeNotifier {
     _members[i] = _members[i].copyWith(alerts: alerts);
     _save();
     if (isSynced) {
-      unawaited(_sync!.publishAlerts(activeCircleId!, memberId, alerts));
+      _pendingAlerts[memberId] = alerts;
+      unawaited(_savePendingAlerts());
+      unawaited(_publishAlertsAndTrack(memberId, alerts));
     }
+    notifyListeners();
+  }
+
+  /// Publish one member's alerts and clear the pending record only
+  /// when THIS publish landed. A newer setAlert meanwhile replaces
+  /// the pending entry, so an old completion never clears a newer
+  /// intent (compared by identity: each setAlert builds a new map).
+  Future<void> _publishAlertsAndTrack(
+    String memberId,
+    Map<AlertType, bool> alerts,
+  ) async {
+    final ok =
+        await _sync!.publishAlerts(activeCircleId!, memberId, alerts);
+    if (ok && identical(_pendingAlerts[memberId], alerts)) {
+      _pendingAlerts.remove(memberId);
+      unawaited(_savePendingAlerts());
+    }
+  }
+
+  /// Re-publish any alert change whose publish never landed (phone
+  /// was offline, app restarted). Called whenever a members event
+  /// proves we are online again, and after load(). Safe to call
+  /// any time: with nothing pending it is a no-op.
+  Future<void> retryPendingAlertPublishes() async {
+    if (!isSynced || _pendingAlerts.isEmpty) return;
+    final pending = Map<String, Map<AlertType, bool>>.of(_pendingAlerts);
+    for (final entry in pending.entries) {
+      final ok = await _sync!
+          .publishAlerts(activeCircleId!, entry.key, entry.value);
+      if (ok && identical(_pendingAlerts[entry.key], entry.value)) {
+        _pendingAlerts.remove(entry.key);
+      }
+    }
+    unawaited(_savePendingAlerts());
+  }
+
+  /// Persist the pending-alerts record so an app restart does not
+  /// lose the fact that the server never got a change (v0.6.9).
+  /// Written on every pending change; removed when nothing is
+  /// pending. A corrupt record is dropped, never trusted.
+  Future<void> _savePendingAlerts() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_pendingAlerts.isEmpty) {
+      await prefs.remove(_pendingAlertsKey);
+      return;
+    }
+    await prefs.setString(
+      _pendingAlertsKey,
+      jsonEncode({
+        for (final e in _pendingAlerts.entries)
+          e.key: {for (final a in e.value.entries) a.key.name: a.value},
+      }),
+    );
+  }
+
+  Future<void> _loadPendingAlerts() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_pendingAlertsKey);
+    if (raw == null) return;
+    try {
+      final map = jsonDecode(raw) as Map<String, dynamic>;
+      for (final e in map.entries) {
+        final alerts = <AlertType, bool>{};
+        for (final a in (e.value as Map).entries) {
+          for (final t in AlertType.values) {
+            if (t.name == a.key && a.value is bool) {
+              alerts[t] = a.value as bool;
+            }
+          }
+        }
+        if (alerts.isNotEmpty) _pendingAlerts[e.key] = alerts;
+      }
+    } catch (_) {
+      _pendingAlerts.clear();
+    }
+  }
+
+  /// Apply a members snapshot from RTDB (v0.6.9).
+  ///
+  /// User-reported 24 Nov 2026: an alert switched ON kept turning
+  /// itself OFF. Cause: the members node in RTDB never carries
+  /// alert changes — [SyncService.publishMyLocation] writes
+  /// lat/lon/battery only, and alerts live in the separate
+  /// `alerts/{memberId}` node (see [SyncService.publishAlerts]) —
+  /// so every members snapshot arrived with the join-time alerts
+  /// and overwrote the toggle the parent had just set (then
+  /// [_save] persisted the reverted value). The child's phone was
+  /// offline ("no data"), so no round-trip ever refreshed the
+  /// members node either.
+  ///
+  /// Fix: alerts are owned by the alerts node, never by the
+  /// members snapshot — when a remote member already exists
+  /// locally, its local alerts survive the merge. Everything else
+  /// (location, battery, online) still comes from the snapshot.
+  @visibleForTesting
+  void applyRemoteMembers(List<Member> remote) {
+    final merged = remote.map((m) {
+      final i = _members.indexWhere((x) => x.id == m.id);
+      if (i < 0) return m;
+      return m.copyWith(alerts: Map.of(_members[i].alerts));
+    }).toList();
+    _members
+      ..clear()
+      ..addAll(merged);
+    _save();
     notifyListeners();
   }
 
@@ -265,6 +386,7 @@ class FamilyService extends ChangeNotifier {
         _members.clear();
       }
     }
+    await _loadPendingAlerts();
     notifyListeners();
     _subscribeRemote();
   }
@@ -277,15 +399,19 @@ class FamilyService extends ChangeNotifier {
     final circleId = activeCircleId!;
     final sync = _sync!;
     sync.subscribeMembers(circleId, (remote) {
-      _members
-        ..clear()
-        ..addAll(remote);
-      _save();
-      notifyListeners();
+      applyRemoteMembers(remote);
+      // A members event proves we are online again — retry any
+      // alert publish that never landed while offline (v0.6.9).
+      unawaited(retryPendingAlertPublishes());
     });
     sync.subscribeAlerts(circleId, sync.uid!, (alerts) {
       final i = _members.indexWhere((m) => m.id == sync.uid);
       if (i < 0) return;
+      // A local change that has not published yet is newer than
+      // anything the server can send — never let a stale server
+      // value clobber it (v0.6.9). Once the publish lands, the
+      // pending record clears and server values apply again.
+      if (_pendingAlerts.containsKey(sync.uid)) return;
       _members[i] = _members[i].copyWith(alerts: alerts);
       _save();
       notifyListeners();
