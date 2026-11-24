@@ -111,6 +111,69 @@ class LockedApp {
       );
 }
 
+/// Everything the parent sets for ONE member on the Locks screen
+/// (v0.6.9): the app list PLUS the two switches. Before v0.6.9 the
+/// locks node held only `{'apps': [...]}` and the two switches
+/// (Location Lock, Internet-off alert) lived only in the screen's
+/// local state — they were never saved or sent anywhere, so they
+/// did nothing at all and reset whenever the screen was rebuilt.
+/// The node now holds the whole object; old nodes (apps only) read
+/// back with both switches ON, matching the old screen defaults.
+class LockSettings {
+  final List<LockedApp> apps;
+
+  /// Member cannot turn location off themselves (parent PIN only).
+  final bool locationLocked;
+
+  /// Alert the parent when this member's internet is turned off.
+  final bool internetAlert;
+
+  const LockSettings({
+    this.apps = const [],
+    this.locationLocked = true,
+    this.internetAlert = true,
+  });
+
+  LockSettings copyWith({
+    List<LockedApp>? apps,
+    bool? locationLocked,
+    bool? internetAlert,
+  }) =>
+      LockSettings(
+        apps: apps ?? this.apps,
+        locationLocked: locationLocked ?? this.locationLocked,
+        internetAlert: internetAlert ?? this.internetAlert,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'apps': apps.map((a) => a.toJson()).toList(),
+        'locationLocked': locationLocked,
+        'internetAlert': internetAlert,
+      };
+
+  factory LockSettings.fromJson(Map<String, dynamic> json) {
+    final apps = <LockedApp>[];
+    final appsRaw = json['apps'];
+    if (appsRaw is List) {
+      for (final a in appsRaw) {
+        if (a is! Map) continue;
+        try {
+          apps.add(
+            LockedApp.fromJson(Map<String, dynamic>.from(a)),
+          );
+        } catch (_) {
+          // One bad entry must not drop the whole list.
+        }
+      }
+    }
+    return LockSettings(
+      apps: apps,
+      locationLocked: json['locationLocked'] as bool? ?? true,
+      internetAlert: json['internetAlert'] as bool? ?? true,
+    );
+  }
+}
+
 class AppLockService {
   static const MethodChannel _channel =
       MethodChannel(AppConstants.appLockChannel);
