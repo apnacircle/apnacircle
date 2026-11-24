@@ -5,6 +5,7 @@ import '../core/chat_paging.dart';
 import '../models/chat_message.dart';
 import '../services/auth_service.dart';
 import '../services/family_service.dart';
+import '../services/notification_service.dart';
 import '../services/sync_service.dart';
 
 /// Family chat (text). Voice/video calls are a v0.2 item:
@@ -32,6 +33,11 @@ class _ChatScreenState extends State<ChatScreen> {
   ];
   final _ctrl = TextEditingController();
   bool _subscribed = false;
+  // v0.6.11: while this screen is open the user is LOOKING at the
+  // chat — NotificationService suppresses chat notifications for
+  // this circle (same as WhatsApp: no ping for the open chat).
+  // Kept as a field so dispose() can clear it without context.
+  NotificationService? _notifications;
   // v0.6.7 pagination: the live subscription only carries the
   // newest chatPageSize messages. Older pages are fetched on demand
   // and merged in — a live update must never drop them again.
@@ -42,10 +48,13 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    _notifications = context.read<NotificationService>();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final sync = context.read<SyncService>();
       if (!sync.isAvailable || sync.activeCircleId == null) return;
+      // v0.6.11: this chat is open now — suppress its notifications.
+      _notifications?.openChatCircleId = sync.activeCircleId;
       if (_subscribed) return;
       _subscribed = true;
       sync.subscribeChat(sync.activeCircleId!, (remote) {
@@ -91,6 +100,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    // v0.6.11: chat no longer open — notifications resume.
+    _notifications?.openChatCircleId = null;
     _ctrl.dispose();
     super.dispose();
   }
