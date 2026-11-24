@@ -1,5 +1,9 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/app_lock_service.dart';
 import '../core/time_lock.dart';
@@ -20,6 +24,12 @@ import 'pin_gate_dialog.dart';
 ///     scheduled day, without setting it again daily.
 ///     Company example: 08:00–14:00, Mon–Fri — set once, workers
 ///     cannot use the app in work hours, every working day.
+///
+/// v0.6.9: the two switches are real now — they are saved per
+/// target member in the locks node (with the app list) and loaded
+/// back whenever this screen opens. Before, they only did a local
+/// setState: they were never saved or sent anywhere, so they did
+/// nothing and reset whenever the screen was rebuilt.
 class LocksScreen extends StatefulWidget {
   const LocksScreen({super.key});
   @override
@@ -85,9 +95,12 @@ class _LocksScreenState extends State<LocksScreen>
         setState(() {
           _apps
             ..clear()
-            ..addAll(incoming);
+            ..addAll(incoming.apps);
+          // v0.6.9: the switches arrive with the app list now.
+          _locationLocked = incoming.locationLocked;
+          _internetLockAlert = incoming.internetAlert;
         });
-        AppLockService.applyLocks(incoming);
+        AppLockService.applyLocks(incoming.apps);
       });
       return;
     }
@@ -99,47 +112,100 @@ class _LocksScreenState extends State<LocksScreen>
     if (target != null) await _loadTargetLocks(target);
   }
 
+  /// Local pending record for one member's lock settings (v0.6.9):
+  /// the newest local intent, kept until its RTDB publish is
+  /// confirmed — so a switch changed while offline does not flip
+  /// back when this screen is reopened. A newer change overwrites
+  /// the record; a confirmed publish clears it.
+  static String _pendingLocksKey(String memberId) =>
+      'locks_pending_$memberId';
+
+  Future<void> _savePendingSettings(
+    String memberId,
+    LockSettings settings,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _pendingLocksKey(memberId),
+      jsonEncode(settings.toJson()),
+    );
+  }
+
+  Future<LockSettings?> _loadPendingSettings(String memberId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_pendingLocksKey(memberId));
+    if (raw == null) return null;
+    try {
+      return LockSettings.fromJson(
+        jsonDecode(raw) as Map<String, dynamic>,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _clearPendingSettings(String memberId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_pendingLocksKey(memberId));
+  }
+
   Future<void> _loadTargetLocks(String memberId) async {
     final sync = context.read<SyncService>();
     setState(() => _targetMemberId = memberId);
     if (sync.activeCircleId == null) return;
-    final remote =
+    final settings =
         await sync.getLocksOnce(sync.activeCircleId!, memberId);
     if (!mounted) return;
-    if (remote.isNotEmpty) {
-      // v0.6.8: heal custom entries the parent already added by
-      // name ("WA Business", "Playstore") — they were stored as
-      // "custom:<name>" and never resolved, so they never locked.
-      // Resolve known aliases to real packages now and push the
-      // healed list, so the child's phone gets it on next sync.
-      var healed = false;
-      final fixed = remote.map((a) {
-        if (a.packageName.startsWith('custom:')) {
-          final known = AppLockService.knownPackageForName(a.name);
-          if (known != null) {
-            healed = true;
-            return LockedApp(
-              name: a.name,
-              packageName: known,
-              isCustom: true,
-              locked: a.locked,
-              mode: a.mode,
-              window: a.window,
-            );
-          }
-        }
-        return a;
-      }).toList();
-      setState(() {
-        _apps
-          ..clear()
-          ..addAll(fixed);
-      });
-      if (healed) _publishLocks();
+    // A newer local change whose publish never landed wins over
+    // the server value (v0.6.9).
+    final pending = await _loadPendingSettings(memberId);
+    if (settings == null && pending == null) {
+      // Fresh target, nothing saved yet: keep the preset list and
+      // the default switches — do not wipe them with an empty node.
+      return;
     }
+    final apps = pending?.apps ?? settings?.apps ?? const <LockedApp>[];
+    final locationLocked =
+        pending?.locationLocked ?? settings?.locationLocked ?? true;
+    final internetAlert =
+        pending?.internetAlert ?? settings?.internetAlert ?? true;
+    // v0.6.8: heal custom entries the parent already added by
+    // name ("WA Business", "Playstore") — they were stored as
+    // "custom:<name>" and never resolved, so they never locked.
+    // Resolve known aliases to real packages now and push the
+    // healed list, so the child's phone gets it on next sync.
+    var healed = false;
+    final fixed = apps.map((a) {
+      if (a.packageName.startsWith('custom:')) {
+        final known = AppLockService.knownPackageForName(a.name);
+        if (known != null) {
+          healed = true;
+          return LockedApp(
+            name: a.name,
+            packageName: known,
+            isCustom: true,
+            locked: a.locked,
+            mode: a.mode,
+            window: a.window,
+          );
+        }
+      }
+      return a;
+    }).toList();
+    setState(() {
+      _apps
+        ..clear()
+        ..addAll(fixed);
+      _locationLocked = locationLocked;
+      _internetLockAlert = internetAlert;
+    });
+    if (healed || pending != null) _publishLocks();
   }
 
-  /// Push the current list to the target child's phone (RTDB).
+  /// Push the current list + switches to the target child's phone
+  /// (RTDB). v0.6.9: the whole [LockSettings] object is written —
+  /// before, only the app list was written and the two switches
+  /// were never saved anywhere.
   void _publishLocks() {
     final sync = context.read<SyncService>();
     final target = _targetMemberId;
@@ -148,7 +214,19 @@ class _LocksScreenState extends State<LocksScreen>
         target == null) {
       return;
     }
-    sync.publishLocks(sync.activeCircleId!, target, List.of(_apps));
+    final settings = LockSettings(
+      apps: List.of(_apps),
+      locationLocked: _locationLocked,
+      internetAlert: _internetLockAlert,
+    );
+    unawaited(_savePendingSettings(target, settings));
+    unawaited(
+      sync
+          .publishLocks(sync.activeCircleId!, target, settings)
+          .then((ok) {
+        if (ok) unawaited(_clearPendingSettings(target));
+      }),
+    );
   }
 
   @override
@@ -439,7 +517,12 @@ class _LocksScreenState extends State<LocksScreen>
             'Member cannot turn location off. Only the parent PIN can change this.',
           ),
           value: _locationLocked,
-          onChanged: (v) => _withPin(() => setState(() => _locationLocked = v)),
+          // v0.6.9: the switch is saved + published now — before,
+          // it only did a local setState and never stuck.
+          onChanged: (v) => _withPin(() {
+            setState(() => _locationLocked = v);
+            _publishLocks();
+          }),
         ),
         SwitchListTile(
           title: const Text('Internet-off alert'),
@@ -448,8 +531,11 @@ class _LocksScreenState extends State<LocksScreen>
             'Android does not allow a full lock on the data toggle.',
           ),
           value: _internetLockAlert,
-          onChanged: (v) =>
-              _withPin(() => setState(() => _internetLockAlert = v)),
+          // v0.6.9: same — saved + published, not just local.
+          onChanged: (v) => _withPin(() {
+            setState(() => _internetLockAlert = v);
+            _publishLocks();
+          }),
         ),
         const Divider(),
         const Text(
