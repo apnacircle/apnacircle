@@ -550,7 +550,78 @@ flutter build appbundle --release   # Play Store ko AAB chahiye
    at all — the child must be online for any new lock to arrive.
    Nothing else changed: no location/battery/publish timing,
    no SOS, no call overlay, no trial/auth changes.
-8. **Google Maps API key** — placeholder system tayyar hai (upar v0.2
+8. **Alert toggle that turned itself off — v0.6.9 (24 Nov 2026):**
+   User-reported ~10:01 PKT: an alert switched ON kept turning
+   itself OFF. Cause: the members node in RTDB never carries
+   alert changes — `publishMyLocation` writes lat/lon/battery
+   only, and alerts live in the separate `alerts/{memberId}` node
+   — so every members snapshot arrived with the join-time alerts
+   and overwrote the toggle the parent had just set, then `_save`
+   persisted the reverted value. The child's phone was offline
+   ("no data"), so no round-trip ever refreshed the members node.
+   Fix: `FamilyService.applyRemoteMembers` keeps each existing
+   member's LOCAL alerts when merging a remote members snapshot;
+   only the alerts node (`subscribeAlerts`) may change them.
+   Location, battery and online state still come from the
+   snapshot. Same version, second half of the fix: (a) a toggle
+   whose publish never landed (phone offline) is now tracked as
+   pending — saved in SharedPreferences, retried on the next
+   members event, and a stale server value never overwrites it
+   while it is pending, so the toggle can no longer flip back
+   OFF on its own; pending survives an app restart. (b) The two
+   Locks-screen switches did nothing at all before — they only
+   did a local setState and were never saved. They are now part
+   of the locks node (`locks/{memberId}` gains `locationLocked`
+   and `internetAlert`, old nodes read back with both ON):
+   Location Lock makes the child's Map card say "Location is
+   locked by your parent — turn sharing back on", and the
+   background service already alerts the parent when sharing
+   goes off; Internet-off alert arms a background check that
+   reports the offline window (2 min or longer) to the parent
+   when the phone is back online, labelled with when the
+   internet went off. Honest limits: no app can block the
+   phone's system GPS switch (Android limit) — the lock is the
+   prompt plus the parent alert; an internet-off alert can only
+   arrive after the phone is back online (no channel while
+   offline except SMS, which covers location only). Tests: 18 in
+   `test/v069_test.dart` (4 merge + 4 LockSettings + 5
+   InternetOffTracker + 2 fake-sync end-to-end + 3 card
+   wording); full suite 178/178 pass.
+9. **Loud emergency alerts — v0.6.10 (24 Nov 2026):**
+   User-reported ~10:19 PKT: an SOS/alert only showed as a silent
+   red line INSIDE the app after someone opened it — no sound, no
+   notification outside the app. For an emergency that is useless.
+   Fix, app side only: (a) a dedicated "ApnaCircle Alerts"
+   channel (IMPORTANCE_HIGH, sound + vibration + lights), created
+   at startup, and the manifest points FCM's default channel at
+   it — so a push arriving while the app is closed/killed is
+   shown by the system on THIS loud channel; (b) foreground FCM
+   pushes ring loud via a local notification (SOS with a
+   full-screen intent — rings over the lock screen like an
+   incoming call; other alerts ring loud without taking over the
+   screen); (c) RTDB circle events arriving while the app is open
+   also ring loud on top of the red banner, deduped against the
+   FCM path (60 s window, shared type+sender+minute key) so one
+   alert rings once, not twice; (d) tapping an alert notification
+   opens the app on the Alerts tab. `USE_FULL_SCREEN_INTENT` was
+   already declared in the manifest — Play Store needs a
+   declaration/justification for it at submission (calling/alarm
+   use case; SOS is the alarm-like case here — Google reviews
+   this, approval is not guaranteed). Honest limits: push needs
+   internet on the RECEIVER's phone — if a member's phone is
+   offline (no data), no push can arrive (SMS fallback covers
+   location only, not alerts); a user can still mute the channel
+   or turn on Do Not Disturb (Android lets them); the Cloud
+   Function `sendCircleEventPush` is STILL NOT deployed, so no
+   push is sent at all while the app is closed — deploy it first
+   (parent's step, code already exists since v0.5). Also: a
+   message that carries a `notification` payload is displayed by
+   the system itself, so SOS full-screen while killed needs the
+   function to send data-only pushes (function code NOT changed
+   in this version). Nothing else changed: no location/battery
+   timing, no app-lock presets, no toggles, no trial/auth, no
+   Cloud Function code. Tests: 10 new in `test/v0610_test.dart`.
+10. **Google Maps API key** — placeholder system tayyar hai (upar v0.2
    point 4 dekhein); real key ke liye Google Cloud billing (card)
    chahiye hoti hai — ye parent ka step hai, is build mein nahi hai.
    Bina key ke map nahi khulta.
@@ -588,9 +659,19 @@ Ye sab is VM par verify NAHI ho sakta — asal phone par karna lazmi hai:
       Business lock karein → child ke phone (online + App Lock
       service ON) par dono khulte hi PIN screen aaye; "WA Business"
       ya "Playstore" naam se add karne par bhi lock lage.
-- [ ] SOS / alerts: SOS dabane par parent ko notification (RTDB event —
-      app khula ho; band app par push sirf Cloud Function deploy ke
-      baad aayega — pehle deploy karein, phir test karein).
+- [ ] SOS / alerts (v0.6.10): SOS dabane par doosre phone par
+      LOUD notification aani chahiye — awaz + vibration, app
+      khula ho ya band; SOS par full-screen ring (call ki tarah),
+      tap karne par Alerts tab khule. Band app par push sirf
+      Cloud Function deploy ke baad aayega — pehle deploy karein,
+      phir test karein. Do dafa ring nahi honi chahiye (FCM +
+      RTDB dedupe). Phone silent / Do Not Disturb par ho to
+      notification dab sakti hai (Android ki limit).
+- [ ] Alerts (v0.6.9): parent phone se kisi member ka alert ON karein →
+      app band karke dobara kholein (ya doosre member ki location
+      update hone dein) → toggle ON hi rehna chahiye, khud OFF nahi
+      hona chahiye; phir child ke phone (online) par usi alert ki
+      value check karein — wahan bhi ON honi chahiye.
 - [ ] SIM-change: child ke phone mein dusri SIM daal kar reboot karein —
       parent ko "SIM card changed" alert mile (nayi SIM mein net zaroori).
 - [ ] Device Admin: Settings se protection ON karein → uninstall ki
