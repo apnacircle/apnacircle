@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:battery_plus/battery_plus.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
@@ -233,6 +234,19 @@ void backgroundLocationTaskCallback() {
 class BackgroundLocationTaskHandler extends TaskHandler {
   final LocationService _loc = LocationService();
   final LocationOffDetector _offDetector = LocationOffDetector();
+  // Internet-off alert (v0.6.9): the phone going offline can only
+  // be reported when it is back online — while offline there is no
+  // channel to the parent except SMS. The tracker records the
+  // offline window; on reconnect the parent gets ONE event,
+  // labelled with when the internet went off.
+  final InternetOffTracker _internetOffTracker = InternetOffTracker();
+
+  /// Last known Internet-off alert flag for this member (v0.6.9).
+  /// Read from the locks node when an offline window closes;
+  /// default ON, matching the Locks screen default. A failed read
+  /// keeps the cached value — the alert must not depend on a
+  /// single read, and this must never break the location cycle.
+  bool _cachedInternetAlert = true;
   // Battery has its OWN schedule (v0.6.6): it is published every
   // 15 minutes and on a >= 2% change, even when the location has
   // not moved and the movement throttle says "do not send the fix
@@ -284,6 +298,16 @@ class BackgroundLocationTaskHandler extends TaskHandler {
 
   Future<void> _publishCycle() async {
     if (_db == null || _circleId == null || _uid == null) return;
+    final now = DateTime.now();
+    // Internet-off alert (v0.6.9): check connectivity FIRST, so
+    // the offline window is tracked even when GPS is off or the
+    // permission was revoked (the returns below must not skip it).
+    final online = await _isOnline();
+    final offlineSince =
+        _internetOffTracker.check(online: online, now: now);
+    if (offlineSince != null) {
+      await _maybePublishInternetOffAlert(offlineSince);
+    }
     bool servicesOn;
     try {
       servicesOn = await Geolocator.isLocationServiceEnabled();
@@ -317,7 +341,6 @@ class BackgroundLocationTaskHandler extends TaskHandler {
     } catch (_) {
       battery = -1; // Unknown battery shows no battery text (v0.6.2).
     }
-    final now = DateTime.now();
     if (fix == null) {
       // No GPS fix right now, but the battery is still readable —
       // share it on its own schedule instead of dropping it.
@@ -387,6 +410,65 @@ class BackgroundLocationTaskHandler extends TaskHandler {
     }
   }
 
+  /// True when the phone has any data connection. A failed check
+  /// reports online — an unknown state must never fake an offline
+  /// window, and this must never break the location cycle.
+  Future<bool> _isOnline() async {
+    try {
+      final results = await Connectivity().checkConnectivity();
+      return results.isNotEmpty &&
+          results.any((r) => r != ConnectivityResult.none);
+    } catch (_) {
+      return true;
+    }
+  }
+
+  /// Parent alert: this phone's internet was switched off at
+  /// [since] and is back now (v0.6.9). Sent only when the parent
+  /// left the Internet-off alert ON for this member — the flag is
+  /// read from the locks node at this moment (we are back online,
+  /// so the read should succeed) and cached for the next time.
+  /// Honest limit: the alert CANNOT arrive while the phone is
+  /// offline — no channel exists then except SMS — so it arrives
+  /// on reconnect, labelled with when the internet went off.
+  Future<void> _maybePublishInternetOffAlert(DateTime since) async {
+    bool alertOn = _cachedInternetAlert;
+    try {
+      final snap = await _db!
+          .child(FirebaseConfig.circleLocksPath(_circleId!, _uid!))
+          .get()
+          .timeout(const Duration(seconds: 5));
+      final raw = snap.value;
+      if (raw is Map) {
+        final v = raw['internetAlert'];
+        if (v is bool) {
+          alertOn = v;
+          _cachedInternetAlert = v;
+        }
+      }
+    } catch (_) {
+      // Keep the cached value — see the field comment.
+    }
+    if (!alertOn) return;
+    final last = await _loc.lastKnown();
+    final event = CircleEvent(
+      type: 'internetOff',
+      fromUid: _uid!,
+      fromName: _name ?? 'Me',
+      at: since,
+      lat: last?.lat,
+      lon: last?.lon,
+    );
+    try {
+      await _db!
+          .child(FirebaseConfig.circleEventsPath(_circleId!))
+          .push()
+          .set(event.toJson());
+    } catch (e) {
+      debugPrint('ApnaCircle: internetOff alert failed ($e)');
+    }
+  }
+
   /// Parent alert: this phone's location services were switched
   /// off. Sent ONCE per switch-off (see LocationOffDetector),
   /// with the last known location attached so the parent still
@@ -434,5 +516,34 @@ class LocationOffDetector {
       return true;
     }
     return false;
+  }
+}
+
+/// Detects the phone going offline and coming back, reporting the
+/// offline window exactly once (v0.6.9). Pure logic, unit-tested.
+///
+/// Short blips (under [minOffline]) are ignored — a Wi-Fi/mobile
+/// handover must not spam the parent with an alert. The window is
+/// reported when the phone comes back online, never while it is
+/// offline (there is no channel to the parent then except SMS).
+class InternetOffTracker {
+  static const Duration minOffline = Duration(minutes: 2);
+
+  DateTime? _offlineSince;
+
+  /// Returns the start of the offline window when the phone just
+  /// came back online after being offline for at least [minOffline];
+  /// null otherwise (still online, just went offline, still
+  /// offline, or the window was too short to report).
+  DateTime? check({required bool online, required DateTime now}) {
+    if (!online) {
+      _offlineSince ??= now;
+      return null;
+    }
+    final since = _offlineSince;
+    _offlineSince = null;
+    if (since == null) return null;
+    if (now.difference(since) < minOffline) return null;
+    return since;
   }
 }
