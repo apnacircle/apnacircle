@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/alerts.dart';
 import '../core/call_member_cache.dart';
 import '../core/constants.dart';
+import '../models/chat_message.dart';
 import '../models/circle.dart';
 import '../models/member.dart';
 import 'sync_service.dart';
@@ -81,6 +82,21 @@ class FamilyService extends ChangeNotifier {
   /// (other members' phones). The Home screen listens and shows
   /// them as an alert.
   Stream<CircleEvent> get circleEvents => _eventsController.stream;
+
+  final _chatController = StreamController<ChatMessage>.broadcast();
+
+  /// New family chat messages from OTHER members (v0.6.11). The
+  /// Home screen listens and rings a chat notification for each.
+  /// My own messages are filtered here — I already know I sent
+  /// them (same pattern as [circleEvents] above).
+  Stream<ChatMessage> get newChatMessages => _chatController.stream;
+
+  /// Chat baseline (v0.6.11): the first live page is HISTORY, not
+  /// new messages — ringing for all 50 of them on every reconnect
+  /// would be absurd. The first callback only records the ids;
+  /// later callbacks emit only messages never seen before.
+  bool _chatBaselineDone = false;
+  Set<String> _seenChatIds = {};
 
   bool _subscribed = false;
 
@@ -420,6 +436,23 @@ class FamilyService extends ChangeNotifier {
       // Ignore my own events (I already know I pressed SOS).
       if (event.fromUid != sync.uid) _eventsController.add(event);
     });
+    sync.subscribeChat(circleId, (remote) {
+      // v0.6.11: new chat messages from other members. First
+      // page = history (baseline only); later pages emit only
+      // messages never seen before, so a reconnect never rings
+      // for old messages.
+      final ids = <String>{};
+      for (final m in remote) {
+        ids.add(m.id);
+        if (_chatBaselineDone &&
+            !_seenChatIds.contains(m.id) &&
+            m.senderId != sync.uid) {
+          _chatController.add(m);
+        }
+      }
+      _seenChatIds = ids;
+      _chatBaselineDone = true;
+    });
   }
 
   Future<void> _save() async {
@@ -502,6 +535,7 @@ class FamilyService extends ChangeNotifier {
   @override
   void dispose() {
     _eventsController.close();
+    _chatController.close();
     super.dispose();
   }
 }
