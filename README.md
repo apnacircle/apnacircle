@@ -523,7 +523,34 @@ flutter build appbundle --release   # Play Store ko AAB chahiye
    per-ABI APK splits (would change the CI artifact / delivery),
    payload trimming (publish payloads already carry only fields
    screens read), unused assets (pubspec declares none).
-7. **Google Maps API key** — placeholder system tayyar hai (upar v0.2
+7. **Play Store + WhatsApp Business lock — v0.6.8 (24 Nov 2026):**
+   User-reported: both apps did NOT lock although the parent typed
+   their names in the custom-add box and locked them. Two causes:
+   (a) neither was in the presets (only YouTube, Facebook,
+   WhatsApp, Chrome, TikTok, PUBG), so they could only be added
+   by name; (b) the name matching was exact-label / substring
+   only — "whatsapp business" does not contain "wa business", and
+   "playstore" (one word) is not the label "Play Store" — so the
+   custom entries never resolved to a package and never locked.
+   Fix, three layers: (1) both are now presets with exact package
+   names (Play Store `com.android.vending`, WhatsApp Business
+   `com.whatsapp.w4b`, always-locked); (2) known short forms
+   resolve immediately when the parent adds them
+   (`AppLockService.knownPackageForName` — "WA Business" /
+   "WhatsApp Business" -> w4b, "Playstore" / "Play Store" /
+   "Google Play Store" -> vending), and the child's phone runs
+   the same map natively (MainActivity `resolvePackageForName`,
+   now also normalized-label matching: spaces/punctuation/case
+   ignored, so "Playstore" finds "Play Store"); (3) entries the
+   parent ALREADY added are healed when the parent opens the
+   Locks tab (`_loadTargetLocks` resolves known aliases to real
+   packages and re-publishes, so the child's phone gets them on
+   next sync). Note: the child's phone was OFFLINE (no data) on
+   24 Nov morning, so synced lock rules may not have reached it
+   at all — the child must be online for any new lock to arrive.
+   Nothing else changed: no location/battery/publish timing,
+   no SOS, no call overlay, no trial/auth changes.
+8. **Google Maps API key** — placeholder system tayyar hai (upar v0.2
    point 4 dekhein); real key ke liye Google Cloud billing (card)
    chahiye hoti hai — ye parent ka step hai, is build mein nahi hai.
    Bina key ke map nahi khulta.
@@ -557,6 +584,10 @@ Ye sab is VM par verify NAHI ho sakta — asal phone par karna lazmi hai:
 - [ ] Battery (v0.6.6): ghar par baithe member ki battery 15 min
       mein update honi chahiye (bina hile); 30 min purani battery
       "(old)" ke saath dikhe.
+- [ ] App Lock (v0.6.8): parent phone se Play Store aur WhatsApp
+      Business lock karein → child ke phone (online + App Lock
+      service ON) par dono khulte hi PIN screen aaye; "WA Business"
+      ya "Playstore" naam se add karne par bhi lock lage.
 - [ ] SOS / alerts: SOS dabane par parent ko notification (RTDB event —
       app khula ho; band app par push sirf Cloud Function deploy ke
       baad aayega — pehle deploy karein, phir test karein).
