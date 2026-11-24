@@ -107,11 +107,35 @@ class _LocksScreenState extends State<LocksScreen>
         await sync.getLocksOnce(sync.activeCircleId!, memberId);
     if (!mounted) return;
     if (remote.isNotEmpty) {
+      // v0.6.8: heal custom entries the parent already added by
+      // name ("WA Business", "Playstore") — they were stored as
+      // "custom:<name>" and never resolved, so they never locked.
+      // Resolve known aliases to real packages now and push the
+      // healed list, so the child's phone gets it on next sync.
+      var healed = false;
+      final fixed = remote.map((a) {
+        if (a.packageName.startsWith('custom:')) {
+          final known = AppLockService.knownPackageForName(a.name);
+          if (known != null) {
+            healed = true;
+            return LockedApp(
+              name: a.name,
+              packageName: known,
+              isCustom: true,
+              locked: a.locked,
+              mode: a.mode,
+              window: a.window,
+            );
+          }
+        }
+        return a;
+      }).toList();
       setState(() {
         _apps
           ..clear()
-          ..addAll(remote);
+          ..addAll(fixed);
       });
+      if (healed) _publishLocks();
     }
   }
 
