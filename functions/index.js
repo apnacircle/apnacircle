@@ -137,6 +137,98 @@ exports.sendCircleEventPush = functions.database
   });
 
 // ---------------------------------------------------------------------------
+// Family CHAT push (v0.6.11) — WhatsApp-style: "Ali: Ghar pahunch
+// gaya."
+//
+// Trigger: a message written to `circles/{circleId}/chat/{messageId}`.
+// Sends the OTHER members a push with the sender's name as the
+// title and a short preview as the body. NEVER notifies the sender.
+//
+// DATA-ONLY ON PURPOSE: the app shows the push itself on the
+// "ApnaCircle Chat" channel (normal importance, sound + vibration
+// — NOT the loud emergency channel). If this carried a
+// `notification` payload, the system would display it on the
+// default channel instead, and a chat message would ring like an
+// SOS. See lib/services/notification_service.dart
+// (firebaseMessagingBackgroundHandler).
+// ---------------------------------------------------------------------------
+
+/** Short preview of a chat message (mirrors the app's snippet). */
+function chatSnippet(text) {
+  const t = String(text || '')
+    .trim()
+    .replace(/\s+/g, ' ');
+  if (t.length <= 120) return t;
+  return `${t.slice(0, 120).trimEnd()}…`;
+}
+
+exports.sendChatMessagePush = functions.database
+  .instance('apnacircle-22ef3-default-rtdb')
+  .ref('/circles/{circleId}/chat/{messageId}')
+  .onCreate(async (snapshot, context) => {
+    const msg = snapshot.val() || {};
+    const { circleId, messageId } = context.params;
+    const text = String(msg.text || '').trim();
+    if (!text) return null; // Empty message — nothing to preview.
+
+    // Who is in this circle? Everyone except the sender.
+    const membersSnap = await db
+      .ref(`circles/${circleId}/members`)
+      .once('value');
+    const members = membersSnap.val() || {};
+    const uids = Object.keys(members).filter(
+      (uid) => uid && uid !== msg.senderId,
+    );
+    if (uids.length === 0) {
+      functions.logger.log('No other members to notify (chat)', {
+        circleId,
+      });
+      return null;
+    }
+
+    // Each member's FCM token (stored by the app on sign-in).
+    const tokens = [];
+    for (const uid of uids) {
+      const profileSnap = await db
+        .ref(`users/${uid}/profile/fcmToken`)
+        .once('value');
+      const token = profileSnap.val();
+      if (typeof token === 'string' && token.length > 0) tokens.push(token);
+    }
+    if (tokens.length === 0) {
+      functions.logger.log('No FCM tokens for circle members (chat)', {
+        circleId,
+      });
+      return null;
+    }
+
+    const senderName = String(msg.senderName || 'A family member');
+    const message = {
+      tokens,
+      // DATA-ONLY — see the note above. The app builds the visible
+      // notification on the chat channel itself.
+      data: {
+        type: 'chat',
+        circleId: String(circleId),
+        messageId: String(messageId),
+        fromUid: String(msg.senderId || ''),
+        senderName,
+        preview: chatSnippet(text),
+      },
+      android: { priority: 'high' },
+      apns: { payload: { aps: { 'content-available': 1 } } },
+    };
+
+    const response = await admin.messaging().sendEachForMulticast(message);
+    functions.logger.log('Chat push sent', {
+      circleId,
+      success: response.successCount,
+      failure: response.failureCount,
+    });
+    return null;
+  });
+
+// ---------------------------------------------------------------------------
 // 6-digit EMAIL OTP login (v0.6).
 //
 // Firebase Auth has NO built-in 6-digit email code — only a
