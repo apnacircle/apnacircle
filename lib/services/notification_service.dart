@@ -7,6 +7,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart'
     as local;
 
 import '../core/alert_notification.dart';
+import '../core/chat_notification.dart';
+import '../models/chat_message.dart';
 import '../models/circle.dart';
 import 'firebase_bootstrap.dart';
 import 'sync_service.dart';
@@ -25,7 +27,66 @@ local.AndroidNotificationChannel _alertChannel() =>
       enableLights: true,
     );
 
-/// Platform details for one alert notification. SOS gets a
+/// The chat channel — normal importance, sound + vibration, NO
+/// full-screen intent and no heads-up intrusion. A chat message
+/// must never ring like an SOS call (v0.6.11). Created at startup
+/// (and in the background handler) alongside the alerts channel.
+local.AndroidNotificationChannel _chatChannel() =>
+    const local.AndroidNotificationChannel(
+      ChatNotifications.channelId,
+      ChatNotifications.channelName,
+      description: ChatNotifications.channelDescription,
+      importance: local.Importance.defaultImportance,
+      playSound: true,
+      enableVibration: true,
+    );
+
+/// Platform details for one chat notification. Normal priority,
+/// message category, lock-screen preview visible (like WhatsApp —
+/// a family app, the preview is the point).
+local.NotificationDetails _chatDetails() {
+  return const local.NotificationDetails(
+    android: local.AndroidNotificationDetails(
+      ChatNotifications.channelId,
+      ChatNotifications.channelName,
+      channelDescription: ChatNotifications.channelDescription,
+      importance: local.Importance.defaultImportance,
+      priority: local.Priority.defaultPriority,
+      playSound: true,
+      enableVibration: true,
+      category: local.AndroidNotificationCategory.message,
+      visibility: local.NotificationVisibility.public,
+      ticker: 'ApnaCircle chat',
+    ),
+    iOS: local.DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+      interruptionLevel: local.InterruptionLevel.active,
+    ),
+  );
+}
+
+/// Posts one chat message through [plugin]. Shared by the
+/// foreground instance methods and the background handler below.
+Future<bool> _postChatNotification(
+  local.FlutterLocalNotificationsPlugin plugin, {
+  required ChatNotification chat,
+}) async {
+  try {
+    await plugin.show(
+      id: ChatNotifications.notificationIdFor(chat.circleId),
+      title: chat.title,
+      body: chat.body,
+      notificationDetails: _chatDetails(),
+      payload: ChatNotifications.tapPayload,
+    );
+    return true;
+  } catch (e) {
+    debugPrint('ApnaCircle: chat notification failed ($e)');
+    return false;
+  }
+}
 /// full-screen intent (rings over the lock screen like an incoming
 /// call); other alerts ring loud on the same channel.
 local.NotificationDetails _alertDetails({required bool isSos}) {
@@ -109,7 +170,30 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         .resolvePlatformSpecificImplementation<
             local.AndroidFlutterLocalNotificationsPlugin>();
     await android?.createNotificationChannel(_alertChannel());
+    await android?.createNotificationChannel(_chatChannel());
     final type = message.data['type'] as String? ?? 'alert';
+    // v0.6.11: family chat pushes are DATA-ONLY (the function
+    // sends no `notification` payload, so the system never shows
+    // them on the loud alerts channel). Build the visible
+    // notification here, on the normal chat channel.
+    if (type == 'chat') {
+      final chat = ChatNotifications.fromMessage(
+        msg: ChatMessage(
+          id: message.data['messageId'] as String? ?? '',
+          senderId: message.data['fromUid'] as String? ?? '',
+          senderName: message.data['senderName'] as String? ??
+              message.notification?.title ??
+              '',
+          text: message.data['preview'] as String? ??
+              message.notification?.body ??
+              '',
+          at: DateTime.now(),
+        ),
+        circleId: message.data['circleId'] as String? ?? '',
+      );
+      await _postChatNotification(plugin, chat: chat);
+      return;
+    }
     final title = message.notification?.title ??
         AlertNotifications.titleFor(type, 'A family member');
     final body = message.notification?.body ??
@@ -146,7 +230,15 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 ///   without staring at the screen. FCM + RTDB delivery of the
 ///   SAME alert is deduped (60 s window) so the phone rings once.
 /// * Tapping an alert notification opens the app on the Alerts
-///   tab ([tapRequests] + [takePendingTap]).
+///   tab ([tapRequests] + [takePendingTap]); tapping a chat
+///   notification opens the Chat tab (payload 'chat', v0.6.11).
+/// * Chat messages (v0.6.11) go on their OWN normal-importance
+///   channel ("ApnaCircle Chat") with sound + vibration — sender
+///   name + preview, like WhatsApp — and NEVER ring like an SOS.
+///   Own messages never notify, and neither do messages in the
+///   chat the user is already looking at ([openChatCircleId],
+///   set by ChatScreen). FCM + RTDB delivery of the same message
+///   is deduped by message id.
 /// * FCM token fetch + refresh, stored on the user's profile node
 ///   (`users/{uid}/profile/fcmToken`) so the server can target it.
 /// * Background handler registered (see top of this file).
@@ -189,7 +281,15 @@ class NotificationService extends ChangeNotifier {
   final local.FlutterLocalNotificationsPlugin _local =
       local.FlutterLocalNotificationsPlugin();
   final AlertDedupe _dedupe = AlertDedupe();
+  final AlertDedupe _chatDedupe = AlertDedupe();
   bool _localReady = false;
+
+  /// The circle whose chat screen the user is looking at right
+  /// now (v0.6.11). ChatScreen sets this when it opens and clears
+  /// it when it closes — while it is set, messages in THAT circle
+  /// do not ring (same as WhatsApp: no ping for the open chat).
+  /// Null when no chat screen is open.
+  String? openChatCircleId;
 
   String? _token;
   String? get token => _token;
@@ -215,6 +315,7 @@ class NotificationService extends ChangeNotifier {
           .resolvePlatformSpecificImplementation<
               local.AndroidFlutterLocalNotificationsPlugin>();
       await android?.createNotificationChannel(_alertChannel());
+      await android?.createNotificationChannel(_chatChannel());
       _localReady = true;
     } catch (e) {
       debugPrint('ApnaCircle: local notifications init failed ($e)');
@@ -240,6 +341,13 @@ class NotificationService extends ChangeNotifier {
         await _sync.saveProfile(fcmToken: newToken);
       });
       FirebaseMessaging.onMessage.listen((message) {
+        // v0.6.11: chat pushes take the chat path (normal sound,
+        // sender name + preview) and never reach the alert
+        // SnackBar — the chat list itself shows the message.
+        if (message.data['type'] == 'chat') {
+          unawaited(showChatFromMessage(message));
+          return;
+        }
         unawaited(showAlertFromMessage(message));
         _messagesController.add(message);
       });
@@ -295,6 +403,55 @@ class NotificationService extends ChangeNotifier {
     if (!_localReady) return false;
     if (!_dedupe.shouldShow(alert.dedupeKey)) return false;
     return _postAlertNotification(_local, alert: alert);
+  }
+
+  /// WhatsApp-style notification for one family chat message
+  /// (v0.6.11): sender's name + preview, on the normal chat
+  /// channel — never the loud emergency one. Called by Home for
+  /// messages arriving live over RTDB. Suppressed for my own
+  /// messages, for empty text, and while the user is looking at
+  /// that circle's chat screen ([openChatCircleId]). Deduped
+  /// against the FCM path by message id, so one message rings
+  /// once. Returns false when suppressed or not ready.
+  Future<bool> showChatMessage(
+    ChatMessage msg, {
+    required String circleId,
+  }) async {
+    await _ensureLocalNotifications();
+    if (!_localReady) return false;
+    final chat = ChatNotifications.fromMessage(msg: msg, circleId: circleId);
+    if (!ChatNotifications.shouldNotify(
+      msg: msg,
+      circleId: circleId,
+      myUid: _sync.uid,
+      openChatCircleId: openChatCircleId,
+    )) {
+      return false;
+    }
+    if (!_chatDedupe.shouldShow(chat.dedupeKey)) return false;
+    return _postChatNotification(_local, chat: chat);
+  }
+
+  /// Chat notification for one foreground FCM message. The Cloud
+  /// Function sends the message id, sender and preview as data,
+  /// so the RTDB path and this path share the same dedupe key.
+  Future<bool> showChatFromMessage(RemoteMessage message) async {
+    final data = message.data;
+    final msg = ChatMessage(
+      id: data['messageId'] as String? ?? '',
+      senderId: data['fromUid'] as String? ?? '',
+      senderName: data['senderName'] as String? ??
+          message.notification?.title ??
+          '',
+      text: data['preview'] as String? ??
+          message.notification?.body ??
+          '',
+      at: DateTime.now(),
+    );
+    return showChatMessage(
+      msg,
+      circleId: data['circleId'] as String? ?? '',
+    );
   }
 
   @override
