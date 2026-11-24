@@ -31,7 +31,7 @@ what is left is the TWO-PHONE test (see §6), the rules check in
 circles/{circleId}/
   info/                 {name, inviteCode, createdBy, createdAt, pinHash}
   members/{memberId}/   lat, lon, battery, isOnline, lastSeen, role
-  locks/{memberId}/     apps: [{package, locked, mode, window:{start,end,days}}]
+  locks/{memberId}/     apps: [{package, locked, mode, window:{start,end,days}}] + locationLocked (bool, default true) + internetAlert (bool, default true) — v0.6.9; old nodes without the two flags read back with both ON
   alerts/{memberId}/    {sos: true, lowBattery: true, ...}   // 14 alerts
   chat/                 [{from, text, at}]
   events/               [{type: sos/lowBattery/phoneOff, fromUid, fromName, at}]
