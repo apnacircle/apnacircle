@@ -6,6 +6,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/alert_notification.dart';
 import '../core/app_lock_service.dart';
 import '../core/call_distance_service.dart';
 import '../core/location_service.dart';
@@ -63,6 +64,13 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   // running. Shown in the status card at the top of the Map tab.
   LocationSharingState? _sharingState;
   bool _serviceRunning = false;
+
+  // v0.6.9: the parent's Location Lock for ME (from my locks node
+  // — see _ensureLockSubscription). When it is on and sharing is
+  // not "always", the status card says the parent locked it, so
+  // the child sees they must turn sharing back on. Admins never
+  // enforce their own locks, so this stays false on a parent phone.
+  bool _myLocationLocked = false;
 
   // v0.6.4: which circle+user the background service was last
   // (re)started for — re-run only when the circle changes, so a
@@ -130,11 +138,20 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     final uid = sync.uid!;
     // Apply the current list at once — do not wait for the first
     // remote event (e.g. after an app restart).
-    sync.getLocksOnce(circleId, uid).then((apps) {
+    sync.getLocksOnce(circleId, uid).then((settings) {
+      final apps = settings?.apps ?? const [];
       if (apps.isNotEmpty) AppLockService.applyLocks(apps);
+      // v0.6.9: the parent's Location Lock for me — the status card
+      // shows it (below), so the child sees the lock is on.
+      if (mounted) {
+        setState(() => _myLocationLocked = settings?.locationLocked ?? false);
+      }
     });
     sync.subscribeLocks(circleId, uid, (incoming) {
-      AppLockService.applyLocks(incoming);
+      AppLockService.applyLocks(incoming.apps);
+      if (mounted) {
+        setState(() => _myLocationLocked = incoming.locationLocked);
+      }
     });
   }
 
@@ -319,7 +336,8 @@ class _HomeMapScreenState extends State<HomeMapScreen>
 
     // FCM foreground pushes + RTDB circle events (SOS from family).
     if (mounted) {
-      context.read<NotificationService>().messages.listen((msg) {
+      final notifications = context.read<NotificationService>();
+      notifications.messages.listen((msg) {
         if (!mounted) return;
         final title = msg.notification?.title ?? 'ApnaCircle alert';
         final body = msg.notification?.body ?? '';
@@ -327,15 +345,41 @@ class _HomeMapScreenState extends State<HomeMapScreen>
           SnackBar(content: Text('$title${body.isEmpty ? '' : ' — $body'}')),
         );
       });
+      // v0.6.10: tapping an alert notification opens the Alerts tab.
+      // A tap that arrived before Home was listening (cold start)
+      // is drained from the pending slot once, below.
+      notifications.tapRequests.listen((payload) {
+        if (!mounted) return;
+        if (payload == AlertNotifications.tapPayload) setState(() => _tab = 1);
+      });
+      final pendingTap = notifications.takePendingTap();
+      if (pendingTap == AlertNotifications.tapPayload) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _tab = 1);
+        });
+      }
       family.circleEvents.listen((event) {
         if (!mounted) return;
+        // v0.6.10: ring LOUD on top of the red banner — an SOS must
+        // be heard without staring at the screen. Deduped against
+        // the FCM path in NotificationService (same alert rings
+        // once). The SnackBar stays as the in-app visual.
+        unawaited(notifications.showAlertFromEvent(event));
+        // v0.6.9: plain words, not raw type names — a parent
+        // reading "internetOff" would not know what it means.
+        final label = switch (event.type) {
+          'sos' => 'SOS from ${event.fromName}!',
+          'internetOff' =>
+            'Internet was switched off on ${event.fromName}\'s phone',
+          'locationOff' =>
+            'Location was switched off on ${event.fromName}\'s phone',
+          'lowBattery' => 'Low battery on ${event.fromName}\'s phone',
+          'phoneOff' => '${event.fromName}\'s phone was switched off',
+          _ => 'Alert from ${event.fromName}: ${event.type}',
+        };
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              event.type == 'sos'
-                  ? 'SOS from ${event.fromName}!'
-                  : 'Alert from ${event.fromName}: ${event.type}',
-            ),
+            content: Text(label),
             backgroundColor: Colors.red,
           ),
         );
@@ -605,6 +649,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
             child: LocationStatusCard(
               state: _sharingState,
               serviceRunning: _serviceRunning,
+              locationLocked: _myLocationLocked,
               onFix: _fixLocationSharing,
               onRefresh: () {
                 unawaited(_checkSharingState());
