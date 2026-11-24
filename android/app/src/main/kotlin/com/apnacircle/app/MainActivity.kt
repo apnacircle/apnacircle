@@ -525,13 +525,23 @@ class MainActivity : FlutterActivity() {
 
     /**
      * Resolve a parent-typed app name ("Snapchat") to its real
-     * package name on THIS phone. Exact label match wins, then a
-     * "contains" match. Null when the app is not installed — the
-     * entry stays "custom:<name>" and can resolve on a later call.
+     * package name on THIS phone. v0.6.8: matching is tolerant —
+     * labels are compared normalized (lowercase, no spaces or
+     * punctuation), so "Playstore" finds "Play Store", and a small
+     * alias map covers short forms the parent actually types
+     * ("WA Business" -> WhatsApp Business — no normalization can
+     * bridge that one, the real label is "WhatsApp Business").
+     * Order: known alias, exact label, normalized exact, then a
+     * "contains" match (raw or normalized). Null when the app is
+     * not installed — the entry stays "custom:<name>" and can
+     * resolve on a later call.
      */
     private fun resolvePackageForName(name: String): String? {
         val wanted = name.trim().lowercase()
         if (wanted.isEmpty()) return null
+        knownPackageForName(wanted)?.let { return it }
+        val wantedNorm = normalizeAppName(wanted)
+        if (wantedNorm.isEmpty()) return null
         val apps = try {
             packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
         } catch (e: Exception) {
@@ -546,12 +556,32 @@ class MainActivity : FlutterActivity() {
                 ""
             }
             if (label == wanted) return app.packageName
-            if (contains == null && label.contains(wanted)) {
+            val labelNorm = normalizeAppName(label)
+            if (labelNorm == wantedNorm) return app.packageName
+            if (contains == null &&
+                (label.contains(wanted) || labelNorm.contains(wantedNorm))
+            ) {
                 contains = app.packageName
             }
         }
         return contains
     }
+
+    /** Lowercase, letters/digits only: "Play Store" -> "playstore". */
+    private fun normalizeAppName(s: String): String =
+        s.lowercase().filter { it.isLetterOrDigit() }
+
+    /**
+     * Well-known short forms (v0.6.8) — mirrors Dart
+     * AppLockService.knownPackageForName. Keep this list tiny and
+     * exact-package only.
+     */
+    private fun knownPackageForName(wanted: String): String? =
+        when (normalizeAppName(wanted)) {
+            "wabusiness", "whatsappbusiness" -> "com.whatsapp.w4b"
+            "playstore", "googleplaystore" -> "com.android.vending"
+            else -> null
+        }
 
     override fun onDestroy() {
         phoneListener?.let {
