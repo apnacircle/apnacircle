@@ -621,7 +621,44 @@ flutter build appbundle --release   # Play Store ko AAB chahiye
    in this version). Nothing else changed: no location/battery
    timing, no app-lock presets, no toggles, no trial/auth, no
    Cloud Function code. Tests: 10 new in `test/v0610_test.dart`.
-10. **Google Maps API key** — placeholder system tayyar hai (upar v0.2
+10. **Family chat notifications — v0.6.11 (24 Nov 2026):**
+   User-reported ~11:07 PKT: in the family chat, when someone sent
+   a message nobody knew unless they opened the app. Like WhatsApp,
+   a message now appears OUTSIDE the app — sender's name as the
+   title + a short preview + sound — so members know a message
+   arrived. Fix: (a) a SEPARATE "ApnaCircle Chat" channel (normal
+   importance, sound + vibration) — chat NEVER rings like an SOS
+   call, and it is a different channel from the v0.6.10 alerts
+   channel, so it can be muted separately; (b) the app watches the
+   circle's chat node live (FamilyService, first page = history,
+   only genuinely new messages ring) and FCM pushes while the app
+   is closed/background — both paths deduped by message id, so one
+   message rings once, not twice; (c) NO notification for my own
+   messages, and NO notification while the user is already looking
+   at that circle's chat screen (same as WhatsApp); (d) tapping a
+   chat notification opens the app on the Chat tab; (e) new Cloud
+   Function `sendChatMessagePush` (CODE ONLY, not deployed) —
+   sends the other members a DATA-ONLY push (sender name + preview)
+   when a chat message is written; data-only on purpose, so the
+   system never shows it on the loud alerts channel. Honest
+   limits: the push needs the Cloud Function deployed first
+   (parent's step, same deploy as the v0.5 event push — code
+   already here) AND internet on the RECEIVER's phone — an offline
+   member gets nothing until back online (chat history still syncs
+   when they reconnect); a user can mute the chat channel in system
+   settings; the message preview is visible on the lock screen,
+   like WhatsApp (family app, acceptable). Nothing else changed:
+   no location/battery timing, no app-lock, no toggles, no
+   trial/auth, no SOS/alert behaviour, no alert-channel change.
+   Tests: 18 new in `test/v0611_test.dart`.
+   Build fix (24 Nov 2026, run #204): v0.6.10's CI build FAILED —
+   `flutter_local_notifications` needs core library desugaring.
+   Fixed in `android/app/build.gradle.kts`:
+   `isCoreLibraryDesugaringEnabled = true` +
+   `coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")`.
+   Local checks cannot catch this (they never run Gradle) — CI is
+   the only proof.
+11. **Google Maps API key** — placeholder system tayyar hai (upar v0.2
    point 4 dekhein); real key ke liye Google Cloud billing (card)
    chahiye hoti hai — ye parent ka step hai, is build mein nahi hai.
    Bina key ke map nahi khulta.
@@ -672,6 +709,15 @@ Ye sab is VM par verify NAHI ho sakta — asal phone par karna lazmi hai:
       update hone dein) → toggle ON hi rehna chahiye, khud OFF nahi
       hona chahiye; phir child ke phone (online) par usi alert ki
       value check karein — wahan bhi ON honi chahiye.
+- [ ] Chat (v0.6.11): aik phone se family chat mein message bhejein →
+      doosre phone par (app band ho ya Map tab par) sender ka naam +
+      preview ke saath notification aani chahiye, awaz ke saath;
+      apna khud ka message kabhi notification nahi banta; jis chat
+      ko dekh rahe hain us ka notification nahi aana chahiye; tap
+      karne par Chat tab khule. Band app par push sirf Cloud
+      Function deploy ke baad aayega — pehle deploy karein, phir
+      test karein. Aik message ki awaz do dafa nahi aani chahiye
+      (FCM + RTDB dedupe).
 - [ ] SIM-change: child ke phone mein dusri SIM daal kar reboot karein —
       parent ko "SIM card changed" alert mile (nayi SIM mein net zaroori).
 - [ ] Device Admin: Settings se protection ON karein → uninstall ki
