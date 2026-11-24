@@ -92,6 +92,7 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-stdlib:2.1.0")
     // Run #204 fix (24 Nov 2026): desugaring library required by
     // flutter_local_notifications (v0.6.10) — pairs with
-    // isCoreLibraryDesugaringEnabled above.
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    // isCoreLibraryDesugaringEnabled above. Run #215 proved 2.0.4
+    // is NOT enough: the plugin needs 2.1.4 or above.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }
