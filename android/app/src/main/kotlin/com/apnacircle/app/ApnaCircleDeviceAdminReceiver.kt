@@ -54,11 +54,34 @@ class ApnaCircleDeviceAdminReceiver : DeviceAdminReceiver() {
     }
 
     override fun onDisabled(context: Context, intent: Intent) {
+        val atMs = System.currentTimeMillis()
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit()
             .putBoolean(KEY_ADMIN_ACTIVE, false)
-            .putLong(KEY_PENDING_DISABLED, System.currentTimeMillis())
+            .putLong(KEY_PENDING_DISABLED, atMs)
             .apply()
+        // v0.6.13: ALSO write the deactivation time into the
+        // FlutterSharedPreferences file (the "flutter."-prefixed
+        // key the shared_preferences plugin reads), so the
+        // background location task — which runs every 60 s while
+        // the app is still installed — can publish the
+        // `adminDisabled` event to the parent within a minute,
+        // instead of waiting for the next app start (which never
+        // comes if the child uninstalls right after deactivating).
+        // The Dart side claims (removes) the flag before
+        // publishing, so it can only ever send one event.
+        try {
+            context.getSharedPreferences(
+                "FlutterSharedPreferences", Context.MODE_PRIVATE
+            ).edit()
+                .putLong(
+                    "flutter.apnacircle_admin_disabled_at", atMs
+                )
+                .apply()
+        } catch (e: Exception) {
+            // The native flag above is still the backup — the
+            // next app start publishes from it.
+        }
         postAdminDisabledNotification(context)
     }
 
