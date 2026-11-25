@@ -9,6 +9,7 @@ import '../core/constants.dart';
 import '../models/chat_message.dart';
 import '../models/circle.dart';
 import '../models/member.dart';
+import 'device_owner_service.dart';
 import 'sync_service.dart';
 
 /// Family circle state: members (MAX 10), alerts, places.
@@ -82,6 +83,12 @@ class FamilyService extends ChangeNotifier {
   /// (other members' phones). The Home screen listens and shows
   /// them as an alert.
   Stream<CircleEvent> get circleEvents => _eventsController.stream;
+
+  /// adminDisabled events already delivered, keyed
+  /// "<fromUid>|<ISO time>" (v0.6.13 dedupe — see the subscribe
+  /// callback). Unbounded growth is not a concern: one entry per
+  /// real deactivation, and the set lives only for the session.
+  final Set<String> _seenAdminDisabled = {};
 
   final _chatController = StreamController<ChatMessage>.broadcast();
 
@@ -166,6 +173,15 @@ class FamilyService extends ChangeNotifier {
       );
       _members.add(mine);
     }
+    // v0.6.13: the uninstall-protection level rides on my member
+    // node so the parent sees it. Read fresh here (main isolate —
+    // the platform channel is available); unknown leaves the
+    // server value alone.
+    final level = await DeviceOwnerService().currentLevel();
+    final i0 = _members.indexWhere((m) => m.id == uid);
+    if (i0 >= 0) {
+      _members[i0] = _members[i0].copyWith(protection: level);
+    }
     updateLocation(uid, lat, lon, DateTime.now());
     // Battery rides on the same node — stamped with when it was
     // read, so viewers can tell a live level from a stale one
@@ -201,6 +217,7 @@ class FamilyService extends ChangeNotifier {
       uid: uid,
       battery: battery,
       at: now,
+      protection: _members[i].protection,
     ));
     notifyListeners();
   }
@@ -434,7 +451,23 @@ class FamilyService extends ChangeNotifier {
     });
     sync.subscribeEvents(circleId, (event) {
       // Ignore my own events (I already know I pressed SOS).
-      if (event.fromUid != sync.uid) _eventsController.add(event);
+      if (event.fromUid == sync.uid) return;
+      // Dedupe adminDisabled (v0.6.13): the background task and
+      // the next app start watch the same pending flag, so one
+      // deactivation can arrive twice with the same timestamp —
+      // the parent must see it once, not twice.
+      if (event.type == 'adminDisabled' &&
+          _seenAdminDisabled.contains(
+            '${event.fromUid}|${event.at.toIso8601String()}',
+          )) {
+        return;
+      }
+      if (event.type == 'adminDisabled') {
+        _seenAdminDisabled.add(
+          '${event.fromUid}|${event.at.toIso8601String()}',
+        );
+      }
+      _eventsController.add(event);
     });
     sync.subscribeChat(circleId, (remote) {
       // v0.6.11: new chat messages from other members. First
