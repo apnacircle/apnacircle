@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/member.dart';
+import 'location_service.dart';
 
 /// Member cache for the native SIM-call distance overlay (v0.6.5).
 ///
@@ -58,9 +59,49 @@ class CallMemberCache {
     return false;
   }
 
+  /// Resolve the "my" position written into the native overlay
+  /// cache (v0.6.14): the FRESHEST real position of THIS phone
+  /// wins. A live/last-known fix beats a stale published member
+  /// entry — the entry only moves when a publish lands, so it can
+  /// lag the phone by minutes or hours when the phone was offline
+  /// or the app was killed, while the last-known fix is refreshed
+  /// by every GPS fix the phone takes. When neither is known the
+  /// overlay shows no distance ('—' equivalent), never a made-up
+  /// point. Returns the position + the time it was true, so the
+  /// cache keeps the matching timestamp.
+  static ({double lat, double lon, DateTime? at})? resolveCacheMyPosition({
+    Member? myMember,
+    LastLocation? lastKnown,
+  }) {
+    final m = myMember;
+    final hasMemberLoc = m != null && m.hasLocation;
+    if (lastKnown == null) {
+      return hasMemberLoc
+          ? (lat: m.lat!, lon: m.lon!, at: m.lastSeen)
+          : null;
+    }
+    if (!hasMemberLoc) {
+      return (lat: lastKnown.lat, lon: lastKnown.lon, at: lastKnown.at);
+    }
+    final memberAt = m.lastSeen;
+    if (memberAt == null) {
+      return (lat: lastKnown.lat, lon: lastKnown.lon, at: lastKnown.at);
+    }
+    return lastKnown.at.isAfter(memberAt)
+        ? (lat: lastKnown.lat, lon: lastKnown.lon, at: lastKnown.at)
+        : (lat: m.lat!, lon: m.lon!, at: memberAt);
+  }
+
   /// Build the cache JSON from the current member list. [myId] is
   /// my own uid (null in demo mode — then the first member is used).
-  static Map<String, dynamic> buildJson(List<Member> members, {String? myId}) {
+  /// [lastKnown] is this phone's last GPS fix: the cache's "my"
+  /// position prefers it when it is fresher than my published
+  /// member entry (see [resolveCacheMyPosition]).
+  static Map<String, dynamic> buildJson(
+    List<Member> members, {
+    String? myId,
+    LastLocation? lastKnown,
+  }) {
     Member? me;
     for (final m in members) {
       if (m.id == myId) {
@@ -69,10 +110,11 @@ class CallMemberCache {
       }
     }
     me ??= members.isEmpty ? null : members.first;
+    final myPos = resolveCacheMyPosition(myMember: me, lastKnown: lastKnown);
     return {
-      'myLat': me?.lat,
-      'myLon': me?.lon,
-      'myAt': me?.lastSeen?.millisecondsSinceEpoch,
+      'myLat': myPos?.lat,
+      'myLon': myPos?.lon,
+      'myAt': myPos?.at?.millisecondsSinceEpoch,
       'members': [
         for (final m in members)
           if (m.phone.trim().isNotEmpty && m.locationSharingOn)
@@ -87,9 +129,16 @@ class CallMemberCache {
     };
   }
 
-  static Future<void> save(List<Member> members, {String? myId}) async {
+  static Future<void> save(
+    List<Member> members, {
+    String? myId,
+    LastLocation? lastKnown,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_cacheKey, jsonEncode(buildJson(members, myId: myId)));
+    await prefs.setString(
+      _cacheKey,
+      jsonEncode(buildJson(members, myId: myId, lastKnown: lastKnown)),
+    );
   }
 
   static Future<void> clear() async {
