@@ -28,10 +28,14 @@ import 'sync_service.dart';
 /// * The user grants "Allow all the time" (Settings — Android 11+
 ///   cannot grant it from a dialog; see LocationService).
 /// * A foreground service (flutter_foreground_task) then runs a
-///   Dart task in the background: every 60 s it takes a GPS fix
-///   (same 50 m / 60 s throttle as LocationService) and publishes
-///   it to the member's own RTDB node, exactly like the foreground
-///   loop in HomeMapScreen. The service shows a permanent
+///   Dart task in the background: every 60 s it gets a fix with
+///   [LocationService.efficientFix] (v0.6.12: last-known first, a
+///   low-power cell/WiFi check while stationary, GPS only on
+///   movement or a 30-min re-baseline — the old path took a fresh
+///   high-accuracy GPS fix EVERY cycle, ~1,440/day, which drained
+///   the battery even for a phone sitting at home) and publishes
+///   it to the member's own RTDB node, with the same 50 m / 60 s
+///   throttle as LocationService. The service shows a permanent
 ///   notification: "ApnaCircle is sharing your location with your
 ///   family".
 /// * It starts automatically once the member is in a circle AND
@@ -331,7 +335,10 @@ class BackgroundLocationTaskHandler extends TaskHandler {
         p != LocationPermission.always) {
       return;
     }
-    final fix = await _loc.currentFix();
+    // v0.6.12: battery-aware fix — last-known first, a low-power
+    // check while stationary, GPS only on movement (or a 30-min
+    // re-baseline). Same 60 s rhythm, same publish rules.
+    final fix = await _loc.efficientFix();
     // The battery is read on EVERY cycle, even when there is no
     // new fix: it is published on its own schedule (v0.6.6) and
     // must not be dropped together with a throttled location.
