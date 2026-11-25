@@ -8,6 +8,7 @@ import '../core/call_member_cache.dart';
 import '../core/constants.dart';
 import '../core/location_service.dart';
 import '../core/member_phone.dart';
+import '../core/remove_member.dart';
 import '../models/chat_message.dart';
 import '../models/circle.dart';
 import '../models/member.dart';
@@ -59,6 +60,28 @@ class FamilyService extends ChangeNotifier {
       return null;
     }
     return me;
+  }
+
+  /// True when this phone is the circle parent (v0.6.16). Synced
+  /// mode: the circle role from the server (cached locally — works
+  /// offline). Demo mode (no circle selected): my own member
+  /// entry — the seeded demo family has the local user as parent.
+  /// The PIN gate in the UI is the real protection: a child
+  /// holding the parent's phone still needs the code.
+  bool get amParent {
+    final sync = _sync;
+    if (sync != null && sync.activeCircleId != null) {
+      return sync.activeCircle?.isAdmin ?? false;
+    }
+    return myMember?.isParent ?? false;
+  }
+
+  /// My own id for self-checks (v0.6.16): the Firebase uid when
+  /// synced, else my local member entry (demo mode).
+  String? get myId {
+    final sync = _sync;
+    if (sync != null && sync.uid != null) return sync.uid;
+    return myMember?.id;
   }
 
   /// Parent phone numbers in the active circle (for the offline
@@ -126,14 +149,44 @@ class FamilyService extends ChangeNotifier {
     return true;
   }
 
-  bool removeMember(String id) {
-    final before = _members.length;
-    _members.removeWhere((m) => m.id == id);
-    if (_members.length == before) return false;
+  /// Parent removes a member from the circle (v0.6.16 — the user
+  /// asked for the option on 25 Nov 2026). Parent-only, never
+  /// yourself, and removing someone already gone is a no-op with
+  /// a plain message. Returns (ok, error): the error is plain
+  /// words for the SnackBar. The member's `users/{uid}/circles`
+  /// role entry is left alone, so they can re-join with the
+  /// invite code (see SyncService.removeMemberNode).
+  ///
+  /// HONEST LIMIT (rules v1): under the currently published
+  /// rules a removed member's app may re-create its own member
+  /// node on its next location publish (ensureMyMemberNode) — so
+  /// removal only sticks permanently after rules v2
+  /// (database.rules.json, written but not deployed) are deployed.
+  Future<(bool, String?)> removeMember(String id) async {
+    if (!canRemoveMember(
+      isAdmin: amParent,
+      myUid: myId,
+      targetMemberId: id,
+    )) {
+      // canRemoveMember is false for exactly two reasons: not
+      // the parent, or the target is me (myId is never null when
+      // amParent is true — the parent always has an entry).
+      return (
+        false,
+        amParent
+            ? 'You cannot remove yourself.'
+            : 'Only the parent can remove a member.',
+      );
+    }
+    final target = _members.where((m) => m.id == id).firstOrNull;
+    if (target == null) {
+      return (false, 'That member is already gone.');
+    }
+    _members.remove(target);
     _save();
-    _removeMemberNode(id);
+    await _removeMemberNode(id);
     notifyListeners();
-    return true;
+    return (true, null);
   }
 
   /// Parent sets a member's SIM number AFTER joining (v0.6.14 —
