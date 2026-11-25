@@ -768,7 +768,59 @@ flutter build appbundle --release   # Play Store ko AAB chahiye
    field, 2-hour threshold, QR payload fields, adminDisabled
    shape, escape gate, removal gate dono directions, offline
    cases — cached-hash PIN verify, admin-status path, flag key).
-13. **Google Maps API key** — placeholder system tayyar hai (upar v0.2
+13. **Wrong distance — v0.6.14 (25 Nov 2026):**
+   User report (~12:36 PKT): "distance be saiii show nhi ho
+   raha". Wajah: Map tab par har member ka distance aik
+   HARDCODED Lahore point (31.5204, 74.3587) se napaa jata tha —
+   har phone par, hamesha. Jahanian (~295 km Lahore se) wale
+   user ko khud aur ghar walon ko "295.4 km away" dikhta tha.
+   Call-overlay preview screen mein wahi constants thay. Haversine
+   helper khud theek tha — "from" point ghalat tha. Native
+   SIM-call overlay kabhi mutasir nahi hua: us ka cache Dart
+   meri REAL published location se likhti hai.
+   Fix: viewer ki position ab live resolve hoti hai — fresh GPS
+   fix, warna last known fix, warna meri apni published member
+   entry (`lib/core/viewer_position.dart`). Position pata na ho
+   to distance '—' dikhta hai, kabhi made-up number nahi. Lahore
+   sirf map ke initial camera ka fallback reh gaya hai — distance
+   ke liye kabhi use nahi hota. Apni row fresh fix par ~0 m
+   parhti hai (koi special case nahi — live position se natural).
+   Phone par check: kisi member ke paas khade ho kar dekho — us
+   ka distance chand metres aana chahiye, sau km nahi.
+   **Call overlay — "na card na distance" (user, ~12:42 PKT):**
+   jab mehvish call karti thi to card aata hi nahi tha — distance
+   ghalat nahi, card hi nahi. Wajah: Gmail se login karne wale
+   member ki `phone` field mein un ka EMAIL hota hai
+   (`phoneNumber ?? email` fallback), aur email kabhi SIM number
+   se match nahi hota — overlay trigger hi nahi hota tha. Koi UI
+   number daalne ki thi hi nahi.
+   (a) **Join time number:** "Join a circle" ab 6-digit code ke
+   SAATH member ka mobile number bhi mangta hai — dono zaroori.
+   Number validate hota hai (asli phone format, 10–13 digits,
+   kabhi email nahi); bina / ghalat number ke join refuse hota
+   hai, saaf message ke saath. Join ye number member node ki
+   `phone` field mein likhta hai (email fallback khatam).
+   (b) **Baad mein badalne ka option:** Locks screen par (jahan
+   parent member manage karta hai) "Call distance — member's
+   mobile number" — pehle se join hue members (mehvish) ke liye.
+   Sirf parent, PIN-gated (wahi parent PIN); bacha apna number
+   khud nahi badal sakta. Number server par likhte hi call-member
+   cache refresh hota hai — agli SIM call par card aata hai.
+   (c) **Overlay ki "my" position:** native cache ki myLat/myLon
+   ab freshest real position hoti hai — live/last-known fix,
+   stale published entry se behtar (`resolveCacheMyPosition`,
+   `lib/core/call_member_cache.dart`). Dono na hon to distance
+   nahi dikhta ('—'), kabhi made-up nahi. Trigger/permission
+   (overlay permission) waisa ka waisa — masla number ka tha,
+   permission ka nahi.
+   **Note:** joining ab code ke saath mobile number bhi mangta
+   hai — wahi number call-distance card ko chalata hai. Gmail
+   login se app ko number milta hi nahi, is liye ye zaroori hai.
+   Tests: `test/v0614_test.dart` (resolution precedence, 0 m /
+   200 m / 3.6 km, unknown → '—', Jahanian regression, cache
+   my-position freshest-wins, join validation, Gmail-never-matches,
+   +92 vs 03… matching, parent-only change guard).
+14. **Google Maps API key** — placeholder system tayyar hai (upar v0.2
    point 4 dekhein); real key ke liye Google Cloud billing (card)
    chahiye hoti hai — ye parent ka step hai, is build mein nahi hai.
    Bina key ke map nahi khulta.
@@ -830,6 +882,12 @@ Ye sab is VM par verify NAHI ho sakta — asal phone par karna lazmi hai:
       (FCM + RTDB dedupe).
 - [ ] SIM-change: child ke phone mein dusri SIM daal kar reboot karein —
       parent ko "SIM card changed" alert mile (nayi SIM mein net zaroori).
+- [ ] Distance (v0.6.14): do phones paas khade hon → ek doosre ka
+      distance chand metres aana chahiye (sau km nahi); apni row
+      ~0 m parhni chahiye. Kisi member ke paas ja kar dekho —
+      distance ghatna chahiye, badhna nahi. Call preview (home
+      screen ka phone button) mein bhi caller ka distance apni
+      asal jagah se napna chahiye.
 - [ ] Device Admin: Settings se protection ON karein → uninstall ki
       koshish karein (rukni chahiye) → admin band karein → parent ko
       alert mile.
@@ -855,6 +913,11 @@ Ye sab is VM par verify NAHI ho sakta — asal phone par karna lazmi hai:
       distance overlay" ON karein (Display over other apps). Dual SIM
       par dono SIMs test karein. Overlay par tap karne se wo band ho.
       Non-member ki call par kuch nahi dikhna chahiye.
+- [ ] SIM call number (v0.6.14): Gmail se join hue member (mehvish) ki
+      call par card aana chahiye. Pehle Locks screen par us ka mobile
+      number save karein (parent PIN) → phir us ki SIM call par card +
+      asal distance dikhe. Naya join: code ke saath number na dein to
+      join refuse ho; email number ke tor par dein to refuse ho.
 - [ ] Account delete: Settings → Delete account → confirm → account
       delete ho, dobara sign in na ho.
 - [ ] App icon: home screen par naya icon (green shield + pin) dikhe.
