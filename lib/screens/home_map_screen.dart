@@ -14,6 +14,7 @@ import '../core/chat_notification.dart';
 import '../core/location_service.dart';
 import '../core/osm_map.dart';
 import '../core/protection_level.dart';
+import '../core/remove_member.dart';
 import '../core/viewer_position.dart';
 import '../models/circle.dart';
 import '../models/member.dart';
@@ -22,6 +23,7 @@ import '../screens/call_overlay_screen.dart';
 import '../screens/chat_screen.dart';
 import '../screens/locks_screen.dart';
 import '../screens/location_status_card.dart';
+import '../screens/pin_gate_dialog.dart';
 import '../screens/plan_screen.dart';
 import '../screens/settings_screen.dart';
 import '../services/background_location_service.dart';
@@ -919,6 +921,16 @@ class _HomeMapScreenState extends State<HomeMapScreen>
       lastSeen: m.lastSeen,
       now: now,
     );
+    // v0.6.16: parent-only remove option — a "⋮" menu on the row.
+    // Never on my own row, never for a child. The menu does NOT
+    // replace the tap-to-centre (tapping the row still centres
+    // the map); only the "⋮" opens the menu.
+    final family = context.read<FamilyService>();
+    final canRemove = canRemoveMember(
+      isAdmin: family.amParent,
+      myUid: family.myId,
+      targetMemberId: m.id,
+    );
     return ListTile(
       // v0.6.15: tap a member's row to centre the map on them.
       onTap: m.hasLocation
@@ -938,9 +950,83 @@ class _HomeMapScreenState extends State<HomeMapScreen>
               ],
             )
           : Text(fullStatus),
-      trailing: m.locationSharingOn
-          ? const Icon(Icons.location_on, color: Colors.green)
-          : const Icon(Icons.location_off, color: Colors.red),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          m.locationSharingOn
+              ? const Icon(Icons.location_on, color: Colors.green)
+              : const Icon(Icons.location_off, color: Colors.red),
+          if (canRemove)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              tooltip: 'Member options',
+              onSelected: (value) {
+                if (value == 'remove') {
+                  unawaited(_confirmRemoveMember(m));
+                }
+              },
+              itemBuilder: (ctx) => const [
+                PopupMenuItem<String>(
+                  value: 'remove',
+                  child: Text(
+                    'Remove from circle',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Remove a member (v0.6.16, parent only): confirm dialog first,
+  /// then the parent PIN, then the removal. Wrong PIN blocks and
+  /// nothing is deleted — askParentPin only calls onUnlocked on a
+  /// correct PIN. The service re-checks parent + not-self, so a
+  /// child calling the service directly still fails.
+  Future<void> _confirmRemoveMember(Member m) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Remove ${m.name}?'),
+        content: Text(
+          'Remove ${m.name} from the circle? '
+          'They can re-join with the invite code.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await askParentPin(
+      context,
+      onUnlocked: () {
+        unawaited(_doRemoveMember(m));
+      },
+    );
+  }
+
+  Future<void> _doRemoveMember(Member m) async {
+    final family = context.read<FamilyService>();
+    final (ok, error) = await family.removeMember(m.id);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? '${m.name} removed from the circle.'
+              : (error ?? 'Could not remove ${m.name}.'),
+        ),
+      ),
     );
   }
 
