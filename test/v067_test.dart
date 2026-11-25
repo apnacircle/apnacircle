@@ -12,7 +12,7 @@ import 'package:apnacircle/services/trial_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -178,7 +178,7 @@ void main() {
       await pumpHome(tester);
 
       // Map tab (default): the map + SOS button are there.
-      expect(find.byType(GoogleMap), findsOneWidget);
+      expect(find.byType(FlutterMap), findsOneWidget);
       expect(find.text('SOS'), findsOneWidget);
 
       // Switch to Chat: the map leaves the tree — its widget
@@ -186,7 +186,7 @@ void main() {
       await tester.tap(find.text('Chat'));
       await tester.pump(const Duration(seconds: 1));
       await tester.pump(const Duration(seconds: 1));
-      expect(find.byType(GoogleMap), findsNothing);
+      expect(find.byType(FlutterMap), findsNothing);
       expect(find.text('Message family…'), findsOneWidget);
 
       // Switch back to Map: the map is built again, same as before.
@@ -195,7 +195,7 @@ void main() {
       await tester.tap(find.text('Map'));
       await tester.pump(const Duration(seconds: 1));
       await tester.pump(const Duration(seconds: 1));
-      expect(find.byType(GoogleMap), findsOneWidget);
+      expect(find.byType(FlutterMap), findsOneWidget);
       expect(find.text('SOS'), findsOneWidget);
     });
   });
