@@ -2,8 +2,9 @@ import 'dart:async';
 
 import 'package:battery_plus/battery_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -11,6 +12,7 @@ import '../core/alert_notification.dart';
 import '../core/app_lock_service.dart';
 import '../core/chat_notification.dart';
 import '../core/location_service.dart';
+import '../core/osm_map.dart';
 import '../core/protection_level.dart';
 import '../core/viewer_position.dart';
 import '../models/circle.dart';
@@ -31,9 +33,12 @@ import '../services/sync_service.dart';
 /// Home: live map + member cards with distance (km), battery,
 /// online/offline + last location. SOS button is always visible.
 ///
-/// NOTE: Google Maps needs an API key in android/app/src/main/
-/// AndroidManifest.xml (meta-data com.google.android.geo.API_KEY)
-/// and the key restricted to this app. No key is committed here.
+/// NOTE (v0.6.15): the map is OpenStreetMap (flutter_map) — free,
+/// no API key, no card. Google Maps was removed because the map tab
+/// was blank without a key, and the key needs Google Cloud billing.
+/// Tiles need internet (offline shows no tiles; the members list
+/// still works). Attribution "© OpenStreetMap contributors" is
+/// shown on the map, bottom-left (OSM licence).
 ///
 /// v0.3: this screen also runs the location loop — every 60 s it
 /// takes a GPS fix and:
@@ -54,19 +59,25 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     with WidgetsBindingObserver {
   int _tab = 0;
 
-  // Map camera fallback ONLY — the initial camera needs a point
-  // before GPS answers. NEVER used for a distance (v0.6.14: the
+  // Map camera fallback — Lahore, in lib/core/osm_map.dart
+  // (osmMapFallbackLat/osmMapFallbackLon). It is the initial camera
+  // ONLY, before GPS answers. NEVER used for a distance (v0.6.14:
   // distances were measured from this hardcoded Lahore point on
   // every phone, so a user in Jahanian saw everyone as
   // "295.4 km away"). Distances use [_viewerPosition] instead.
-  static const _mapFallbackLat = 31.5204;
-  static const _mapFallbackLon = 74.3587;
 
   // THIS phone's own position, resolved live (v0.6.14): the
   // foreground loop's fresh fix, else the last known fix, else my
   // own published member entry. Null = unknown — member rows show
   // '—' until it is known, never a made-up number.
   ViewerPosition? _viewerPosition;
+
+  // v0.6.15: OpenStreetMap camera controller — follow-me button,
+  // member-card tap-to-centre, and the one-time centre on the
+  // first viewer fix. [_mapReady] is set by onMapReady; moves
+  // before the map mounts are skipped, never forced.
+  final _mapController = MapController();
+  bool _mapReady = false;
 
   static const _smsAskedKey = 'sms_fallback_asked';
   static const _smsEnabledKey = 'sms_fallback_enabled';
@@ -562,9 +573,15 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   Future<void> _refreshViewerPosition({Position? fix}) async {
     if (!mounted) return;
     if (fix != null) {
+      final hadViewer = _viewerPosition != null;
       setState(
         () => _viewerPosition = resolveViewerPosition(liveFix: fix),
       );
+      // v0.6.15: first fix — centre the map on where I really am.
+      // Before this the camera stayed on the Lahore fallback until
+      // the user dragged it. Once only: later fixes never yank
+      // the camera while the user is looking at a member.
+      if (!hadViewer) _centreOnViewer();
       return;
     }
     if (_viewerPosition != null) return;
@@ -577,6 +594,45 @@ class _HomeMapScreenState extends State<HomeMapScreen>
         myMember: family.myMember,
       ),
     );
+    if (_viewerPosition != null) _centreOnViewer();
+  }
+
+  /// Move the map camera. Skipped (never forced) before the map is
+  /// mounted — the controller has no map to move yet.
+  void _moveCamera(LatLng point, double zoom) {
+    if (!_mapReady || !mounted) return;
+    try {
+      _mapController.move(point, zoom);
+    } catch (_) {
+      // A move on a disposed/unmounted controller is a no-op for
+      // the user — the map simply stays where it is.
+    }
+  }
+
+  /// Follow-me: centre on THIS phone's live position. With no
+  /// viewer position yet, take a fresh fix first.
+  Future<void> _centreOnViewer() async {
+    final viewer = _viewerPosition;
+    if (viewer != null) {
+      _moveCamera(LatLng(viewer.lat, viewer.lon), 14);
+      return;
+    }
+    final fix = await LocationService().currentFix();
+    if (!mounted) return;
+    if (fix != null) {
+      setState(
+        () => _viewerPosition = resolveViewerPosition(liveFix: fix),
+      );
+      _moveCamera(LatLng(fix.latitude, fix.longitude), 14);
+      return;
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Your location is not known yet.'),
+        ),
+      );
+    }
   }
 
   @override
@@ -600,26 +656,38 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _mapController.dispose();
     _locationTimer?.cancel();
     _offlineSub?.cancel();
     _smsSub?.cancel();
     super.dispose();
   }
 
-  Set<Marker> _markers(List<Member> members) => {
-        for (final m in members)
-          if (m.hasLocation)
-            Marker(
-              markerId: MarkerId(m.id),
-              position: LatLng(m.lat!, m.lon!),
-              infoWindow: InfoWindow(
-                title: m.name,
-                snippet: m.isOnline
-                    ? 'Online'
-                    : 'Last seen: ${_fmtTime(m.lastSeen)}',
+  /// One marker per member WITH a location (v0.6.15, flutter_map).
+  /// Same rule as the old Google markers: members with no location
+  /// get no marker. Tap a marker to centre the map on that member.
+  /// My own member row IS my position — there is no separate blue
+  /// dot (Google's myLocationEnabled); the follow-me button centres
+  /// on it.
+  List<Marker> _markers(List<Member> members) => [
+        for (final d in osmMarkersFor(members))
+          Marker(
+            point: d.point,
+            width: 44,
+            height: 44,
+            child: GestureDetector(
+              onTap: () => _moveCamera(d.point, 14),
+              child: CircleAvatar(
+                backgroundColor:
+                    d.isOnline ? Colors.green : Colors.grey,
+                child: Text(
+                  d.name[0],
+                  style: const TextStyle(color: Colors.white),
+                ),
               ),
             ),
-      };
+          ),
+      ];
 
   static String _fmtTime(DateTime? t) {
     if (t == null) return '—';
@@ -630,7 +698,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
 
   /// Build ONLY the selected tab (v0.6.7). Before this, `build()`
   /// called `_mapTab(members)` on EVERY build — constructing the
-  /// GoogleMap widget, computing all markers and building every
+  /// FlutterMap widget, computing all markers and building every
   /// member card — even while the user was on Chat, Locks or
   /// Settings. The map platform view was never mounted for other
   /// tabs, but the widget subtree + marker work was wasted on
@@ -742,13 +810,53 @@ class _HomeMapScreenState extends State<HomeMapScreen>
               ),
             ),
           Expanded(
-            child: GoogleMap(
-              initialCameraPosition: const CameraPosition(
-                target: LatLng(_mapFallbackLat, _mapFallbackLon),
-                zoom: 12,
-              ),
-              myLocationEnabled: true,
-              markers: _markers(members),
+            child: Stack(
+              children: [
+                FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter:
+                        osmInitialCenter(viewer: _viewerPosition),
+                    initialZoom: osmMapInitialZoom,
+                    onMapReady: () => _mapReady = true,
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate: osmTileUrlTemplate,
+                      userAgentPackageName: osmUserAgentPackageName,
+                    ),
+                    MarkerLayer(markers: _markers(members)),
+                  ],
+                ),
+                // Required OSM attribution — always visible,
+                // bottom-left (OSM licence).
+                Positioned(
+                  left: 6,
+                  bottom: 4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 1,
+                    ),
+                    color: Colors.white70,
+                    child: const Text(
+                      '© $osmAttributionText',
+                      style: TextStyle(fontSize: 10),
+                    ),
+                  ),
+                ),
+                // Follow-me: centre the map on my live position.
+                Positioned(
+                  right: 12,
+                  bottom: 12,
+                  child: FloatingActionButton.small(
+                    heroTag: 'follow_me',
+                    onPressed: () => unawaited(_centreOnViewer()),
+                    tooltip: 'Centre on me',
+                    child: const Icon(Icons.my_location),
+                  ),
+                ),
+              ],
             ),
           ),
           SizedBox(
@@ -812,6 +920,10 @@ class _HomeMapScreenState extends State<HomeMapScreen>
       now: now,
     );
     return ListTile(
+      // v0.6.15: tap a member's row to centre the map on them.
+      onTap: m.hasLocation
+          ? () => _moveCamera(LatLng(m.lat!, m.lon!), 14)
+          : null,
       leading: CircleAvatar(child: Text(m.name[0])),
       title: Text(m.name),
       subtitle: showMissing
