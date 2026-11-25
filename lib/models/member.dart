@@ -1,4 +1,5 @@
 import '../core/alerts.dart';
+import '../core/protection_level.dart';
 
 /// One family member. Location is shared ONLY with consent:
 /// the member joined the circle and left sharing on.
@@ -17,6 +18,13 @@ class Member {
   final DateTime? batteryAt;
   final bool isOnline;
   final bool locationSharingOn;
+
+  /// Uninstall-protection level of this member's phone (v0.6.13):
+  /// owner = cannot be uninstalled from Settings, admin = uninstall
+  /// needs deactivation first (+ parent alert), none = can be
+  /// uninstalled freely. Unknown = older app version that does not
+  /// publish it yet — the UI shows nothing rather than guessing.
+  final ProtectionLevel protection;
   final Map<AlertType, bool> alerts;
 
   /// True when this member's shown location arrived by SMS while
@@ -37,6 +45,7 @@ class Member {
     this.isOnline = false,
     this.locationSharingOn = true,
     this.locationViaSms = false,
+    this.protection = ProtectionLevel.unknown,
     Map<AlertType, bool>? alerts,
   }) : alerts = alerts ?? const {};
 
@@ -70,6 +79,7 @@ class Member {
     bool? isOnline,
     bool? locationSharingOn,
     bool? locationViaSms,
+    ProtectionLevel? protection,
     Map<AlertType, bool>? alerts,
   }) =>
       Member(
@@ -85,6 +95,7 @@ class Member {
         isOnline: isOnline ?? this.isOnline,
         locationSharingOn: locationSharingOn ?? this.locationSharingOn,
         locationViaSms: locationViaSms ?? this.locationViaSms,
+        protection: protection ?? this.protection,
         alerts: alerts ?? this.alerts,
       );
 
@@ -101,6 +112,7 @@ class Member {
         'isOnline': isOnline,
         'locationSharingOn': locationSharingOn,
         'locationViaSms': locationViaSms,
+        'protection': protection.wireValue,
         'alerts': {for (final e in alerts.entries) e.key.name: e.value},
       };
 
@@ -121,6 +133,8 @@ class Member {
         isOnline: j['isOnline'] as bool? ?? false,
         locationSharingOn: j['locationSharingOn'] as bool? ?? true,
         locationViaSms: j['locationViaSms'] as bool? ?? false,
+        protection:
+            ProtectionLevel.fromWire(j['protection'] as String?),
         alerts: {
           for (final e in (j['alerts'] as Map? ?? {}).entries)
             AlertType.values.firstWhere(
