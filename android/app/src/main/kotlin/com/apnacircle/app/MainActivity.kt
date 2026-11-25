@@ -12,12 +12,14 @@ import android.provider.Settings
 import android.telephony.PhoneStateListener
 import android.telephony.SmsManager
 import android.telephony.TelephonyManager
+import android.util.Base64
 import android.view.accessibility.AccessibilityManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.security.MessageDigest
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -125,6 +127,41 @@ class MainActivity : FlutterActivity() {
 
     private fun devicePolicyManager(): DevicePolicyManager =
         getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+
+    /**
+     * Base64 SHA-256 of this app's signing certificate (v0.6.13) —
+     * the value the Device Owner QR checksum must carry. The
+     * provisioning wizard downloads the APK from the URL in the QR
+     * and refuses it when the checksum does not match the APK's
+     * own certificate. CI builds are debug-signed with a FRESH key
+     * per run, so the QR is only valid for the exact APK build it
+     * was generated from. Null when the certificate cannot be read.
+     */
+    private fun signingChecksum(): String? {
+        return try {
+            val certs = if (android.os.Build.VERSION.SDK_INT >=
+                android.os.Build.VERSION_CODES.P
+            ) {
+                val info = packageManager.getPackageInfo(
+                    packageName,
+                    PackageManager.GET_SIGNING_CERTIFICATES,
+                )
+                info.signingInfo?.apkContentsSigners
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getPackageInfo(
+                    packageName,
+                    PackageManager.GET_SIGNATURES,
+                ).signatures
+            }
+            val cert = certs?.firstOrNull() ?: return null
+            val digest = MessageDigest.getInstance("SHA-256")
+                .digest(cert.toByteArray())
+            Base64.encodeToString(digest, Base64.NO_WRAP)
+        } catch (e: Exception) {
+            null
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -271,6 +308,41 @@ class MainActivity : FlutterActivity() {
                         ApnaCircleDeviceAdminReceiver.KEY_PENDING_DISABLED
                     ).apply()
                     result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        // Device Owner — the only truly non-uninstallable protection
+        // (v0.6.13). A device-owner app has NO working uninstall in
+        // Settings. Setup is a one-time QR provisioning on a fresh /
+        // factory-reset phone (see DeviceOwnerService + the setup
+        // screen); removal is PIN-gated clearDeviceOwnerApp from
+        // inside the app, so the parent is never locked out of
+        // their own phone by this protection.
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger, "apnacircle/deviceowner"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "isDeviceOwner" -> result.success(
+                    devicePolicyManager().isDeviceOwnerApp(packageName)
+                )
+                // Base64 SHA-256 of this app's signing certificate —
+                // the QR checksum the provisioning wizard verifies
+                // against the APK at the download URL. Null when it
+                // cannot be read (the setup screen then refuses to
+                // show a QR rather than showing a wrong one).
+                "getSigningChecksum" -> result.success(signingChecksum())
+                // Parent-controlled removal (PIN-gated in Dart):
+                // only the device owner app itself can call this.
+                // The app stays installed, but loses owner status.
+                "clearDeviceOwner" -> {
+                    try {
+                        devicePolicyManager().clearDeviceOwnerApp(packageName)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.success(false)
+                    }
                 }
                 else -> result.notImplemented()
             }
