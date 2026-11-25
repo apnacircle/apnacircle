@@ -45,4 +45,5 @@ class AppConstants {
   static const String deviceChannel = 'apnacircle/device';
   static const String deviceAdminChannel = 'apnacircle/deviceadmin';
   static const String simChannel = 'apnacircle/sim';
+  static const String deviceOwnerChannel = 'apnacircle/deviceowner';
 }
