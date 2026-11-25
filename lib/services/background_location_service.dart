@@ -7,10 +7,14 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/battery_schedule.dart';
 import '../core/location_service.dart';
+import '../core/protection_level.dart';
 import '../models/circle.dart';
+import 'device_admin_service.dart';
+import 'device_owner_service.dart';
 import 'firebase_config.dart';
 import 'sync_service.dart';
 
@@ -303,6 +307,15 @@ class BackgroundLocationTaskHandler extends TaskHandler {
   Future<void> _publishCycle() async {
     if (_db == null || _circleId == null || _uid == null) return;
     final now = DateTime.now();
+    // v0.6.13 (B): a child deactivating Device Admin must alert
+    // the parent WITHIN A MINUTE — while the app is still
+    // installed — not only on the next app start (which never
+    // comes if the child uninstalls right after deactivating).
+    // The receiver writes the deactivation time into the
+    // FlutterSharedPreferences file; this task checks it every
+    // cycle, claims it, and publishes the event. The next-start
+    // path watches the same flag as backup.
+    await _publishPendingAdminDisabledAlert();
     // Internet-off alert (v0.6.9): check connectivity FIRST, so
     // the offline window is tracked even when GPS is off or the
     // permission was revoked (the returns below must not skip it).
@@ -376,6 +389,14 @@ class BackgroundLocationTaskHandler extends TaskHandler {
         update['battery'] = battery;
         update['batteryAt'] = now.toIso8601String();
       }
+      // v0.6.13 (C): the protection level rides along, from the
+      // cache the main isolate maintains (this isolate cannot call
+      // the platform channels). Only when known — 'unknown' must
+      // never clobber a level published earlier.
+      final protection = await DeviceOwnerService.cachedLevel();
+      if (protection != ProtectionLevel.unknown) {
+        update['protection'] = protection.wireValue;
+      }
       await _db!
           .child(FirebaseConfig.circleMemberPath(_circleId!, _uid!))
           .update(update);
@@ -399,21 +420,86 @@ class BackgroundLocationTaskHandler extends TaskHandler {
   /// Battery-only publish (v0.6.6) — see [BatteryPublishTracker].
   /// Writes only `battery` + `batteryAt`, never location or
   /// lastSeen: a member who has not moved keeps the last fix, but
-  /// the family still sees a fresh battery level.
+  /// the family still sees a fresh battery level. The protection
+  /// level (v0.6.13) rides along when known, so the parent's label
+  /// stays fresh even while the member sits still.
   Future<void> _publishBatteryIfDue(int battery, DateTime now) async {
     if (!_batteryTracker.shouldPublish(battery: battery, now: now)) {
       return;
     }
     try {
-      await _db!
-          .child(FirebaseConfig.circleMemberPath(_circleId!, _uid!))
-          .update({
+      final data = <String, dynamic>{
         'battery': battery,
         'batteryAt': now.toIso8601String(),
-      });
+      };
+      final protection = await DeviceOwnerService.cachedLevel();
+      if (protection != ProtectionLevel.unknown) {
+        data['protection'] = protection.wireValue;
+      }
+      await _db!
+          .child(FirebaseConfig.circleMemberPath(_circleId!, _uid!))
+          .update(data);
       _batteryTracker.markPublished(battery: battery, now: now);
     } catch (e) {
       debugPrint('ApnaCircle: background battery publish failed ($e)');
+    }
+  }
+
+  /// Immediate admin-deactivation alert (v0.6.13, part B). The
+  /// receiver writes the deactivation time into the
+  /// FlutterSharedPreferences file when the child turns Device
+  /// Admin off. This task checks it EVERY cycle and publishes the
+  /// `adminDisabled` event to the circle within a minute — while
+  /// the app is still installed.
+  ///
+  /// OFFLINE RULE (v0.6.13 refinement): the flag is claimed
+  /// (removed) ONLY after the write succeeds. With no network the
+  /// write cannot land now, so the flag SURVIVES for the next
+  /// cycle (or the next app start) to retry — it is never lost.
+  /// The write is bounded by a 15 s timeout: the RTDB SDK queues
+  /// offline writes, so a timed-out write may still land later
+  /// AND a retry may send it again — the parent's phone dedupes
+  /// identical adminDisabled events (same phone + same time).
+  /// Honest limit, kept: with net off the alert CANNOT be sent
+  /// immediately — no channel exists — and if the app is then
+  /// uninstalled before any reconnect, nothing reports again;
+  /// the parent-side 2-hour silence notice is the backstop for
+  /// that case. Never throws, never breaks the location cycle.
+  Future<void> _publishPendingAdminDisabledAlert() async {
+    int? atMs;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      atMs = prefs.getInt(DeviceAdminService.pendingDisabledPrefsKey);
+      if (atMs == null) return;
+    } catch (_) {
+      return;
+    }
+    var published = false;
+    try {
+      final event = CircleEvent(
+        type: 'adminDisabled',
+        fromUid: _uid!,
+        fromName: _name ?? 'Me',
+        at: DateTime.fromMillisecondsSinceEpoch(atMs),
+      );
+      await _db!
+          .child(FirebaseConfig.circleEventsPath(_circleId!))
+          .push()
+          .set(event.toJson())
+          .timeout(const Duration(seconds: 15));
+      published = true;
+    } catch (e) {
+      debugPrint(
+        'ApnaCircle: background adminDisabled publish failed ($e)',
+      );
+    }
+    if (!published) return; // Flag survives — retry next cycle.
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(DeviceAdminService.pendingDisabledPrefsKey);
+    } catch (_) {
+      // The next-start path claims the same flag; the parent's
+      // phone dedupes identical events.
     }
   }
 
