@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/escape_gate.dart';
 import '../services/auth_service.dart';
 import '../services/firebase_bootstrap.dart';
 import '../services/pin_service.dart';
 import '../services/sync_service.dart';
 import 'auth_screen.dart';
+import 'pin_gate_dialog.dart';
 
 /// Account & Circles (v0.3, 22 Nov 2026).
 ///
@@ -112,6 +116,14 @@ class _CircleScreenState extends State<CircleScreen> {
       role: _joinRole,
     );
     if (!mounted) return;
+    if (circle != null) {
+      // v0.6.13 (offline rule): cache the parent PIN hash now, so
+      // this phone's PIN gates work even before the next start —
+      // never leave a member's phone with no local copy after its
+      // first sync.
+      await sync.cacheParentPinHash(context.read<PinService>());
+    }
+    if (!mounted) return;
     setState(() {
       _busy = false;
       _error = err;
@@ -122,7 +134,42 @@ class _CircleScreenState extends State<CircleScreen> {
     if (circle != null) _inviteCode.clear();
   }
 
+  /// Escape-hatch gate (v0.6.13, part E): a CHILD signing out or
+  /// deleting their account must first enter the parent PIN — the
+  /// SAME parent PIN that unlocks apps (one PIN for everything).
+  /// Signing out is how a child drops out of the circle silently,
+  /// so it is gated exactly like deleting. Parent role: never
+  /// gated. No hash anywhere (never set, or offline with nothing
+  /// stored) = fail closed: the escape is blocked, with a plain
+  /// message, never let through unverified.
+  Future<bool> _passEscapeGate() async {
+    final sync = context.read<SyncService>();
+    if (!childEscapeNeedsParentPin(sync.activeCircle?.role)) return true;
+    final hash = await resolveParentPinHash(
+      sync: sync,
+      pin: context.read<PinService>(),
+    );
+    if (!mounted) return false;
+    if (hash == null) {
+      setState(() => _error =
+          'Parent PIN is needed for this — connect to the internet and try again.');
+      return false;
+    }
+    var passed = false;
+    await askParentPin(
+      context,
+      expectedHash: hash,
+      onUnlocked: () => passed = true,
+    );
+    return passed;
+  }
+
   Future<void> _signOut() async {
+    if (!await _passEscapeGate()) return;
+    await _doSignOut();
+  }
+
+  Future<void> _doSignOut() async {
     await context.read<AuthService>().signOut();
     if (!mounted) return;
     Navigator.pushReplacement(
@@ -132,6 +179,11 @@ class _CircleScreenState extends State<CircleScreen> {
   }
 
   Future<void> _deleteAccount() async {
+    if (!await _passEscapeGate()) return;
+    await _doDeleteAccount();
+  }
+
+  Future<void> _doDeleteAccount() async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
