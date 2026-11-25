@@ -16,7 +16,8 @@ import 'pin_gate_dialog.dart';
 /// This is where the two-phone test happens:
 /// 1. PARENT phone: sign in, "Create a circle", share the 6-digit
 ///    invite code with the child.
-/// 2. CHILD phone: sign in, "Join a circle", type the code, role
+/// 2. CHILD phone: sign in, "Join a circle", type the code + their
+///    mobile number (v0.6.14 — both required), role
 ///    "child". Both phones now see the same circle.
 /// 3. Parent changes a lock / alert on the parent phone -> the
 ///    child's phone gets it live. The child's live location shows
@@ -39,6 +40,11 @@ class CircleScreen extends StatefulWidget {
 class _CircleScreenState extends State<CircleScreen> {
   final _circleName = TextEditingController();
   final _inviteCode = TextEditingController();
+  // v0.6.14: the member's mobile number, typed WITH the invite
+  // code at join time — both required. Gmail logins carry no
+  // number, and without one the SIM-call overlay can never match
+  // the member, so no card appears at all.
+  final _joinPhone = TextEditingController();
   String _joinRole = 'child';
   bool _busy = false;
   String? _error;
@@ -48,6 +54,7 @@ class _CircleScreenState extends State<CircleScreen> {
   void dispose() {
     _circleName.dispose();
     _inviteCode.dispose();
+    _joinPhone.dispose();
     super.dispose();
   }
 
@@ -113,6 +120,7 @@ class _CircleScreenState extends State<CircleScreen> {
     });
     final (circle, err) = await sync.joinCircle(
       _inviteCode.text,
+      phoneNumber: _joinPhone.text,
       role: _joinRole,
     );
     if (!mounted) return;
@@ -132,6 +140,7 @@ class _CircleScreenState extends State<CircleScreen> {
           : 'Joined "${circle.name}" as ${circle.role}.';
     });
     if (circle != null) _inviteCode.clear();
+    if (circle != null) _joinPhone.clear();
   }
 
   /// Escape-hatch gate (v0.6.13, part E): a CHILD signing out or
@@ -336,6 +345,18 @@ class _CircleScreenState extends State<CircleScreen> {
             decoration: const InputDecoration(
               labelText: '6-digit invite code',
               hintText: 'e.g. 482913',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _joinPhone,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(
+              labelText: 'My mobile number',
+              hintText: 'e.g. 03001234567',
+              helperText:
+                  'Needed so a SIM call from you shows your distance to the family. A real SIM number — never an email.',
               border: OutlineInputBorder(),
             ),
           ),
