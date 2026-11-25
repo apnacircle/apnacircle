@@ -71,6 +71,7 @@ class Member {
           const Duration(minutes: 30);
 
   Member copyWith({
+    String? phone,
     double? lat,
     double? lon,
     DateTime? lastSeen,
@@ -85,7 +86,7 @@ class Member {
       Member(
         id: id,
         name: name,
-        phone: phone,
+        phone: phone ?? this.phone,
         role: role,
         lat: lat ?? this.lat,
         lon: lon ?? this.lon,
