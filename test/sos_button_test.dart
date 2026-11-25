@@ -122,9 +122,12 @@ void main() {
     // The icon must not be the letters-SOS glyph anymore.
     expect(find.byIcon(Icons.sos), findsNothing);
     expect(find.byIcon(Icons.emergency), findsOneWidget);
-    // Still a big red extended button.
-    final fab =
-        tester.widget<FloatingActionButton>(find.byType(FloatingActionButton));
+    // Still a big red extended button. (v0.6.15: the map also has
+    // a small follow-me FAB, so the finder must name the SOS one —
+    // the follow-me button has no text.)
+    final fab = tester.widget<FloatingActionButton>(
+      find.widgetWithText(FloatingActionButton, 'SOS'),
+    );
     expect(fab.backgroundColor, Colors.red);
 
     // Dispose the screen so its 60 s location timer is cancelled.
@@ -155,8 +158,10 @@ void main() {
     );
     await tester.drag(listFinder, const Offset(0, -1000));
     await tester.pump();
+    // v0.6.15: the follow-me FAB is a second FloatingActionButton
+    // on the map — name the SOS one here, as above.
     final fabRect =
-        tester.getRect(find.byType(FloatingActionButton));
+        tester.getRect(find.widgetWithText(FloatingActionButton, 'SOS'));
     final ammiRect = tester.getRect(find.text('Ammi'));
     expect(fabRect.overlaps(ammiRect), isFalse,
         reason: 'SOS button must never cover the last member row');
