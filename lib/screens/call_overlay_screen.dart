@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../core/call_distance_service.dart';
-import '../core/location_service.dart';
+import '../core/viewer_position.dart';
 import '../models/member.dart';
 
 /// What the parent sees when a family member calls on a NORMAL SIM
@@ -11,24 +10,31 @@ import '../models/member.dart';
 /// so it works with the app dead) matches the number against the
 /// member cache Dart keeps in SharedPreferences and shows a small
 /// native overlay window OVER the call screen (CallOverlayManager).
-/// This Flutter screen is the PREVIEW of that overlay — reachable
-/// from the home screen's phone button for testing without a real
-/// call — and the in-app view of a call. It does NOT answer or
-/// decline the real call; those buttons just close this preview.
+/// That native path was never affected by the v0.6.14 bug: the cache
+/// carries my REAL published location. This Flutter screen is the
+/// PREVIEW of that overlay — reachable from the home screen's phone
+/// button for testing without a real call — and the in-app view of a
+/// call. It does NOT answer or decline the real call; those buttons
+/// just close this preview.
 class CallOverlayScreen extends StatelessWidget {
   final Member caller;
-  const CallOverlayScreen({super.key, required this.caller});
 
-  // My location — in production this comes from LocationService.
-  static const double myLat = 31.5204;
-  static const double myLon = 74.3587;
+  /// THIS phone's live position, passed in by the caller (the home
+  /// screen's foreground loop resolves it). Null = unknown — the
+  /// distance shows '—', never a made-up number from a hardcoded
+  /// demo point (v0.6.14: this screen used to measure every caller
+  /// from hardcoded Lahore, 31.5204 / 74.3587).
+  final ViewerPosition? viewerPosition;
+  const CallOverlayScreen({
+    super.key,
+    required this.caller,
+    this.viewerPosition,
+  });
 
   @override
   Widget build(BuildContext context) {
     final distance = caller.hasLocation
-        ? CallDistanceService.formatKm(
-            LocationService.distanceKm(myLat, myLon, caller.lat!, caller.lon!),
-          )
+        ? formatMemberDistance(viewer: viewerPosition, member: caller)
         : 'Location unknown';
     return Scaffold(
       appBar: AppBar(title: const Text('Incoming call · SIM')),
