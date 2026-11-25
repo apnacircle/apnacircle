@@ -72,7 +72,7 @@ const Map<String, String> enStrings = {
       'Protection ON — the app cannot be uninstalled without turning this off first.',
   'deviceAdminOff': 'Protection OFF — the app can be uninstalled normally.',
   'deviceAdminNote':
-      'Device Admin cannot truly block uninstall on modern Android — it forces an extra deactivation step and alerts your parent when that happens.',
+      'Device Admin cannot truly block uninstall on modern Android — it forces an extra deactivation step and alerts your parent when that happens. Protection is enforced on the phone itself by Android, so it works even with the internet off.',
   'enableProtection': 'Turn on protection',
   'disableProtection': 'Turn off protection',
   'adminDisabledAlert':
