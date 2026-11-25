@@ -2,16 +2,17 @@ import 'dart:async';
 
 import 'package:battery_plus/battery_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/alert_notification.dart';
 import '../core/app_lock_service.dart';
-import '../core/call_distance_service.dart';
 import '../core/chat_notification.dart';
 import '../core/location_service.dart';
 import '../core/protection_level.dart';
+import '../core/viewer_position.dart';
 import '../models/circle.dart';
 import '../models/member.dart';
 import '../screens/alerts_screen.dart';
@@ -53,9 +54,19 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     with WidgetsBindingObserver {
   int _tab = 0;
 
-  // My location (Lahore demo default until GPS gives a real fix).
-  static const _myLat = 31.5204;
-  static const _myLon = 74.3587;
+  // Map camera fallback ONLY — the initial camera needs a point
+  // before GPS answers. NEVER used for a distance (v0.6.14: the
+  // distances were measured from this hardcoded Lahore point on
+  // every phone, so a user in Jahanian saw everyone as
+  // "295.4 km away"). Distances use [_viewerPosition] instead.
+  static const _mapFallbackLat = 31.5204;
+  static const _mapFallbackLon = 74.3587;
+
+  // THIS phone's own position, resolved live (v0.6.14): the
+  // foreground loop's fresh fix, else the last known fix, else my
+  // own published member entry. Null = unknown — member rows show
+  // '—' until it is known, never a made-up number.
+  ViewerPosition? _viewerPosition;
 
   static const _smsAskedKey = 'sms_fallback_asked';
   static const _smsEnabledKey = 'sms_fallback_enabled';
@@ -513,6 +524,11 @@ class _HomeMapScreenState extends State<HomeMapScreen>
       battery = -1;
     }
     if (!mounted) return;
+    // v0.6.14: feed the fix into the viewer position, so member
+    // distances are measured from THIS phone, not from Lahore.
+    // Runs on every cycle, online or offline — the viewer position
+    // is local and never needs data.
+    await _refreshViewerPosition(fix: fix);
     final offline = await sms.isOffline;
     if (mounted) setState(() => _iAmOffline = offline);
     if (offline) {
@@ -537,6 +553,30 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     }
     // Online: publish to the circle (no-op in demo mode).
     await family.publishSelfLocation(fix.latitude, fix.longitude, battery);
+  }
+
+  /// Resolve THIS phone's position for the member distances
+  /// (v0.6.14): a fresh fix wins; with no fix, keep the live one
+  /// we already have; with none yet, fall back to the last known
+  /// fix, then to my own published member entry. Never Lahore.
+  Future<void> _refreshViewerPosition({Position? fix}) async {
+    if (!mounted) return;
+    if (fix != null) {
+      setState(
+        () => _viewerPosition = resolveViewerPosition(liveFix: fix),
+      );
+      return;
+    }
+    if (_viewerPosition != null) return;
+    final family = context.read<FamilyService>();
+    final last = await LocationService().lastKnown();
+    if (!mounted) return;
+    setState(
+      () => _viewerPosition = resolveViewerPosition(
+        lastKnown: last,
+        myMember: family.myMember,
+      ),
+    );
   }
 
   @override
@@ -631,7 +671,10 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => CallOverlayScreen(caller: ali),
+                    builder: (_) => CallOverlayScreen(
+                      caller: ali,
+                      viewerPosition: _viewerPosition,
+                    ),
                   ),
                 );
               }
@@ -701,7 +744,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
           Expanded(
             child: GoogleMap(
               initialCameraPosition: const CameraPosition(
-                target: LatLng(_myLat, _myLon),
+                target: LatLng(_mapFallbackLat, _mapFallbackLon),
                 zoom: 12,
               ),
               myLocationEnabled: true,
@@ -725,11 +768,13 @@ class _HomeMapScreenState extends State<HomeMapScreen>
       );
 
   Widget _memberCard(Member m) {
-    final distance = m.hasLocation
-        ? CallDistanceService.formatKm(
-            LocationService.distanceKm(_myLat, _myLon, m.lat!, m.lon!),
-          )
-        : '—';
+    // v0.6.14: measured from THIS phone's live position — never
+    // from the old hardcoded Lahore point. '—' while the viewer's
+    // position is still unknown.
+    final distance = formatMemberDistance(
+      viewer: _viewerPosition,
+      member: m,
+    );
     // Honest offline state (v0.3): last location + when it was
     // last seen + how it arrived (live / SMS / nothing since off).
     final String status;
