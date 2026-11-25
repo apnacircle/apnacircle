@@ -68,13 +68,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <!-- Maps key comes from manifestPlaceholders (see
-             android/app/build.gradle.kts): set MAPS_API_KEY in
-             gradle.properties / local.properties on the build machine.
-             Restrict the key in Google Cloud to this app + Maps SDK. -->
-        <meta-data
-            android:name="com.google.android.geo.API_KEY"
-            android:value="${MAPS_API_KEY}" />
         <!-- v0.6.10: FCM notification messages with no channel set
              are shown by the system on this channel, so a push that
              arrives while the app is closed/killed still rings loud
