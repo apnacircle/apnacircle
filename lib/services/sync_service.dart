@@ -9,13 +9,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/alerts.dart';
 import '../core/app_lock_service.dart';
 import '../core/chat_paging.dart';
+import '../core/protection_level.dart';
 import '../models/chat_message.dart';
 import '../models/circle.dart';
 import '../models/member.dart';
 import '../models/trial.dart';
 import 'auth_service.dart';
+import 'device_owner_service.dart';
 import 'firebase_bootstrap.dart';
 import 'firebase_config.dart';
+import 'pin_service.dart';
 
 /// Firebase Realtime Database sync (v0.3, 22 Nov 2026).
 ///
@@ -181,7 +184,11 @@ class SyncService extends ChangeNotifier {
       // circle-level write rule requires membership, so write MY
       // OWN member node FIRST (the rules allow anyone to write
       // their own members/{uid} node), and only then the info node.
-      await _writeMyMemberNode(circleId, 'parent');
+      await _writeMyMemberNode(
+        circleId,
+        'parent',
+        protection: await DeviceOwnerService().currentLevel(),
+      );
       await _root.child(FirebaseConfig.circleInfoPath(circleId)).set(info);
       await _root.child(FirebaseConfig.invitePath(code)).set(circleId);
       await _root
@@ -238,8 +245,12 @@ class SyncService extends ChangeNotifier {
         await _root
             .child(FirebaseConfig.userCircleRolePath(uid!, circleId))
             .set(myRole);
-        await _writeMyMemberNode(circleId, myRole,
-            displayName: displayName);
+        await _writeMyMemberNode(
+          circleId,
+          myRole,
+          displayName: displayName,
+          protection: await DeviceOwnerService().currentLevel(),
+        );
       }
       final infoSnap = await _root
           .child(FirebaseConfig.circleInfoPath(circleId))
@@ -329,6 +340,7 @@ class SyncService extends ChangeNotifier {
     String circleId,
     String role, {
     String? displayName,
+    ProtectionLevel protection = ProtectionLevel.unknown,
   }) async {
     final member = Member(
       id: uid!,
@@ -337,6 +349,7 @@ class SyncService extends ChangeNotifier {
       role: role,
       lastSeen: DateTime.now(),
       isOnline: true,
+      protection: protection,
     );
     await _root
         .child(FirebaseConfig.circleMemberPath(circleId, uid!))
@@ -360,6 +373,7 @@ class SyncService extends ChangeNotifier {
       await _writeMyMemberNode(
         circleId,
         roleSnap.value as String? ?? 'member',
+        protection: await DeviceOwnerService().currentLevel(),
       );
     } catch (e) {
       debugPrint('ApnaCircle: ensureMyMemberNode failed ($e)');
@@ -469,6 +483,12 @@ class SyncService extends ChangeNotifier {
       if (me.batteryAt != null) {
         data['batteryAt'] = me.batteryAt!.toIso8601String();
       }
+      // Protection level rides along (v0.6.13) — but only when
+      // known: writing 'unknown' would clobber a level published
+      // earlier by a newer build.
+      if (me.protection != ProtectionLevel.unknown) {
+        data['protection'] = me.protection.wireValue;
+      }
       await _root.child(FirebaseConfig.circleMemberPath(circleId, me.id)).update(data);
     } catch (e) {
       debugPrint('ApnaCircle: publishMyLocation failed ($e)');
@@ -479,19 +499,28 @@ class SyncService extends ChangeNotifier {
   /// minutes passed) while the location did not, so there is no
   /// new fix to send — push just the battery + its timestamp.
   /// Touches nothing else: location, lastSeen and isOnline keep
-  /// their values.
+  /// their values. The protection level (v0.6.13) rides along when
+  /// known, so the parent's label stays fresh even while the
+  /// member sits still.
   Future<void> publishBattery({
     required String circleId,
     required String uid,
     required int battery,
     required DateTime at,
+    ProtectionLevel protection = ProtectionLevel.unknown,
   }) async {
     if (!isAvailable) return;
     try {
-      await _root.child(FirebaseConfig.circleMemberPath(circleId, uid)).update({
+      final data = <String, dynamic>{
         'battery': battery,
         'batteryAt': at.toIso8601String(),
-      });
+      };
+      if (protection != ProtectionLevel.unknown) {
+        data['protection'] = protection.wireValue;
+      }
+      await _root
+          .child(FirebaseConfig.circleMemberPath(circleId, uid))
+          .update(data);
     } catch (e) {
       debugPrint('ApnaCircle: publishBattery failed ($e)');
     }
@@ -599,6 +628,31 @@ class SyncService extends ChangeNotifier {
     } catch (e) {
       debugPrint('ApnaCircle: fetchPinHash failed ($e)');
       return null;
+    }
+  }
+
+  /// Cache the circle's parent PIN hash on THIS phone (v0.6.13,
+  /// offline rule). Every member's phone must hold the parent PIN
+  /// hash locally (SharedPreferences, the same
+  /// `flutter.parent_pin_sha256` key LockActivity reads), so the
+  /// PIN gates — delete-account, sign-out, admin/owner removal —
+  /// keep working with the internet OFF. Only adopts when this
+  /// phone has no PIN yet (PinService.adoptHash): a locally-set
+  /// PIN is never overwritten by a remote one, and the parent PIN
+  /// is set once at first run (there is no change-PIN flow), so a
+  /// cached copy cannot go stale. Best effort, never throws.
+  /// Call whenever online: after joining a circle and after every
+  /// circle-list refresh — never leave a member's phone with no
+  /// local copy after its first sync.
+  Future<void> cacheParentPinHash(PinService pin) async {
+    if (pin.pinHash != null) return;
+    final circleId = activeCircleId;
+    if (circleId == null) return;
+    try {
+      final hash = await fetchPinHash(circleId);
+      if (hash != null) await pin.adoptHash(hash);
+    } catch (_) {
+      // Best effort — the next online refresh retries.
     }
   }
 
