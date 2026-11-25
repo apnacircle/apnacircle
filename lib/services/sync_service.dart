@@ -21,6 +21,33 @@ import 'firebase_bootstrap.dart';
 import 'firebase_config.dart';
 import 'pin_service.dart';
 
+/// Resolve a join: the role I join with, and whether joinCircle
+/// must (re)write my member node.
+///
+/// v0.6.15 (RTDB rules v2) — re-join after removal. The role: an
+/// existing role entry wins — a removed member re-joins with their
+/// OLD role, never with a role the caller passes (a removed child
+/// cannot re-join as 'parent' by asking for it).
+///
+/// The member node: ALWAYS written. First join (no role entry) —
+/// the node does not exist yet. Re-join (role entry exists) — the
+/// node may be missing (the parent removed me) or present
+/// (redundant re-join). joinCircle cannot tell without reading —
+/// and under rules v2 the read is DENIED once membership is gone
+/// (the members read rule requires your own node to exist) — so it
+/// must never read first: it writes directly. The self-write is
+/// always allowed under v2 (`members/$memberId` write rule:
+/// `auth.uid == $memberId`), and a redundant write is harmless
+/// (the next location publish restores location/battery).
+({String role, bool writeMemberNode}) resolveJoinRole({
+  required String? existingRole,
+  required String requestedRole,
+}) =>
+    (
+      role: existingRole ?? requestedRole,
+      writeMemberNode: true,
+    );
+
 /// Firebase Realtime Database sync (v0.3, 22 Nov 2026).
 ///
 /// This is the layer that makes a parent on ONE phone control a
@@ -221,6 +248,17 @@ class SyncService extends ChangeNotifier {
   /// never an email) and stored as the member node's `phone`.
   /// [role] is 'child', 'elderly' or 'member' — the parent is the
   /// only admin. Returns (circle, null) on success.
+  ///
+  /// v0.6.15 (RTDB rules v2) — re-join after removal: a member the
+  /// parent removed CAN re-join with the code (their
+  /// `users/{uid}/circles` role entry is left alone by removal),
+  /// but removal deletes only their member node. joinCircle must
+  /// write that node again — it must NOT skip the write when the
+  /// role entry already exists, and it must NOT read the node
+  /// first to check: under v2 the read is DENIED once membership
+  /// is gone, so a read-first check would never write. The
+  /// self-write is always allowed under v2, so join writes the
+  /// node directly (see [resolveJoinRole]).
   Future<(CircleInfo?, String?)> joinCircle(
     String code, {
     required String phoneNumber,
@@ -247,11 +285,24 @@ class SyncService extends ChangeNotifier {
           .child(FirebaseConfig.userCircleRolePath(uid!, circleId))
           .get();
       final existingRole = roleSnap.value as String?;
-      final myRole = existingRole ?? role;
+      final join = resolveJoinRole(
+        existingRole: existingRole,
+        requestedRole: role,
+      );
+      final myRole = join.role;
       if (existingRole == null) {
         await _root
             .child(FirebaseConfig.userCircleRolePath(uid!, circleId))
             .set(myRole);
+      }
+      // v0.6.15: ALWAYS write my member node — even on re-join (see
+      // resolveJoinRole). Before this the write lived inside the
+      // `existingRole == null` branch, so a removed member's re-join
+      // "succeeded" but left them invisible: no member node, and
+      // under rules v2 ensureMyMemberNode can no longer re-create
+      // it (its read-first check is denied once membership is
+      // gone). No read here — the self-write is always allowed.
+      if (join.writeMemberNode) {
         await _writeMyMemberNode(
           circleId,
           myRole,
