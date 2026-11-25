@@ -163,10 +163,12 @@ Function + email sender.
    (koi real project/account nahi, koi firebase package add nahi) aur
    `FIREBASE_SETUP.md` (project, Realtime DB rules, Auth, FCM, packages,
    cost — 1–2 hours ka kaam, normal machine par).
-4. **Google Maps key placeholder:** key ab code mein hardcode nahi —
-   `MAPS_API_KEY` `gradle.properties` / `local.properties` se aata hai
-   (`android/app/build.gradle` manifestPlaceholders), default
-   `YOUR_GOOGLE_MAPS_API_KEY`. Real key build machine par set hogi.
+4. **Map — OpenStreetMap (v0.6.15):** Google Maps hata diya — map
+   tab blank tha kyun ke key nahi thi, aur key ke liye Google Cloud
+   billing (card) chahiye hoti hai. Ab map OpenStreetMap hai
+   (flutter_map 8.3.2 + latlong2): free, koi key nahi, koi card
+   nahi — tiles internet se aate hain. Attribution "© OpenStreetMap
+   contributors" map par hamesha dikhta hai (OSM licence).
 5. **Privacy policy draft:** `PRIVACY_POLICY.md` (placeholders
    [CONTACT_EMAIL] / [PLAY_STORE_URL] / [LAUNCH_DATE] bharne hain —
    Play submit se pehle confirm karna hai).
@@ -182,7 +184,7 @@ Family location safety app — Mujahid's idea, name FINAL: **ApnaCircle**.
    Urdu poora RTL hai.
 2. **Family circle, max 10 members** — 11th member add nahi hota (UI + `FamilyService`
    dono mein check hai).
-3. **Live location on Google Maps** — har member ki location, distance (km),
+3. **Live location on OpenStreetMap** — har member ki location, distance (km),
    battery, online/offline. **Net off ho to aakhri location + time** dikhta hai
    (har fix local save hota hai). **v0.3:** net off ho aur SMS fallback on ho
    to bache ki location SMS se aati hai ("SMS se aayi · [time]"); member
@@ -298,9 +300,8 @@ test/                       9 unit tests (alerts, Haversine, PIN hash, JSON)
 export JAVA_HOME=/path/to/jdk17
 export ANDROID_HOME=/path/to/android-sdk
 
-# 2. Google Maps API key (Google Cloud, key ko app par restrict karein)
-#    android/app/src/main/AndroidManifest.xml mein
-#    YOUR_GOOGLE_MAPS_API_KEY ki jagah apni key likhein.
+# 2. Map key — koi nahi chahiye (v0.6.15): map OpenStreetMap hai,
+#    free, no API key, no card. Tiles internet se aate hain.
 
 # 3. Pehli dafa
 flutter pub get
@@ -513,7 +514,7 @@ flutter build appbundle --release   # Play Store ko AAB chahiye
    full on every new message); older pages load via "Load older
    messages" (`loadOlderChatMessages`, `mergeChatMessages` —
    a live update merges, never drops loaded older pages).
-   (c) Map tab is built lazily: `_mapTab` (GoogleMap + markers +
+   (c) Map tab is built lazily: `_mapTab` (FlutterMap + markers +
    member cards) used to be constructed on EVERY build even on
    other tabs; now only the selected tab is built.
    Deliberately NOT changed: the 60 s / 50 m location rule, the
@@ -820,10 +821,32 @@ flutter build appbundle --release   # Play Store ko AAB chahiye
    200 m / 3.6 km, unknown → '—', Jahanian regression, cache
    my-position freshest-wins, join validation, Gmail-never-matches,
    +92 vs 03… matching, parent-only change guard).
-14. **Google Maps API key** — placeholder system tayyar hai (upar v0.2
-   point 4 dekhein); real key ke liye Google Cloud billing (card)
-   chahiye hoti hai — ye parent ka step hai, is build mein nahi hai.
-   Bina key ke map nahi khulta.
+14. **OpenStreetMap — v0.6.15 (25 Nov 2026):** Google Maps hata
+   diya — map tab blank tha kyun ke key nahi thi, aur key ke liye
+   Google Cloud billing (card) chahiye hoti hai. Ab map
+   OpenStreetMap hai (flutter_map 8.3.2 + latlong2): free, koi key
+   nahi, koi card nahi — tiles internet se aate hain (offline par
+   tiles nahi dikhte, members list phir bhi chalti hai). Attribution
+   "© OpenStreetMap contributors" map par hamesha dikhta hai
+   (OSM licence). Lahore sirf initial camera ka fallback hai —
+   distance ke liye kabhi use nahi hota (v0.6.14 waisa ka waisa).
+   Follow-me button camera ko meri live position par le jata hai;
+   member card par tap us member par centre karta hai; pehli fix
+   par camera aik dafa meri jagah par aata hai. `MAPS_API_KEY`
+   (manifest, build.gradle.kts, gradle.properties) aur
+   `google_maps_flutter` poori tarah hata diye gaye.
+   Tests: `test/v0615_test.dart` (tile URL, marker conversion,
+   camera fallback, attribution/user-agent constants) + v0.6.7
+   widget test ab `FlutterMap` check karta hai.
+   **Re-join after removal (rules v2 ke liye zaroori fix):**
+   parent ne jis member ko remove kiya tha, wo code se dobara join
+   kare to us ka member node dobara likha jata hai — pehle
+   `joinCircle` role entry maujood hone par node likhta hi nahi
+   tha, aur v2 rules mein `ensureMyMemberNode` bhi use wapas nahi
+   bana sakta (read-first check membership gayab hone par DENIED
+   hota hai). Is liye join ab node seedha likhta hai, bina read
+   kiye (self-write v2 mein hamesha allowed hai). Tests:
+   `test/v0615_test.dart` mein re-join group.
 6. **Google Play Billing — asal khareed:** product
    `apnacircle_family_yearly` Play Console mein banana hai (subscription,
    $5/year) + Play developer account ($25, parent khud). Tab tak Plan
@@ -888,6 +911,15 @@ Ye sab is VM par verify NAHI ho sakta — asal phone par karna lazmi hai:
       distance ghatna chahiye, badhna nahi. Call preview (home
       screen ka phone button) mein bhi caller ka distance apni
       asal jagah se napna chahiye.
+- [ ] Map (v0.6.15): Map tab par asal map (sadkein/gali) dikhe, sirf
+      beige rang nahi; har member ka marker dikhe; neeche-left
+      "© OpenStreetMap contributors" dikhe. Follow-me button
+      dabayein → camera meri jagah par aaye. Member card par tap
+      karein → camera us member par aaye. Data off ho to tiles na
+      dikhein, list phir bhi dikhe.
+- [ ] Re-join after removal (v0.6.15, rules v2): parent kisi member
+      ko remove kare → wo code se dobara join kare → parent ki list
+      mein wo dobara dikhna chahiye (pehle dikhta hi nahi tha).
 - [ ] Device Admin: Settings se protection ON karein → uninstall ki
       koshish karein (rukni chahiye) → admin band karein → parent ko
       alert mile.
