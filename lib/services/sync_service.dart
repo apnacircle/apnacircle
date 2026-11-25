@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/alerts.dart';
 import '../core/app_lock_service.dart';
 import '../core/chat_paging.dart';
+import '../core/member_phone.dart';
 import '../core/protection_level.dart';
 import '../models/chat_message.dart';
 import '../models/circle.dart';
@@ -212,19 +213,25 @@ class SyncService extends ChangeNotifier {
     }
   }
 
-  /// Join a circle with the parent's 6-digit invite code.
+  /// Join a circle with the parent's 6-digit invite code AND the
+  /// member's mobile number (v0.6.14) — both required. Gmail logins
+  /// carry no number, so the number must be typed at join time;
+  /// without it the SIM-call overlay can never match the member and
+  /// no card appears. The number is validated (real phone format,
+  /// never an email) and stored as the member node's `phone`.
   /// [role] is 'child', 'elderly' or 'member' — the parent is the
   /// only admin. Returns (circle, null) on success.
   Future<(CircleInfo?, String?)> joinCircle(
     String code, {
+    required String phoneNumber,
     String role = 'child',
     String? displayName,
   }) async {
     if (!isAvailable) return (null, 'Sign in first to join a circle.');
+    final joinError = validateJoinInput(code: code, phone: phoneNumber);
+    if (joinError != null) return (null, joinError);
     final clean = code.trim();
-    if (clean.length != 6 || int.tryParse(clean) == null) {
-      return (null, 'The invite code is 6 digits.');
-    }
+    final normalizedPhone = validateMemberPhone(phoneNumber).number!;
     try {
       final snap =
           await _root.child(FirebaseConfig.invitePath(clean)).get();
@@ -249,6 +256,7 @@ class SyncService extends ChangeNotifier {
           circleId,
           myRole,
           displayName: displayName,
+          phone: normalizedPhone,
           protection: await DeviceOwnerService().currentLevel(),
         );
       }
@@ -340,12 +348,19 @@ class SyncService extends ChangeNotifier {
     String circleId,
     String role, {
     String? displayName,
+    String? phone,
     ProtectionLevel protection = ProtectionLevel.unknown,
   }) async {
     final member = Member(
       id: uid!,
       name: displayName ?? _auth.displayName ?? _auth.phoneNumber ?? 'Me',
-      phone: _auth.phoneNumber ?? _auth.email ?? '',
+      // v0.6.14: the number typed at join time wins. The old
+      // `phoneNumber ?? email` fallback stored an EMAIL for Gmail
+      // users, which can never match a SIM call — that is why no
+      // overlay card appeared at all. The fallback below survives
+      // only for paths that never asked for a number
+      // (ensureMyMemberNode); join always passes one.
+      phone: phone ?? _auth.phoneNumber ?? _auth.email ?? '',
       role: role,
       lastSeen: DateTime.now(),
       isOnline: true,
@@ -391,6 +406,32 @@ class SyncService extends ChangeNotifier {
           .remove();
     } catch (e) {
       debugPrint('ApnaCircle: removeMemberNode failed ($e)');
+    }
+  }
+
+  /// Parent sets one member's SIM number after joining (v0.6.14 —
+  /// the change-later option for members who joined before numbers
+  /// were asked at join time, e.g. mehvish). The member's own phone
+  /// never overwrites this: `publishMyLocation` / battery updates
+  /// never write the `phone` field, and `ensureMyMemberNode` only
+  /// writes when the node is missing. NOTE: this relies on the
+  /// circle-level write grant in the current RTDB rules (any member
+  /// may write the circle); the pending rules tightening must keep
+  /// a parent-write allowance for member phone.
+  Future<bool> setMemberPhone(
+    String circleId,
+    String memberId,
+    String phone,
+  ) async {
+    if (!isAvailable) return false;
+    try {
+      await _root
+          .child(FirebaseConfig.circleMemberPath(circleId, memberId))
+          .update({'phone': phone});
+      return true;
+    } catch (e) {
+      debugPrint('ApnaCircle: setMemberPhone failed ($e)');
+      return false;
     }
   }
 
