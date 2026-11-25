@@ -11,6 +11,7 @@ import '../core/app_lock_service.dart';
 import '../core/call_distance_service.dart';
 import '../core/chat_notification.dart';
 import '../core/location_service.dart';
+import '../core/protection_level.dart';
 import '../models/circle.dart';
 import '../models/member.dart';
 import '../screens/alerts_screen.dart';
@@ -748,10 +749,38 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     } else {
       status = 'Offline since ${_fmtTime(m.lastSeen)} · $distance away';
     }
+    // v0.6.13 (C): uninstall-protection level, when known — the
+    // parent sees at a glance which child can uninstall and which
+    // cannot. Unknown shows nothing (never a guess).
+    final protectionLabel = m.protection.label;
+    final fullStatus = protectionLabel.isEmpty
+        ? status
+        : '$status · $protectionLabel';
+    // v0.6.13 (D): "child gayab" notice — a CHILD with no update
+    // for 2+ hours. No loud notification (no-data is common);
+    // a clear line on the row, keeping "Offline since [time]".
+    final now = DateTime.now();
+    final showMissing = shouldShowMissingWarning(
+      role: m.role,
+      isOnline: m.isOnline,
+      lastSeen: m.lastSeen,
+      now: now,
+    );
     return ListTile(
       leading: CircleAvatar(child: Text(m.name[0])),
       title: Text(m.name),
-      subtitle: Text(status),
+      subtitle: showMissing
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(fullStatus),
+                Text(
+                  missingWarningText(m.lastSeen!, now),
+                  style: const TextStyle(color: Colors.orange),
+                ),
+              ],
+            )
+          : Text(fullStatus),
       trailing: m.locationSharingOn
           ? const Icon(Icons.location_on, color: Colors.green)
           : const Icon(Icons.location_off, color: Colors.red),
