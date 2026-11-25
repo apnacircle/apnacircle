@@ -659,7 +659,42 @@ flutter build appbundle --release   # Play Store ko AAB chahiye
    (First tried 2.0.4 — run #215 proved the plugin needs 2.1.4+.)
    Local checks cannot catch this (they never run Gradle) — CI is
    the only proof.
-11. **Google Maps API key** — placeholder system tayyar hai (upar v0.2
+11. **Battery drain fix — v0.6.12 (25 Nov 2026):**
+   User-reported ~07:23 PKT: the app drained his phone battery
+   heavily — he saw it himself. Cause (verified in code): the
+   background task runs every 60 s, 24/7, and took a FRESH
+   high-accuracy GPS fix EVERY cycle (~1,440 GPS fixes/day). The
+   50 m / 60 s throttle ran AFTER the fix, so it saved server
+   writes but never saved battery — a phone sitting at home all
+   day still fired the GPS radio every minute.
+   Fix (new `LocationService.efficientFix`, used by the background
+   cycle only): cheapest first — (a) a fresh OS-cached fix
+   (≤ 2 min old) near our last fix proves the phone has not moved:
+   use it, power nothing; (b) otherwise ONE low-power fix
+   (cell/WiFi, medium accuracy, 10 s limit) checks for movement;
+   (c) GPS only when that check suggests movement (> 50 m), when
+   there is no baseline yet, or when the accurate baseline is
+   older than 30 min (re-baseline cap). Steady state while
+   stationary: roughly one GPS fix per 30 min instead of one per
+   minute, plus a cheap cell/WiFi check every few minutes.
+   Accuracy rule HONOURED: the 60 s cycle and the 50 m / 60 s
+   publish throttle are unchanged — a real move is still caught
+   within ~60 s, and what the parent sees (and when) is exactly
+   what it was before; only HOW the fix is obtained changed.
+   The foreground Map loop still takes a fresh high-accuracy fix
+   (`currentFix`, unchanged) — the user is looking at the map.
+   Honest note: exact battery saving varies by phone and must be
+   checked on the user's phone (Settings → Battery) after install;
+   on some phones the OS last-known cache does not update from
+   low-power fixes, in which case the cycle does a cheap check
+   every 60 s instead of every few minutes — still far cheaper
+   than a GPS fix every minute. Deliberately left alone: the
+   battery-level read every cycle (one cheap platform call, needed
+   for the ≥ 2% change check), the connectivity check, the
+   foreground-service notification text (only updated on a real
+   publish), RTDB listeners (subscriptions, not polling).
+   Tests: 17 new in `test/v0612_test.dart`.
+12. **Google Maps API key** — placeholder system tayyar hai (upar v0.2
    point 4 dekhein); real key ke liye Google Cloud billing (card)
    chahiye hoti hai — ye parent ka step hai, is build mein nahi hai.
    Bina key ke map nahi khulta.
