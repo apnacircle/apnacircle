@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/alerts.dart';
 import '../core/call_member_cache.dart';
 import '../core/constants.dart';
+import '../core/location_service.dart';
+import '../core/member_phone.dart';
 import '../models/chat_message.dart';
 import '../models/circle.dart';
 import '../models/member.dart';
@@ -132,6 +134,51 @@ class FamilyService extends ChangeNotifier {
     _removeMemberNode(id);
     notifyListeners();
     return true;
+  }
+
+  /// Parent sets a member's SIM number AFTER joining (v0.6.14 —
+  /// the change-later option for members who joined before numbers
+  /// were asked at join time, e.g. mehvish). Parent-only (admin)
+  /// and never for their own number — enforced here AND in the UI,
+  /// which also asks for the parent PIN first. Returns (ok, error):
+  /// the error is plain words for the SnackBar. The server write
+  /// happens BEFORE the local update, so a failed publish can never
+  /// leave a local number that the next remote sync reverts (the
+  /// v0.6.9 toggle-revert lesson). In demo mode there is no server
+  /// and the local update is the whole change.
+  Future<(bool, String?)> setMemberPhone(
+    String memberId,
+    String rawInput,
+  ) async {
+    final validated = validateMemberPhone(rawInput);
+    final normalized = validated.number;
+    if (normalized == null) return (false, validated.error);
+    if (!canSetMemberPhone(
+      isAdmin: _sync?.activeCircle?.isAdmin ?? false,
+      myUid: _sync?.uid,
+      targetMemberId: memberId,
+    )) {
+      return (false, 'Only the parent can set a member\u2019s number.');
+    }
+    final i = _members.indexWhere((m) => m.id == memberId);
+    if (i < 0) return (false, 'Member not found.');
+    if (isSynced && activeCircleId != null) {
+      final ok = await _sync!.setMemberPhone(
+        activeCircleId!,
+        memberId,
+        normalized,
+      );
+      if (!ok) {
+        return (
+          false,
+          'Could not save the number — check internet and try again.'
+        );
+      }
+    }
+    _members[i] = _members[i].copyWith(phone: normalized);
+    await _save();
+    notifyListeners();
+    return (true, null);
   }
 
   /// Update one member's live location (called by LocationService).
@@ -498,7 +545,15 @@ class FamilyService extends ChangeNotifier {
     // native receiver reads it without the Flutter engine running,
     // so it must be rewritten on EVERY member change, not just on
     // location updates. Every mutation flows through _save().
-    await CallMemberCache.save(_members, myId: _sync?.uid);
+    // v0.6.14: the cache's "my" position prefers this phone's
+    // freshest real fix over a stale published entry — a Shared-
+    // Preferences read per save, no GPS, no network.
+    final lastKnown = await LocationService().lastKnown();
+    await CallMemberCache.save(
+      _members,
+      myId: _sync?.uid,
+      lastKnown: lastKnown,
+    );
   }
 
   Future<void> _pushMemberNode(Member member) async {
