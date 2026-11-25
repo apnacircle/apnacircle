@@ -11,6 +11,7 @@ import 'services/auth_service.dart';
 import 'services/background_location_service.dart';
 import 'services/billing_service.dart';
 import 'services/device_admin_service.dart';
+import 'services/device_owner_service.dart';
 import 'services/email_otp_service.dart';
 import 'services/family_service.dart';
 import 'services/firebase_bootstrap.dart';
@@ -108,6 +109,7 @@ Future<void> main() async {
       simChange: simChange,
       deviceAdmin: deviceAdmin,
       billing: billing,
+      pin: pin,
     ));
   });
 }
@@ -120,13 +122,22 @@ Future<void> _runPostFrameStartup({
   required SimChangeService simChange,
   required DeviceAdminService deviceAdmin,
   required BillingService billing,
+  required PinService pin,
 }) async {
   if (FirebaseBootstrap.available) {
     await notifications.initialize();
   }
   await sync.refreshMyCircles();
+  // v0.6.13 (offline rule): cache the parent PIN hash locally so
+  // every PIN gate works with the internet off. Runs on every
+  // start while online; a phone that already has a PIN skips it.
+  await sync.cacheParentPinHash(pin);
   await simChange.checkOnStart(sync: sync, auth: auth);
   await deviceAdmin.publishPendingAlertIfAny(sync: sync, auth: auth);
+  // v0.6.13: cache this phone's uninstall-protection level so
+  // the background task can publish it with the member node (its
+  // isolate cannot call the platform channels).
+  await DeviceOwnerService().cacheLevel();
   unawaited(billing.initialize());
 }
 
