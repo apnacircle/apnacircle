@@ -847,6 +847,17 @@ flutter build appbundle --release   # Play Store ko AAB chahiye
    hota hai). Is liye join ab node seedha likhta hai, bina read
    kiye (self-write v2 mein hamesha allowed hai). Tests:
    `test/v0615_test.dart` mein re-join group.
+15. **Remove a member — v0.6.16 (25 Nov 2026):** parent apni Map
+   screen par kisi bhi member ki row par "⋮" dabaye → "Remove from
+   circle" → confirm dialog ("They can re-join with the invite
+   code.") → parent PIN → member list se nikal jata hai. Sirf
+   parent ko dikhta hai (child ko kabhi nahi), apni row par kabhi
+   nahi, aur ghalat PIN par kuch nahi hota. Nikala hua member code
+   se dobara join kar sakta hai. **Honest note:** abhi deploy hue
+   rules v1 mein nikale hue member ki app apna node dobara bana
+   sakti hai (agli location publish par) — removal hamesha ke liye
+   tabhi pakka hoga jab rules v2 deploy hon. Tests:
+   `test/v0616_test.dart` (guard, service, widget flow).
 6. **Google Play Billing — asal khareed:** product
    `apnacircle_family_yearly` Play Console mein banana hai (subscription,
    $5/year) + Play developer account ($25, parent khud). Tab tak Plan
@@ -920,6 +931,11 @@ Ye sab is VM par verify NAHI ho sakta — asal phone par karna lazmi hai:
 - [ ] Re-join after removal (v0.6.15, rules v2): parent kisi member
       ko remove kare → wo code se dobara join kare → parent ki list
       mein wo dobara dikhna chahiye (pehle dikhta hi nahi tha).
+- [ ] Remove member (v0.6.16): parent kisi member ki row par "⋮"
+      → "Remove from circle" → confirm → parent PIN → member list
+      se gayab ho jaye; ghalat PIN par kuch na ho; child ke phone
+      par "⋮" dikhe hi nahi; wo code se dobara join kare → dobara
+      dikhna chahiye.
 - [ ] Device Admin: Settings se protection ON karein → uninstall ki
       koshish karein (rukni chahiye) → admin band karein → parent ko
       alert mile.
