@@ -694,7 +694,81 @@ flutter build appbundle --release   # Play Store ko AAB chahiye
    foreground-service notification text (only updated on a real
    publish), RTDB listeners (subscriptions, not polling).
    Tests: 17 new in `test/v0612_test.dart`.
-12. **Google Maps API key** — placeholder system tayyar hai (upar v0.2
+12. **Uninstall protection — v0.6.13 (25 Nov 2026):**
+   User order (~12:02–12:15 PKT): bacha app delete kar ke gayab
+   ho gayi (mehvish ne app delete ki, parent ki list se gayab) —
+   child apni marzi se app delete NA kar sake; delete karne par
+   parent ka code (PIN) manga jaye; aur parent jab chahe apna code
+   daal kar khud delete kar sake — apni app bhi.
+   **Aik hi PIN — jo app lock kholta hai, wohi
+   uninstall/account-delete/sign-out par bhi chalta hai.** Koi
+   doosra code nahi hai: sab kuch usi stored parent PIN hash
+   (`apnacircle:<pin>` SHA-256, wahi scheme jo LockActivity use
+   karti hai) se verify hota hai.
+   (a) **Device Owner QR setup (asal rok):** Settings →
+   "Uninstall protection (Device Owner)" — parent PIN ke baad QR
+   dikhta hai (APK download URL + optional Wi-Fi; checksum is
+   phone par installed app ke signing certificate se banta hai).
+   Bachay ka phone factory-reset (ya naya) → welcome screen par
+   6 dafa tap → QR scan → Android APK download kar ke device
+   owner bana deta hai. Us ke baad Settings se uninstall hota hi
+   nahi. Parent ki taraf se hatane ka raasta: app ke andar se
+   PIN-gated "Remove protection" (clearDeviceOwnerApp) — parent
+   ka code hamesha chalta hai, woh kabhi lock out nahi hota.
+   (b) **Device Admin — fauran alert:** admin band karte hi
+   receiver pending flag likhta hai; background task (har 60 s)
+   usay aik minute ke andar parent ko `adminDisabled` event bhej
+   deta hai — ab parent ko ye jaanne ke liye child ke app dobara
+   kholne ka intezar nahi. Next-start publish backup ke tor par
+   rehta hai.
+   (c) **Parent dekh sakta hai kaun protected hai:** har member
+   node par `protection` field (owner/admin/none/unknown) publish
+   hota hai; parent ki Map screen par har row par "Protected" /
+   "Admin only" / "Not protected" likha aata hai.
+   (d) **"Child gayab" notice:** kisi CHILD ki last update 2
+   ghante se purani ho to us ki row par saaf warning aati hai
+   ("2 ghante se koi update nahi — app delete ya phone off ho
+   sakta hai"). Sirf in-app line — koi loud notification nahi
+   (no-data aam baat hai). "Offline since [time]" waisa ka waisa.
+   (e) **App ke andar ke escape hatches par parent PIN:** child
+   role ke liye "Delete my account" aur "Sign out" (Circle screen
+   aur Settings dono) aur Device Admin band karna — sab par
+   parent PIN. Parent role par kabhi gate nahi. Koi hash kahin na
+   mile to escape BLOCK hota hai (fail closed), kabhi bina
+   verify ke nahi khulta.
+   **Offline rule (user ka sawal: "net band ho to uninstall kar
+   le?"):** enforcement kabhi network par nahi hai — Device
+   Admin / Device Owner Android khud phone par naafiz karta hai,
+   net off ho to bhi uninstall rukta hai. Parent PIN hash har
+   member ke phone par locally cached hota hai
+   (`flutter.parent_pin_sha256`, wahi key jo LockActivity
+   parhti hai) — pehli sync ke baad har PIN gate net off par bhi
+   chalta hai. Admin-off alert net off par fauran NAHI ja sakta
+   (koi channel hi nahi — honest limit): woh durably queued
+   rehta hai (pending flag sirf kamyab publish par clear hota
+   hai) aur network aate hi ya app dobara chalte hi bhej diya
+   jata hai; aur agar app hi delete ho gayi to 2-ghante wali
+   khamoshi wali notice hi backstop hai.
+   **Honest limits:** QR setup ke liye ek dafa factory reset
+   chahiye (ya naya phone) — pehle se set-up phone par bina reset
+   ke nahi ho sakta. Recovery-mode factory reset phir bhi phone
+   wipe kar deta hai — koi app usay rok nahi sakti. Google FRP
+   laagu rehta hai. QR sirf usi exact APK build ke liye valid
+   hai jis se generate hua (CI builds har run par fresh debug key
+   se sign hoti hain — wahi build URL par rakhein jo QR banate
+   waqt phone par installed hai). PIN bache se secret rakhein —
+   jo code janta hai, woh protection hata sakta hai; parent PIN
+   bhool jaye to sirf factory reset hi protection hatata hai.
+   Play Store submission par device-owner use ki justification
+   chahiye hogi (family-safety / parental control). System ki
+   uninstall screen par koi app apna PIN prompt NAHI laga sakti —
+   ye Android ki screen hai; usay Device Admin / Device Owner hi
+   rokte hain.
+   Tests: `test/v0613_test.dart` (protection mapping + member
+   field, 2-hour threshold, QR payload fields, adminDisabled
+   shape, escape gate, removal gate dono directions, offline
+   cases — cached-hash PIN verify, admin-status path, flag key).
+13. **Google Maps API key** — placeholder system tayyar hai (upar v0.2
    point 4 dekhein); real key ke liye Google Cloud billing (card)
    chahiye hoti hai — ye parent ka step hai, is build mein nahi hai.
    Bina key ke map nahi khulta.
@@ -759,6 +833,22 @@ Ye sab is VM par verify NAHI ho sakta — asal phone par karna lazmi hai:
 - [ ] Device Admin: Settings se protection ON karein → uninstall ki
       koshish karein (rukni chahiye) → admin band karein → parent ko
       alert mile.
+- [ ] Uninstall protection (v0.6.13): parent ki Map screen par har
+      member ke saath "Protected" / "Admin only" / "Not protected"
+      dikhe. Child ke phone par Settings → "Delete my account" /
+      "Sign out" / "Remove protection" dabayein → parent PIN manga
+      jaye; ghalat PIN par kuch na ho; sahi PIN (wahi jo app lock
+      kholta hai) par kaam ho. Net OFF kar ke bhi yehi gates test
+      karein — PIN gate net ke baghair bhi chalna chahiye (hash
+      locally cached hai). Admin band karein → aik minute ke andar
+      parent ko alert mile; net off par alert queued rahe aur
+      network aate hi pahunche. Child 2 ghante khamosh rahe →
+      parent ki screen par "2 ghante se koi update nahi" wali line
+      dikhe. Device Owner QR: sirf factory-reset / naye phone par
+      test karein (pehle se set-up phone par nahi ho sakta); QR
+      scan ke baad Settings se uninstall ka option hi na ho;
+      parent apna code daal kar "Remove protection" kare → phir
+      uninstall ho sake.
 - [ ] SIM call (v0.6.5): family member SIM se call kare — overlay par naam +
       distance (km) dikhe. Aap member ko call karein — wahi overlay dikhe.
       Pehle Settings mein Phone + Call Log ki ijazat dein AUR "Call
