@@ -6,7 +6,9 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/app_lock_service.dart';
+import '../core/member_phone.dart';
 import '../core/time_lock.dart';
+import '../models/member.dart';
 import '../services/family_service.dart';
 import '../services/sync_service.dart';
 import 'pin_gate_dialog.dart';
@@ -40,6 +42,10 @@ class _LocksScreenState extends State<LocksScreen>
     with WidgetsBindingObserver {
   final List<LockedApp> _apps = List.of(AppLockService.presets);
   final _customName = TextEditingController();
+  // v0.6.14: the target member's mobile number (change-later
+  // option). Prefilled from the member's stored number when it is
+  // a real number; empty when it is an email (Gmail login).
+  final _phoneController = TextEditingController();
   bool _locationLocked = true;
   bool _internetLockAlert = true;
 
@@ -152,6 +158,18 @@ class _LocksScreenState extends State<LocksScreen>
   Future<void> _loadTargetLocks(String memberId) async {
     final sync = context.read<SyncService>();
     setState(() => _targetMemberId = memberId);
+    // v0.6.14: prefill the number field from the member's stored
+    // number — only when it is a real number. An email (Gmail
+    // login) leaves it empty, so the parent knows one is missing.
+    final member = context
+        .read<FamilyService>()
+        .members
+        .where((m) => m.id == memberId)
+        .firstOrNull;
+    _phoneController.text =
+        (member != null && memberPhoneCanMatchCalls(member.phone))
+            ? member.phone
+            : '';
     if (sync.activeCircleId == null) return;
     final settings =
         await sync.getLocksOnce(sync.activeCircleId!, memberId);
@@ -233,6 +251,7 @@ class _LocksScreenState extends State<LocksScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _customName.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -247,6 +266,60 @@ class _LocksScreenState extends State<LocksScreen>
 
   void _withPin(VoidCallback action) =>
       askParentPin(context, onUnlocked: action);
+
+  /// Plain-words status line under the number field (v0.6.14):
+  /// what is saved now, or why the call card cannot appear yet.
+  String _targetPhoneStatus(List<Member> targets) {
+    final target = _targetMemberId == null
+        ? null
+        : targets.where((m) => m.id == _targetMemberId).firstOrNull;
+    if (target == null) return '';
+    if (memberPhoneCanMatchCalls(target.phone)) {
+      return 'Saved: ${target.phone} — SIM calls from this member will show their distance.';
+    }
+    return 'No number saved — the call-distance card will not appear for this member. Gmail login gives the app no number.';
+  }
+
+  /// Save the target member's mobile number (v0.6.14 — the
+  /// change-later option for members who joined before numbers were
+  /// asked at join time, e.g. mehvish). Validated BEFORE the PIN
+  /// prompt — a bad number needs no code. The save itself is
+  /// PIN-gated (parent only, via [_withPin]) and the service
+  /// refuses it for a child or for the parent's own number.
+  Future<void> _saveTargetPhone() async {
+    final target = _targetMemberId;
+    if (target == null) return;
+    final validated = validateMemberPhone(_phoneController.text);
+    if (validated.number == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(validated.error ?? 'Invalid number.')),
+      );
+      return;
+    }
+    _withPin(() {
+      unawaited(_doSaveTargetPhone(target));
+    });
+  }
+
+  Future<void> _doSaveTargetPhone(String target) async {
+    final family = context.read<FamilyService>();
+    final (ok, error) = await family.setMemberPhone(
+      target,
+      _phoneController.text,
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? 'Number saved — SIM calls from this member will show their distance now.'
+              : (error ?? 'Could not save the number.'),
+        ),
+      ),
+    );
+    if (ok) setState(() {});
+  }
 
   void _addCustomApp() {
     final name = _customName.text.trim();
@@ -510,6 +583,42 @@ class _LocksScreenState extends State<LocksScreen>
             style: TextStyle(fontSize: 12, color: Colors.grey),
           ),
           const Divider(),
+          if (_targetMemberId != null) ...[
+            const Text(
+              'Call distance — member\u2019s mobile number',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            Text(
+              _targetPhoneStatus(targets),
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _phoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                      labelText: 'Mobile number',
+                      hintText: 'e.g. 03001234567',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: _saveTargetPhone,
+                  child: const Text('Save'),
+                ),
+              ],
+            ),
+            const Text(
+              'Parent PIN is asked before saving. A child cannot change their own number.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const Divider(),
+          ],
         ],
         SwitchListTile(
           title: const Text('Location Lock'),
