@@ -3,17 +3,22 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/call_distance_service.dart';
+import '../core/escape_gate.dart';
 import '../core/language_service.dart';
 import '../l10n/strings.dart';
 import '../services/auth_service.dart';
 import '../services/device_admin_service.dart';
+import '../services/device_owner_service.dart';
 import '../services/family_service.dart';
 import '../services/firebase_bootstrap.dart';
+import '../services/pin_service.dart';
 import '../services/sim_change_service.dart';
 import '../services/sms_location_service.dart';
 import '../services/sync_service.dart';
 import 'auth_screen.dart';
 import 'circle_screen.dart';
+import 'device_owner_setup_screen.dart';
+import 'pin_gate_dialog.dart';
 
 /// Settings: language, member count (max 10), lite mode.
 ///
@@ -33,6 +38,8 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   // v0.5 statuses (null = still loading).
   bool? _adminActive;
+  // v0.6.13: device-owner status (null = still loading).
+  bool? _isOwner;
   bool? _simReadable;
   bool? _callLogGranted;
   // v0.6.5: call distance overlay statuses (null = still loading).
@@ -67,18 +74,54 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   Future<void> _refreshProtectionStatuses() async {
     final admin = await DeviceAdminService().isAdminActive();
+    final owner = await DeviceOwnerService().isDeviceOwner();
     final simHash = await SimChangeService().currentHash();
     final callLog = await CallDistanceService.hasCallLogPermission();
     final overlay = await CallDistanceService.canDrawOverlays();
     final outgoing = await CallDistanceService.hasOutgoingCallPermission();
+    // v0.6.13: keep the cached protection level fresh for the
+    // background task, which publishes it with the member node.
+    await DeviceOwnerService().cacheLevel();
     if (!mounted) return;
     setState(() {
       _adminActive = admin;
+      _isOwner = owner;
       _simReadable = simHash != null;
       _callLogGranted = callLog;
       _overlayGranted = overlay;
       _outgoingGranted = outgoing;
     });
+  }
+
+  /// Remove ALL uninstall protection from this phone (v0.6.13,
+  /// both directions of the user's order): the parent enters HIS
+  /// code — the same parent PIN that unlocks apps — and Device
+  /// Owner (if any) + Device Admin (if any) come off, so the app
+  /// can then be uninstalled. A child without the code can never
+  /// get through; the parent is never locked out, on this phone
+  /// or on the child's phone.
+  Future<void> _removeProtection() async {
+    final sync = context.read<SyncService>();
+    final pin = context.read<PinService>();
+    await askParentPinForProtectionRemoval(
+      context,
+      sync: sync,
+      pin: pin,
+      onUnlocked: () async {
+        final ok = await DeviceOwnerService().removeAllProtection();
+        await _refreshProtectionStatuses();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              ok
+                  ? 'Protection removed — the app can now be uninstalled.'
+                  : 'Removal failed — check the protection status above.',
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _toggleSms(bool value) async {
@@ -207,6 +250,35 @@ class _SettingsScreenState extends State<SettingsScreen>
     String t(String key) => tr(lang.isUrdu, key);
     final auth = context.read<AuthService>();
     final sync = context.read<SyncService>();
+    // Escape-hatch gate (v0.6.13, part E — same as CircleScreen):
+    // a CHILD deleting their account must first enter the parent
+    // PIN (the SAME parent PIN that unlocks apps). Parent role:
+    // never gated. No hash anywhere = fail closed.
+    if (childEscapeNeedsParentPin(sync.activeCircle?.role)) {
+      final hash = await resolveParentPinHash(
+        sync: sync,
+        pin: context.read<PinService>(),
+      );
+      if (!mounted) return;
+      if (hash == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Parent PIN is needed for this — connect to the internet and try again.',
+            ),
+          ),
+        );
+        return;
+      }
+      var passed = false;
+      await askParentPin(
+        context,
+        expectedHash: hash,
+        onUnlocked: () => passed = true,
+      );
+      if (!mounted) return;
+      if (!passed) return;
+    }
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -357,12 +429,14 @@ class _SettingsScreenState extends State<SettingsScreen>
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: _adminActive == true
+              // v0.6.13: removing protection is PIN-gated for
+              // EVERYONE — the parent enters HIS code (the same
+              // parent PIN that unlocks apps) and the protection
+              // comes off; a child without the code can never get
+              // through, and the parent is never locked out.
               ? OutlinedButton(
-                  onPressed: () async {
-                    await DeviceAdminService().removeAdmin();
-                    await _refreshProtectionStatuses();
-                  },
-                  child: Text(t('disableProtection')),
+                  onPressed: _removeProtection,
+                  child: const Text('Remove protection (parent code needed)'),
                 )
               : FilledButton(
                   onPressed: () async {
@@ -372,6 +446,39 @@ class _SettingsScreenState extends State<SettingsScreen>
                   },
                   child: Text(t('enableProtection')),
                 ),
+        ),
+        // v0.6.13: Device Owner — the only truly non-uninstallable
+        // protection (one-time QR setup on a fresh / factory-reset
+        // phone). The setup screen is PIN-gated too.
+        ListTile(
+          leading: Icon(
+            Icons.verified_user,
+            color: _isOwner == true
+                ? Colors.green
+                : _adminActive == true
+                    ? Colors.orange
+                    : Colors.grey,
+          ),
+          title: const Text('Uninstall protection (Device Owner)'),
+          subtitle: Text(
+            _isOwner == null
+                ? '…'
+                : _isOwner!
+                    ? 'Device Owner ON — cannot be uninstalled from Settings'
+                    : _adminActive == true
+                        ? 'Device Admin only — tap to set up the stronger protection'
+                        : 'Not protected — tap to set up uninstall protection',
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const DeviceOwnerSetupScreen(),
+              ),
+            );
+            await _refreshProtectionStatuses();
+          },
         ),
         ListTile(
           leading: Icon(
