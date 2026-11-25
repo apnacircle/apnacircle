@@ -47,16 +47,6 @@ android {
         targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        // Google Maps key comes from gradle.properties / local.properties
-        // (MAPS_API_KEY). Default is the placeholder — the map will not
-        // load until a real key is set on the build machine. The key is
-        // never hard-coded in source or committed to git.
-        manifestPlaceholders["MAPS_API_KEY"] =
-            if (project.hasProperty("MAPS_API_KEY")) {
-                project.property("MAPS_API_KEY").toString()
-            } else {
-                "YOUR_GOOGLE_MAPS_API_KEY"
-            }
         // AndroidManifest.xml uses ${applicationName}; Flutter's plugin
         // only injects it when defaultConfig does NOT override
         // manifestPlaceholders, so define it here or the manifest
