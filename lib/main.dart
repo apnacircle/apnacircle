@@ -6,10 +6,14 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 
 import 'app.dart';
+import 'core/call_signaling.dart';
 import 'core/language_service.dart';
+import 'services/alert_history_service.dart';
 import 'services/auth_service.dart';
 import 'services/background_location_service.dart';
 import 'services/billing_service.dart';
+import 'services/call_service.dart';
+import 'services/chat_delete_service.dart';
 import 'services/device_admin_service.dart';
 import 'services/device_owner_service.dart';
 import 'services/email_otp_service.dart';
@@ -55,6 +59,21 @@ Future<void> main() async {
   final sosSms = SosSmsService(sms);
   final pin = PinService();
   final family = FamilyService()..attachSync(sync);
+  // v0.6.21: calls — the incoming-call ring is wired to the loud
+  // notification here (CallService itself never touches the
+  // notification plugin).
+  final calls = CallService(
+    family: family,
+    onIncomingCall: (call) => notifications.showIncomingCall(
+      callerName: call.fromName,
+      isVideo: call.type == CallType.video,
+      callId: call.id,
+    ),
+  );
+  // v0.6.21: the alerts centre (bell badge + per-member history).
+  final alertHistory = AlertHistoryService(family: family);
+  // v0.6.21: local chat deletes (delete for me / clear chat).
+  final chatDeletes = ChatDeleteService(family: family);
   final trial = TrialService()..attachSync(sync);
   final billing = BillingService();
   final simChange = SimChangeService();
@@ -91,6 +110,9 @@ Future<void> main() async {
         ChangeNotifierProvider.value(value: emailOtp),
         ChangeNotifierProvider.value(value: notifications),
         ChangeNotifierProvider.value(value: family),
+        ChangeNotifierProvider.value(value: calls),
+        ChangeNotifierProvider.value(value: alertHistory),
+        ChangeNotifierProvider.value(value: chatDeletes),
         Provider.value(value: sms),
         Provider.value(value: sosSms),
         Provider.value(value: simChange),
