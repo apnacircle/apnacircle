@@ -9,8 +9,8 @@ import 'package:latlong2/latlong.dart';
 /// map tab was blank because Google Maps needs an API key, and the
 /// key needs Google Cloud billing (a card on file). OSM tiles are
 /// free, need no key and no card — only internet to fetch them.
-/// v0.6.19: the tiles now come from CARTO's light basemap (same OSM
-/// data, cleaner streets and labels) — see osm_map.dart.
+/// v0.6.19 tried CARTO's light basemap; v0.6.20 went back to OSM's
+/// own tiles — the user found CARTO confusing / worse (26 Nov 2026).
 /// These tests pin the pure map layer: tile URLs, member → marker
 /// conversion, and the initial camera. Lahore stays ONLY as the
 /// camera fallback when no viewer position is known — it is NEVER
@@ -32,28 +32,27 @@ void main() {
         isOnline: isOnline,
       );
 
-  group('CARTO tile URL (v0.6.19)', () {
+  group('OSM tile URL', () {
     test('known z/x/y builds the exact tile URL', () {
       // Zoom 12, tile column 2048, row 1365.
       expect(
         osmTileUrl(z: 12, x: 2048, y: 1365),
-        'https://a.basemaps.cartocdn.com/light_all/12/2048/1365.png',
+        'https://tile.openstreetmap.org/12/2048/1365.png',
       );
     });
 
     test('template and helper agree for any tile', () {
       const z = 15, x = 12345, y = 9876;
       final fromTemplate = osmTileUrlTemplate
-          .replaceAll('{s}', 'a')
           .replaceAll('{z}', '$z')
           .replaceAll('{x}', '$x')
           .replaceAll('{y}', '$y');
       expect(osmTileUrl(z: z, x: x, y: y), fromTemplate);
     });
 
-    test('tiles come from cartocdn, no key in the URL', () {
+    test('tiles come from openstreetmap.org, no key in the URL', () {
       final url = osmTileUrl(z: 10, x: 1, y: 2);
-      expect(url, startsWith('https://a.basemaps.cartocdn.com/'));
+      expect(url, startsWith('https://tile.openstreetmap.org/'));
       expect(url, isNot(contains('key')));
       expect(url, isNot(contains('token')));
     });
@@ -114,10 +113,7 @@ void main() {
 
   group('attribution + identity constants', () {
     test('required OSM attribution text is present', () {
-      expect(
-        osmAttributionText,
-        'OpenStreetMap contributors, © CARTO',
-      );
+      expect(osmAttributionText, 'OpenStreetMap contributors');
     });
 
     test('tile requests identify this app, not a generic client', () {
