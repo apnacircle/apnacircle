@@ -149,6 +149,9 @@ Function + email sender.
    line ban jata hai; members list default band hoti hai (header
    tap karo to khule); **map par tap karo to map fullscreen** ho
    jata hai (close button se wapas).
+   **v0.6.20 — purana OSM map wapas:** v0.6.19 ki CARTO tiles user
+   ko confusing lagi, is liye map wapas OpenStreetMap ki apni
+   tiles par aa gaya — pehle wala map, waisa ka waisa.
 4. **Offline SMS location fallback (naya):** bache ke phone mein net
    na ho (Wi-Fi gaya, data off) to GPS fix (GPS ko net nahi chahiye)
    **SMS se parent ke number par** jata hai — zyada se zyada har
