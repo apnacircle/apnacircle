@@ -184,6 +184,24 @@ Function + email sender.
    dobara dikhata hi nahi. Ab card par "Allow" ke saath hi
    **"Open battery settings"** ka button bhi hai, jo seedha App
    info page kholta hai (wahan Battery → "Unrestricted" chuno).
+   **v0.6.23 — media sharing (chat mein photo/video/audio/
+   document):** chat ke neeche attach (+) button — Photo, Video,
+   Audio, Document. Photo pehle compress hoti hai (1280 px,
+   quality 80 — 60–80% chhoti), video medium quality par
+   re-encode hoti hai, document waisi ki waisi jati hai (max
+   100 MB). Photo/video download karte hi **Gallery** mein save
+   hoti hai; audio/document share sheet kholti hai (jahan save
+   karna ho wahan chuno). **Server se file tab hat-ti hai jab
+   circle ke SAB members download kar lein, ya 24 ghante guzar
+   jayein** — pehle download par delete karna baaqi members ki
+   file chheen leta. Chat message khud 1-week rule par rehta
+   hai, sirf file jati hai. **Limits (sach):** Storage ke rules
+   RTDB ko parh nahi sakte, is liye membership wahan enforce
+   nahi hoti — file ka path unguessable hai (circle id +
+   message id), sirf signed-in user parh sakta hai; safai tab
+   hoti hai jab koi member chat khole (fixed clock ke liye
+   Cloud Function chahiye). RTDB rules **v4** (downloadedBy)
+   aur Storage rules publish karni hain (FIREBASE_SETUP §2).
 4. **Offline SMS location fallback (naya):** bache ke phone mein net
    na ho (Wi-Fi gaya, data off) to GPS fix (GPS ko net nahi chahiye)
    **SMS se parent ke number par** jata hai — zyada se zyada har
