@@ -111,6 +111,10 @@ void main() {
     await tester.pump();
     await tester.pump();
     await tester.pump();
+    // v0.6.19: the members list is collapsed by default — expand
+    // it so the member rows are laid out and tappable.
+    await tester.tap(find.textContaining('Family ('));
+    await tester.pump();
   }
 
   testWidgets('SOS label appears exactly once, no SOS text icon',
