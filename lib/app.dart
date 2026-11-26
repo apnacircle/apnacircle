@@ -5,17 +5,23 @@ import 'screens/auth_screen.dart';
 import 'screens/home_map_screen.dart';
 import 'screens/language_select_screen.dart';
 import 'screens/pin_setup_screen.dart';
+import 'screens/setup_screen.dart';
 import 'services/auth_service.dart';
 import 'services/firebase_bootstrap.dart';
 import 'services/pin_service.dart';
+import 'services/setup_service.dart';
 import 'package:provider/provider.dart';
 
-/// Decides the first screen: language -> auth -> parent PIN -> map.
+/// Decides the first screen: language -> auth -> parent PIN ->
+/// one-time setup -> map.
 ///
 /// * Firebase configured + nobody signed in + demo NOT skipped:
 ///   AuthScreen (phone OTP / Gmail / demo mode).
 /// * Demo mode (no Firebase project yet, or "Continue in demo
 ///   mode"): skips auth entirely — v0.2 behaviour, local only.
+/// * v0.6.19: after the PIN, the one-time guided Setup screen
+///   (permissions) shows until it is finished or skipped; it never
+///   nags again after that.
 class AppRoot extends StatelessWidget {
   const AppRoot({super.key});
 
@@ -24,13 +30,13 @@ class AppRoot extends StatelessWidget {
     final lang = context.watch<LanguageService>();
     final pin = context.watch<PinService>();
     final auth = context.watch<AuthService>();
+    final setup = context.watch<SetupService>();
     if (!lang.hasChosenLanguage) return const LanguageSelectScreen();
-    if (FirebaseBootstrap.available &&
-        !auth.signedIn &&
-        !auth.demoSkipped) {
+    if (FirebaseBootstrap.available && !auth.signedIn && !auth.demoSkipped) {
       return const AuthScreen();
     }
     if (!pin.hasPin) return const PinSetupScreen();
+    if (!setup.isComplete) return const SetupScreen();
     return const HomeMapScreen();
   }
 }
