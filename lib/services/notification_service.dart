@@ -7,6 +7,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart'
     as local;
 
 import '../core/alert_notification.dart';
+import '../core/call_notification.dart';
 import '../core/chat_notification.dart';
 import '../models/chat_message.dart';
 import '../models/circle.dart';
@@ -103,6 +104,7 @@ Future<bool> _postChatNotification(
     return false;
   }
 }
+
 /// full-screen intent (rings over the lock screen like an incoming
 /// call); other alerts ring loud on the same channel.
 local.NotificationDetails _alertDetails({required bool isSos}) {
@@ -190,9 +192,8 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         android: local.AndroidInitializationSettings('@mipmap/ic_launcher'),
       ),
     );
-    final android = plugin
-        .resolvePlatformSpecificImplementation<
-            local.AndroidFlutterLocalNotificationsPlugin>();
+    final android = plugin.resolvePlatformSpecificImplementation<
+        local.AndroidFlutterLocalNotificationsPlugin>();
     await android?.createNotificationChannel(_alertChannel());
     await android?.createNotificationChannel(_chatChannel());
     final type = message.data['type'] as String? ?? 'alert';
@@ -335,9 +336,8 @@ class NotificationService extends ChangeNotifier {
           _tapController.add(payload);
         },
       );
-      final android = _local
-          .resolvePlatformSpecificImplementation<
-              local.AndroidFlutterLocalNotificationsPlugin>();
+      final android = _local.resolvePlatformSpecificImplementation<
+          local.AndroidFlutterLocalNotificationsPlugin>();
       // v0.6.17: drop the old channel — its sound/vibration are
       // frozen by Android and can never become the 3-second siren.
       // Deleting is safe: nothing posts to it anymore.
@@ -435,6 +435,36 @@ class NotificationService extends ChangeNotifier {
     return _postAlertNotification(_local, alert: alert);
   }
 
+  /// Incoming-call ring (v0.6.21): a full-screen-intent
+  /// notification on the loud alerts channel — it rings over the
+  /// lock screen like a phone call. Tapping it opens the
+  /// incoming-call screen (payload 'call:{callId}').
+  ///
+  /// HONEST NOTE: the ringtone is the same 3-second siren as SOS
+  /// (v0.6.17) — there is no separate ringtone file yet. The
+  /// full-screen intent is what makes it feel like a call.
+  Future<bool> showIncomingCall({
+    required String callerName,
+    required bool isVideo,
+    required String callId,
+  }) async {
+    await _ensureLocalNotifications();
+    if (!_localReady) return false;
+    try {
+      await _local.show(
+        id: CallNotifications.notificationId,
+        title: 'Incoming ${isVideo ? 'video' : 'audio'} call',
+        body: '$callerName is calling you',
+        notificationDetails: _alertDetails(isSos: true),
+        payload: CallNotifications.tapPayload(callId),
+      );
+      return true;
+    } catch (e) {
+      debugPrint('ApnaCircle: incoming-call notification failed ($e)');
+      return false;
+    }
+  }
+
   /// WhatsApp-style notification for one family chat message
   /// (v0.6.11): sender's name + preview, on the normal chat
   /// channel — never the loud emergency one. Called by Home for
@@ -470,12 +500,9 @@ class NotificationService extends ChangeNotifier {
     final msg = ChatMessage(
       id: data['messageId'] as String? ?? '',
       senderId: data['fromUid'] as String? ?? '',
-      senderName: data['senderName'] as String? ??
-          message.notification?.title ??
-          '',
-      text: data['preview'] as String? ??
-          message.notification?.body ??
-          '',
+      senderName:
+          data['senderName'] as String? ?? message.notification?.title ?? '',
+      text: data['preview'] as String? ?? message.notification?.body ?? '',
       at: DateTime.now(),
     );
     return showChatMessage(
