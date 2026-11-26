@@ -152,6 +152,31 @@ Function + email sender.
    **v0.6.20 — purana OSM map wapas:** v0.6.19 ki CARTO tiles user
    ko confusing lagi, is liye map wapas OpenStreetMap ki apni
    tiles par aa gaya — pehle wala map, waisa ka waisa.
+   **v0.6.21 — calls + alerts bell + chat delete + 2-week
+   auto-delete:** (1) **Audio/video calls** — member ki picture
+   tap karo to call (audio ya video), group call bhi (members
+   tick karo, conference); koi bhi member kisi ko bhi call kar
+   sakta hai. Calls internet se hoti hain (SIM balance nahi
+   lagta), dono phones online + app chali hui honi chahiye.
+   (2) **SMS SOS ab parent PIN ke baghair** — koi bhi member
+   'SOS by SMS' khud ON kar sakta hai (kharch ki confirm dialog
+   rehti hai). (3) **Alerts bell** — upar ghanti par poori
+   family ke unread alerts ka total; tap karo to har member
+   alag se, us ke alerts ki count + kisam (SOS / phone off /
+   battery low...) + time. (4) **Chat delete, WhatsApp jaisa**
+   — message par long-press: 'Delete for me' (sirf apne phone
+   se), 'Delete for everyone' (sirf apna message, har jagah se),
+   aur 'Clear chat' (poori chat — SIRF is phone se, baaki sab
+   ki chat waisi ki waisi). (5) **1-week auto-delete** — chat
+   7 din rehti hai, phir purane messages khud-ba-khud delete
+   hote rehte hain (server se bhi); file sharing NAHI hai
+   (user ne mana kiya — storage bhar jati). **Limits (sach):**
+   calls ke liye STUN-only hai (Google ka free server, TURN
+   nahi) — sakht network par do phones jud na saken; band app
+   ko call nahi bajti (Cloud Function chahiye, Blaze-blocked);
+   auto-delete ki safai tab hoti hai jab koi member chat khole
+   (fixed daily clock ke liye Cloud Function chahiye); calls +
+   chat-delete ke liye RTDB rules **v3** publish karni hain.
 4. **Offline SMS location fallback (naya):** bache ke phone mein net
    na ho (Wi-Fi gaya, data off) to GPS fix (GPS ko net nahi chahiye)
    **SMS se parent ke number par** jata hai — zyada se zyada har
