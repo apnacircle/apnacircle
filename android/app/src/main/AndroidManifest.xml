@@ -45,6 +45,17 @@
          APNACIRCLE LOC: SMS from the child's phone when the child
          has no data. SmsReceiver ignores every other SMS. -->
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <!-- v0.6.23: media sharing — pick photos/videos/audio/
+         documents from the gallery and files. Android 13+ uses
+         the READ_MEDIA_* permissions; older Android uses
+         READ_EXTERNAL_STORAGE (maxSdkVersion 32). The pickers
+         ask at runtime; the manifest entries are what let them. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
