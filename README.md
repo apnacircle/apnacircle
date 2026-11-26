@@ -134,6 +134,21 @@ Function + email sender.
    signal + balance chahiye; jis member ka number save nahi, use
    SMS nahi ja sakta; SMS hamesha dabane wale ki SIM se kata hai —
    admin ke account se nahi (operator ka rule).
+   **v0.6.19 — Carto map + Setup wizard + bara map:** map ki tiles
+   ab CARTO ke light basemap se aati hain (wahi OpenStreetMap data,
+   saaf sadkein aur labels) — ab bhi free, bina key/card ke.
+   PIN ke baad aik dafa **Setup** screen aati hai: 7 steps, har
+   step par aik bara button jo seedha sahi settings page kholta
+   hai (location "Allow all the time", notifications, SMS, overlay,
+   Accessibility, Device Admin, battery) — walden ko kuch samajhne
+   ki zaroorat nahi, bas dabate jao; green tick batata hai kaam ho
+   gaya. Poora auto mumkin nahi — Android kisi app ko apni
+   permissions khud dene nahi deta — is liye ye guided hai, auto
+   nahi. Setup Settings se dobara bhi khul sakta hai. Map tab par
+   jab sharing theek ho to bara status card sirf aik chhoti green
+   line ban jata hai; members list default band hoti hai (header
+   tap karo to khule); **map par tap karo to map fullscreen** ho
+   jata hai (close button se wapas).
 4. **Offline SMS location fallback (naya):** bache ke phone mein net
    na ho (Wi-Fi gaya, data off) to GPS fix (GPS ko net nahi chahiye)
    **SMS se parent ke number par** jata hai — zyada se zyada har
