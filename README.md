@@ -120,6 +120,20 @@ Function + email sender.
    nahi bana, is liye SOS abhi RTDB `events` node se deliver hota
    hai (parent ka phone app khula ho to foran dikhta hai). Server
    key kabhi app mein nahi aayegi.
+   **v0.6.18 — SOS by SMS, alag button:** Alerts mein naya switch
+   "SOS by SMS" (default OFF, sirf parent PIN se badlega). Switch ON
+   ho to Map par SOS button ke upar aik alag **orange "SMS SOS"**
+   button dikhta hai; dabane par pehle confirm dialog aata hai
+   (kharcha ~Rs. 2 per member SMS, dabane wale ki SIM se) — sirf
+   confirm karne par SMS jata hai (`APNACIRCLE SOS: <name> needs
+   help!` + Maps link), family ke har member ke saved number par.
+   Normal SOS button kabhi SMS nahi bhejta (muft, pehle jaisa).
+   SMS app band ho bhi to pohanch jata hai, bina server, bina
+   internet, bina Blaze billing ke. Kamyab batch 60 second ke liye
+   throttled hai taa ke double-tap double kharcha na kare. Limits:
+   signal + balance chahiye; jis member ka number save nahi, use
+   SMS nahi ja sakta; SMS hamesha dabane wale ki SIM se kata hai —
+   admin ke account se nahi (operator ka rule).
 4. **Offline SMS location fallback (naya):** bache ke phone mein net
    na ho (Wi-Fi gaya, data off) to GPS fix (GPS ko net nahi chahiye)
    **SMS se parent ke number par** jata hai — zyada se zyada har
