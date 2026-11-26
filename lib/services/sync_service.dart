@@ -755,6 +755,79 @@ class SyncService extends ChangeNotifier {
     }
   }
 
+  /// Media sharing (v0.6.23): a fresh push key for a media message
+  /// — the key is needed BEFORE the upload, because the Storage
+  /// path contains it (circles/{circle}/media/{uid}/{key}/...).
+  String newChatMessageKey(String circleId) {
+    return _root
+            .child(FirebaseConfig.circleChatPath(circleId))
+            .push()
+            .key ??
+        DateTime.now().millisecondsSinceEpoch.toString();
+  }
+
+  /// Media sharing (v0.6.23): write a media message under its
+  /// pre-generated key. The file itself is uploaded by
+  /// MediaService first; this only writes the chat node (the
+  /// create branch of the v3 chat rule allows any member to send).
+  Future<bool> sendMediaMessage(String circleId, ChatMessage msg) async {
+    if (!isAvailable) return false;
+    try {
+      await _root
+          .child(FirebaseConfig.circleChatPath(circleId))
+          .child(msg.id)
+          .set(msg.toJson());
+      return true;
+    } catch (e) {
+      debugPrint('ApnaCircle: sendMediaMessage failed ($e)');
+      return false;
+    }
+  }
+
+  /// Media sharing (v0.6.23): record that I downloaded this file
+  /// to my own phone. Writes `downloadedBy/{myUid} = nowMs` — the
+  /// v4 chat rule allows a member to write ONLY their own entry,
+  /// same as the seenBy rule. The UI derives "removed from
+  /// server" from downloadedBy (every member has it) + the 24-hour
+  /// expiry, so no extra flag is needed.
+  Future<bool> markMediaDownloaded(String circleId, String messageId) async {
+    if (!isAvailable || uid == null) return false;
+    try {
+      await _root
+          .child(FirebaseConfig.circleChatPath(circleId))
+          .child(messageId)
+          .child('downloadedBy')
+          .child(uid!)
+          .set(DateTime.now().millisecondsSinceEpoch);
+      return true;
+    } catch (e) {
+      debugPrint('ApnaCircle: markMediaDownloaded failed ($e)');
+      return false;
+    }
+  }
+
+  /// Media sharing (v0.6.23): read the whole chat node once (for
+  /// the media prune). Returns the parsed messages; empty when
+  /// offline or when the node does not exist.
+  Future<List<ChatMessage>> readChatMessages(String circleId) async {
+    if (!isAvailable) return const [];
+    try {
+      final snap =
+          await _root.child(FirebaseConfig.circleChatPath(circleId)).get();
+      if (!snap.exists) return const [];
+      final out = <ChatMessage>[];
+      for (final child in snap.children) {
+        final raw = SyncService.asMap(child.value);
+        if (raw.isEmpty) continue;
+        out.add(ChatMessage.fromJson(raw, id: child.key));
+      }
+      return out;
+    } catch (e) {
+      debugPrint('ApnaCircle: readChatMessages failed ($e)');
+      return const [];
+    }
+  }
+
   /// Read receipts (v0.6.21): mark [messageIds] as read by me.
   /// Writes `seenBy/{myUid} = nowMs` under each message in ONE
   /// multi-path update. Rules v3 allow a member to write ONLY
