@@ -4,6 +4,9 @@ import 'package:apnacircle/screens/home_map_screen.dart';
 import 'package:apnacircle/services/auth_service.dart';
 import 'package:apnacircle/services/billing_service.dart';
 import 'package:apnacircle/services/family_service.dart';
+import 'package:apnacircle/services/chat_delete_service.dart';
+import 'package:apnacircle/services/call_service.dart';
+import 'package:apnacircle/services/alert_history_service.dart';
 import 'package:apnacircle/services/notification_service.dart';
 import 'package:apnacircle/services/pin_service.dart';
 import 'package:apnacircle/services/sms_location_service.dart';
@@ -206,6 +209,15 @@ void main() {
               value: NotificationService(sync),
             ),
             ChangeNotifierProvider.value(value: family),
+            ChangeNotifierProvider.value(
+              value: CallService(family: family),
+            ),
+            ChangeNotifierProvider.value(
+              value: AlertHistoryService(family: family),
+            ),
+            ChangeNotifierProvider.value(
+              value: ChatDeleteService(family: family),
+            ),
             ChangeNotifierProvider.value(value: pin),
             Provider.value(value: SmsLocationService()),
           ],
@@ -251,7 +263,8 @@ void main() {
       expect(find.text('Parent PIN'), findsOneWidget);
     }
 
-    testWidgets('parent sees the ⋮ menu on other members, never on '
+    testWidgets(
+        'parent sees the ⋮ menu on other members, never on '
         'their own row', (tester) async {
       await pumpHome(tester);
       expect(find.text('Mujahid'), findsOneWidget);
