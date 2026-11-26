@@ -32,6 +32,15 @@
          observing the number — see CallStateReceiver. -->
     <uses-permission android:name="android.permission.PROCESS_OUTGOING_CALLS" />
     <uses-permission android:name="android.permission.SEND_SMS" />
+    <!-- v0.6.21: audio/video calls (flutter_webrtc) — camera +
+         microphone are runtime permissions too (asked in-app
+         before a call starts); MODIFY_AUDIO_SETTINGS lets the
+         app switch the speakerphone on during a call. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
     <!-- Offline location fallback (v0.3): the parent's phone reads
          APNACIRCLE LOC: SMS from the child's phone when the child
          has no data. SmsReceiver ignores every other SMS. -->
