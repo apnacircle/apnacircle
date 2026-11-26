@@ -79,8 +79,11 @@ class FirebaseConfig {
   static String circleAlertsPath(String circleId, String memberId) =>
       'circles/$circleId/alerts/$memberId';
   static String circleChatPath(String circleId) => 'circles/$circleId/chat';
-  static String circleEventsPath(String circleId) =>
-      'circles/$circleId/events';
+  static String circleEventsPath(String circleId) => 'circles/$circleId/events';
+
+  /// v0.6.21: call signaling — one node per call under the
+  /// circle (see call_signaling.dart for the node shape).
+  static String circleCallsPath(String circleId) => 'circles/$circleId/calls';
   static String userProfilePath(String uid) => 'users/$uid/profile';
   static String userCirclesPath(String uid) => 'users/$uid/circles';
   static String userCircleRolePath(String uid, String circleId) =>
@@ -118,38 +121,38 @@ const firebaseChecklist = [
   FirebaseChecklistItem(
     '1. Project banayein',
     'Firebase console (console.firebase.google.com) par naya project — '
-    'naam: apnacircle. Google Analytics optional hai, off rakh sakte hain.',
+        'naam: apnacircle. Google Analytics optional hai, off rakh sakte hain.',
   ),
   FirebaseChecklistItem(
     '2. Android app register karein',
     'Package: com.apnacircle.app. google-services.json download karke '
-    'android/app/ mein rakhein (ye file .gitignore mein hai — commit NAHI hogi).',
+        'android/app/ mein rakhein (ye file .gitignore mein hai — commit NAHI hogi).',
   ),
   FirebaseChecklistItem(
     '3. Realtime Database',
     'Database banayein (locked mode se shuru karein), region: asia-southeast1 '
-    '(Pakistan ke qareeb). Rules: sirf apne circle ke members parh/sakte hain — '
-    'rules file FIREBASE_SETUP.md mein hai.',
+        '(Pakistan ke qareeb). Rules: sirf apne circle ke members parh/sakte hain — '
+        'rules file FIREBASE_SETUP.md mein hai.',
   ),
   FirebaseChecklistItem(
     '4. Authentication',
     'Phone number sign-in ON karein (family ke liye phone number sab se '
-    'asaan hai). Email/password backup ke tor par.',
+        'asaan hai). Email/password backup ke tor par.',
   ),
   FirebaseChecklistItem(
     '5. Cloud Messaging (FCM)',
     'FCM API enable karein. Server key kabhi app mein NAHI dalni — '
-    'sirf Cloud Functions / server se use hogi.',
+        'sirf Cloud Functions / server se use hogi.',
   ),
   FirebaseChecklistItem(
     '6. Packages add karein',
     'pubspec.yaml mein: firebase_core, firebase_auth, '
-    'firebase_database, firebase_messaging. Phir `flutter pub get` '
-    'aur `Firebase.initializeApp()` main.dart mein.',
+        'firebase_database, firebase_messaging. Phir `flutter pub get` '
+        'aur `Firebase.initializeApp()` main.dart mein.',
   ),
   FirebaseChecklistItem(
     '7. Test karein',
     'Do phones par live location sync, parent se remote lock, aur '
-    'SOS push notification — teeno kaam karte hon to hi v0.2 complete hai.',
+        'SOS push notification — teeno kaam karte hon to hi v0.2 complete hai.',
   ),
 ];
