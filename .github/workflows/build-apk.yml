@@ -54,6 +54,14 @@ jobs:
           fi
       - name: Install dependencies
         run: flutter pub get
+      # v0.6.25 (27 Nov 2026): the media packages need compileSdk
+      # 36 (CI run #376 failed at checkReleaseAarMetadata on 35),
+      # so install the android-36 platform + build-tools 36
+      # explicitly — the runner image is not guaranteed to have
+      # them. ANDROID_HOME is set by the runner image.
+      - name: Install Android SDK 36
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"
       - name: Analyze
         run: flutter analyze
       - name: Test
