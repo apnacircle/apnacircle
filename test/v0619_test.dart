@@ -290,5 +290,41 @@ void main() {
       expect(find.text('Done — go to the map'), findsOneWidget);
       expect(find.text('Skip for now'), findsOneWidget);
     });
+
+    testWidgets(
+        'battery step always offers Open battery settings',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final setup = SetupService();
+      await setup.load();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ChangeNotifierProvider.value(
+            value: setup,
+            child: const SetupScreen(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      // The battery step shows BOTH buttons from the start —
+      // "Allow" alone can be a dead button on Oppo/ColorOS
+      // (the exemption dialog never comes back after one
+      // denial), so the manual route must not hide behind it.
+      // (The list builds lazily — scroll it into view first.)
+      await tester.scrollUntilVisible(find.text('Allow'), 200.0);
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
+      expect(find.text('Open battery settings'), findsOneWidget);
+
+      // Tapping it must not crash (openAppSettings is a no-op
+      // in the test env — the permission channel never answers
+      // there, so the handler simply never returns).
+      await tester.tap(find.text('Open battery settings'));
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Open battery settings'), findsOneWidget);
+    });
   });
 }
