@@ -130,29 +130,6 @@ class SmsLocationService {
     return status.isGranted;
   }
 
-  /// Send any SMS body to [to] via the native SmsManager.
-  /// [sendLocationSms] is the location-only wrapper around this.
-  /// Returns false when the native send failed (no permission, no
-  /// signal, no SIM). Never call with a number outside the sender's
-  /// own circle — enforced by the caller.
-  Future<bool> sendRawSms({
-    required String to,
-    required String body,
-  }) async {
-    try {
-      final ok = await _channel.invokeMethod<bool>('sendSms', {
-        'to': to,
-        'body': body,
-      });
-      return ok ?? false;
-    } on PlatformException catch (e) {
-      debugPrint('ApnaCircle: sendSms failed ($e)');
-      return false;
-    } on MissingPluginException {
-      return false;
-    }
-  }
-
   /// Send one location SMS to [parentPhone]. Returns false when
   /// the native send failed (no permission, no signal, no SIM).
   /// Never call with any number except a parent's number from the
@@ -162,8 +139,20 @@ class SmsLocationService {
     required double lat,
     required double lon,
     required DateTime at,
-  }) =>
-      sendRawSms(to: parentPhone, body: encodeSms(lat, lon, at));
+  }) async {
+    try {
+      final ok = await _channel.invokeMethod<bool>('sendSms', {
+        'to': parentPhone,
+        'body': encodeSms(lat, lon, at),
+      });
+      return ok ?? false;
+    } on PlatformException catch (e) {
+      debugPrint('ApnaCircle: sendSms failed ($e)');
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
 
   /// Start listening for live incoming SMS locations (native
   /// receiver -> Dart). Safe to call repeatedly; only binds once.
