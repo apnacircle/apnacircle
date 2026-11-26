@@ -1,0 +1,192 @@
+import 'dart:async';
+
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../models/circle.dart';
+import 'family_service.dart';
+import 'firebase_config.dart';
+import 'sync_service.dart';
+
+/// The alerts centre (v0.6.21) — every SOS / alert the circle
+/// has raised, separated PER MEMBER with a count, instead of one
+/// mixed stream where nobody can tell whose alert it was.
+///
+/// Source of truth: the circle's `events` node in the Realtime
+/// Database (the same node FamilyService listens to for live
+/// alerts). The centre loads the latest 200 events and keeps
+/// listening, so a new SOS appears while the app is open.
+///
+/// Unread = an event newer than the last time the centre was
+/// opened (per circle, stored in SharedPreferences). Opening the
+/// centre marks everything read — the bell badge clears, but the
+/// per-member counts stay (they are totals, not unread counts).
+///
+/// Demo mode (no circle): no events — the centre is empty.
+class AlertHistoryService extends ChangeNotifier {
+  AlertHistoryService({
+    required FamilyService family,
+  }) : _family = family {
+    _family.addListener(_onFamilyChanged);
+    _loadSeen();
+    _listenToEvents();
+  }
+
+  final FamilyService _family;
+
+  DatabaseReference get _root => FirebaseDatabase.instanceFor(
+        app: Firebase.app(),
+        databaseURL: FirebaseConfig.databaseUrl,
+      ).ref();
+
+  /// Latest 200 events, keyed by their RTDB push key (dedupes
+  /// the initial load against the live listener).
+  final Map<String, CircleEvent> _events = {};
+
+  /// All loaded events, newest first.
+  List<CircleEvent> get events {
+    final list = _events.values.toList()..sort((a, b) => b.at.compareTo(a.at));
+    return List.unmodifiable(list);
+  }
+
+  /// Events per member uid, newest first.
+  Map<String, List<CircleEvent>> get eventsByMember {
+    final map = <String, List<CircleEvent>>{};
+    for (final e in events) {
+      map.putIfAbsent(e.fromUid, () => []).add(e);
+    }
+    return map;
+  }
+
+  /// Total alerts per member uid (in the loaded window).
+  Map<String, int> get countByMember {
+    final map = <String, int>{};
+    for (final e in events) {
+      map[e.fromUid] = (map[e.fromUid] ?? 0) + 1;
+    }
+    return map;
+  }
+
+  DateTime? _lastSeenAt;
+
+  /// Events newer than the last centre visit.
+  List<CircleEvent> get unread => _lastSeenAt == null
+      ? events
+      : events.where((e) => e.at.isAfter(_lastSeenAt!)).toList();
+
+  int get totalUnread => unread.length;
+
+  /// Unread alerts per member uid.
+  Map<String, int> get unreadByMember {
+    final map = <String, int>{};
+    for (final e in unread) {
+      map[e.fromUid] = (map[e.fromUid] ?? 0) + 1;
+    }
+    return map;
+  }
+
+  StreamSubscription<DatabaseEvent>? _sub;
+
+  void _onFamilyChanged() {
+    _loadSeen();
+    _listenToEvents();
+  }
+
+  String get _seenKey => 'alerts_seen_${_family.activeCircleId ?? 'none'}';
+
+  Future<void> _loadSeen() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final ms = prefs.getInt(_seenKey);
+      _lastSeenAt = ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms);
+      notifyListeners();
+    } catch (_) {
+      // A missing/corrupt seen-marker means "everything unread"
+      // — safe, never a crash.
+    }
+  }
+
+  void _listenToEvents() {
+    unawaited(_sub?.cancel());
+    _sub = null;
+    _events.clear();
+    final circleId = _family.activeCircleId;
+    if (circleId == null || !_family.isSynced) {
+      notifyListeners();
+      return;
+    }
+    final ref =
+        _root.child(FirebaseConfig.circleEventsPath(circleId)).limitToLast(200);
+    _sub = ref.onChildAdded.listen((event) {
+      final key = event.snapshot.key;
+      final raw = event.snapshot.value;
+      if (key == null || raw == null) return;
+      try {
+        _events[key] = CircleEvent.fromJson(SyncService.asMap(raw));
+        notifyListeners();
+      } catch (_) {
+        // A malformed event must never break the centre.
+      }
+    });
+  }
+
+  /// Mark everything read — called when the centre sheet closes.
+  Future<void> markAllRead() async {
+    _lastSeenAt = DateTime.now();
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(
+        _seenKey,
+        _lastSeenAt!.millisecondsSinceEpoch,
+      );
+    } catch (_) {
+      // Best effort — the badge clears in memory regardless.
+    }
+  }
+
+  @override
+  void dispose() {
+    _family.removeListener(_onFamilyChanged);
+    unawaited(_sub?.cancel());
+    super.dispose();
+  }
+}
+
+/// Plain-words label for one event type (v0.6.21). The stored
+/// type is a code ('internetOff'); the centre shows what a
+/// parent actually understands. An unknown type is shown as-is —
+/// never hidden.
+String alertTypeLabel(String type) => switch (type) {
+      'sos' => 'SOS',
+      'lowBattery' => 'Low battery',
+      'phoneOff' => 'Phone switched off',
+      'internetOff' => 'Internet off',
+      'locationOff' => 'Location switched off',
+      'simChanged' => 'SIM changed',
+      'adminDisabled' => 'Protection removed',
+      _ => type,
+    };
+
+/// Short time for one event: '26 Nov, 21:05'.
+String formatAlertTime(DateTime at) {
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  final hh = at.hour.toString().padLeft(2, '0');
+  final mm = at.minute.toString().padLeft(2, '0');
+  return '${at.day} ${months[at.month - 1]}, $hh:$mm';
+}
