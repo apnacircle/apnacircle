@@ -4,6 +4,9 @@ import 'package:apnacircle/screens/home_map_screen.dart';
 import 'package:apnacircle/services/auth_service.dart';
 import 'package:apnacircle/services/billing_service.dart';
 import 'package:apnacircle/services/family_service.dart';
+import 'package:apnacircle/services/chat_delete_service.dart';
+import 'package:apnacircle/services/call_service.dart';
+import 'package:apnacircle/services/alert_history_service.dart';
 import 'package:apnacircle/services/notification_service.dart';
 import 'package:apnacircle/services/sms_location_service.dart';
 import 'package:apnacircle/services/sync_service.dart';
@@ -142,6 +145,15 @@ void main() {
             value: NotificationService(sync),
           ),
           ChangeNotifierProvider.value(value: family),
+          ChangeNotifierProvider.value(
+            value: CallService(family: family),
+          ),
+          ChangeNotifierProvider.value(
+            value: AlertHistoryService(family: family),
+          ),
+          ChangeNotifierProvider.value(
+            value: ChatDeleteService(family: family),
+          ),
           Provider.value(value: SmsLocationService()),
         ],
         child: const MaterialApp(home: HomeMapScreen()),
@@ -187,8 +199,7 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));
   });
 
-  testWidgets('unknown battery renders no "-1%" text',
-      (tester) async {
+  testWidgets('unknown battery renders no "-1%" text', (tester) async {
     final family = FamilyService();
     // Pre-seed the members so the demo family is NOT seeded on top.
     family.addMember(member('Iza', battery: -1));
