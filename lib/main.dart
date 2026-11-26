@@ -19,6 +19,7 @@ import 'services/device_owner_service.dart';
 import 'services/email_otp_service.dart';
 import 'services/family_service.dart';
 import 'services/firebase_bootstrap.dart';
+import 'services/media_service.dart';
 import 'services/notification_service.dart';
 import 'services/pin_service.dart';
 import 'services/sim_change_service.dart';
@@ -74,6 +75,8 @@ Future<void> main() async {
   final alertHistory = AlertHistoryService(family: family);
   // v0.6.21: local chat deletes (delete for me / clear chat).
   final chatDeletes = ChatDeleteService(family: family);
+  // v0.6.23: media sharing — pick / compress / upload / download.
+  final media = MediaService(sync);
   final trial = TrialService()..attachSync(sync);
   final billing = BillingService();
   final simChange = SimChangeService();
@@ -113,6 +116,7 @@ Future<void> main() async {
         ChangeNotifierProvider.value(value: calls),
         ChangeNotifierProvider.value(value: alertHistory),
         ChangeNotifierProvider.value(value: chatDeletes),
+        Provider.value(value: media),
         Provider.value(value: sms),
         Provider.value(value: sosSms),
         Provider.value(value: simChange),
