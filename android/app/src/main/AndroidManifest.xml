@@ -76,7 +76,7 @@
              created at startup by NotificationService. -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="apnacircle_alerts" />
+            android:value="apnacircle_alerts_v2" />
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
