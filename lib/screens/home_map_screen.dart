@@ -37,13 +37,14 @@ import '../services/sync_service.dart';
 /// Home: live map + member cards with distance (km), battery,
 /// online/offline + last location. SOS button is always visible.
 ///
-/// NOTE (v0.6.15, tiles v0.6.19): the map is flutter_map with
-/// CARTO's light basemap (OpenStreetMap data) — free, no API key,
-/// no card. Google Maps was removed because the map tab was blank
-/// without a key, and the key needs Google Cloud billing. Tiles
-/// need internet (offline shows no tiles; the members list still
-/// works). Attribution "© OpenStreetMap contributors, © CARTO" is
-/// shown on the map, bottom-left (licence).
+/// NOTE (v0.6.15, tiles v0.6.20): the map is flutter_map with
+/// OpenStreetMap tiles — free, no API key, no card. (v0.6.19 tried
+/// CARTO's light basemap; the user found it confusing, so v0.6.20
+/// went back to OSM's own tiles.) Google Maps was removed because
+/// the map tab was blank without a key, and the key needs Google
+/// Cloud billing. Tiles need internet (offline shows no tiles; the
+/// members list still works). Attribution "© OpenStreetMap
+/// contributors" is shown on the map, bottom-left (licence).
 ///
 /// v0.3: this screen also runs the location loop — every 60 s it
 /// takes a GPS fix and:
