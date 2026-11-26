@@ -28,6 +28,7 @@ import '../screens/plan_screen.dart';
 import '../screens/settings_screen.dart';
 import '../services/background_location_service.dart';
 import '../services/family_service.dart';
+import '../services/sos_sms_service.dart';
 import '../services/notification_service.dart';
 import '../services/sms_location_service.dart';
 import '../services/sync_service.dart';
@@ -1033,10 +1034,12 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   Future<void> _sendSos(BuildContext context) async {
     final family = context.read<FamilyService>();
     final sync = context.read<SyncService>();
+    final sosSms = context.read<SosSmsService>();
     final mine = family.myMember;
     // v0.3: the SOS event goes to the whole circle (RTDB) so the
     // parent's phone gets it live; FCM push for the same event
     // needs a server (see NotificationService — not faked here).
+    var rtdbSent = false;
     if (sync.isAvailable && sync.activeCircleId != null && mine != null) {
       await sync.sendEvent(
         sync.activeCircleId!,
@@ -1049,10 +1052,52 @@ class _HomeMapScreenState extends State<HomeMapScreen>
           lon: mine.lon,
         ),
       );
+      rtdbSent = true;
+    }
+    // v0.6.18: SOS by SMS to the whole family — works even when the
+    // app is closed on their phones (and even when THIS phone has
+    // no data), because it needs no server and no internet, only
+    // mobile signal. It runs whether or not the RTDB event above
+    // went out. Costs the sender ~Rs. 2 per member SMS without a
+    // bundle; a successful batch is throttled for 60 s so a
+    // double-tap does not charge twice.
+    var smsSent = 0;
+    var smsNeeded = false;
+    var smsDenied = false;
+    var smsThrottled = false;
+    if (mine != null) {
+      final result = await sosSms.sendSosSms(
+        fromName: mine.name,
+        members: family.members,
+        senderId: mine.id,
+        lat: mine.lat,
+        lon: mine.lon,
+      );
+      smsSent = result.sent;
+      smsNeeded = result.recipients > 0;
+      smsDenied = result.permissionDenied;
+      smsThrottled = result.throttled;
     }
     if (!context.mounted) return;
+    final plural = smsSent == 1 ? '' : 's';
+    final String message;
+    if (rtdbSent && smsSent > 0) {
+      message = 'SOS sent to your family! SMS to $smsSent member$plural.';
+    } else if (rtdbSent && smsDenied && smsNeeded) {
+      message = 'SOS sent to your family! (SMS blocked — SMS permission needed.)';
+    } else if (rtdbSent) {
+      message = 'SOS sent to your family!';
+    } else if (smsSent > 0) {
+      message = 'SOS sent by SMS to $smsSent member$plural (no internet).';
+    } else if (smsThrottled) {
+      message = 'SOS already sent a moment ago — wait a minute before sending again.';
+    } else if (smsDenied) {
+      message = 'SOS could not be sent — allow SMS permission and try again.';
+    } else {
+      message = 'SOS could not be sent — check signal and try again.';
+    }
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('SOS sent to your family!')),
+      SnackBar(content: Text(message)),
     );
   }
 }
