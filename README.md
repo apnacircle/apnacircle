@@ -152,7 +152,7 @@ Function + email sender.
    **v0.6.20 — purana OSM map wapas:** v0.6.19 ki CARTO tiles user
    ko confusing lagi, is liye map wapas OpenStreetMap ki apni
    tiles par aa gaya — pehle wala map, waisa ka waisa.
-   **v0.6.21 — calls + alerts bell + chat delete + 2-week
+   **v0.6.21 — calls + alerts bell + chat delete + 1-week
    auto-delete:** (1) **Audio/video calls** — member ki picture
    tap karo to call (audio ya video), group call bhi (members
    tick karo, conference); koi bhi member kisi ko bhi call kar
@@ -176,7 +176,14 @@ Function + email sender.
    ko call nahi bajti (Cloud Function chahiye, Blaze-blocked);
    auto-delete ki safai tab hoti hai jab koi member chat khole
    (fixed daily clock ke liye Cloud Function chahiye); calls +
-   chat-delete ke liye RTDB rules **v3** publish karni hain.
+   chat-delete ke liye RTDB rules **v3** publish ho gayi hain
+   (26 Nov, live).
+   **v0.6.22 — battery settings button:** Setup wizard ke step 7
+   (Ignore battery optimization) par "Allow" dabane se kuch nahi
+   hota tha — Oppo/ColorOS ek dafa mana karne ke baad dialog
+   dobara dikhata hi nahi. Ab card par "Allow" ke saath hi
+   **"Open battery settings"** ka button bhi hai, jo seedha App
+   info page kholta hai (wahan Battery → "Unrestricted" chuno).
 4. **Offline SMS location fallback (naya):** bache ke phone mein net
    na ho (Wi-Fi gaya, data off) to GPS fix (GPS ko net nahi chahiye)
    **SMS se parent ke number par** jata hai — zyada se zyada har
