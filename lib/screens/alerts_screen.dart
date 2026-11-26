@@ -5,7 +5,7 @@ import '../core/alerts.dart';
 import '../services/family_service.dart';
 import 'pin_gate_dialog.dart';
 
-/// All 14 alerts, each with its OWN on/off switch.
+/// All 15 alerts, each with its OWN on/off switch.
 /// Changing ANY switch requires the parent PIN. A child cannot
 /// change alerts from their own phone — changes are made on the
 /// parent phone and sync to the member (remote control).
@@ -34,9 +34,8 @@ class AlertsScreen extends StatelessWidget {
         for (final type in AlertType.values)
           SwitchListTile(
             title: Text(type.labelEn),
-            subtitle: type.needsExplicitOptIn
-                ? const Text('Needs explicit parent opt-in (dials 1122).')
-                : null,
+            subtitle:
+                type.hintEn == null ? null : Text(type.hintEn!),
             value: member.alerts[type] ?? false,
             onChanged: (value) {
               askParentPin(
