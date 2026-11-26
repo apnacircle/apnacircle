@@ -184,6 +184,11 @@ Function + email sender.
    dobara dikhata hi nahi. Ab card par "Allow" ke saath hi
    **"Open battery settings"** ka button bhi hai, jo seedha App
    info page kholta hai (wahan Battery → "Unrestricted" chuno).
+   **v0.6.25 — compileSdk 36 (build fix):** v0.6.23 ki CI run
+   #376 APK banate waqt fail hui — nayi media packages
+   (androidx.core 1.18 / activity 1.12) ko compileSdk 36
+   chahiye, app 35 par thi. compileSdk 36 kar diya aur workflow
+   mein android-36 platform install karne ka step jod diya.
    **v0.6.24 — Chat first in the bottom bar:** neeche wale
    options ka order ab Chat, Map, Alerts, Locks, Plan, Settings
    hai (pehle Map pehle tha). SOS button, alert/chat
