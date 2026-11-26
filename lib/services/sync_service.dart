@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/alerts.dart';
 import '../core/app_lock_service.dart';
 import '../core/chat_paging.dart';
+import '../core/chat_retention.dart';
 import '../core/member_phone.dart';
 import '../core/protection_level.dart';
 import '../models/chat_message.dart';
@@ -170,9 +171,8 @@ class SyncService extends ChangeNotifier {
     if (value is Map) {
       return {
         for (final e in value.entries)
-          e.key.toString(): e.value is Map || e.value is List
-              ? _convert(e.value)
-              : e.value,
+          e.key.toString():
+              e.value is Map || e.value is List ? _convert(e.value) : e.value,
       };
     }
     return {};
@@ -181,9 +181,7 @@ class SyncService extends ChangeNotifier {
   static dynamic _convert(dynamic value) {
     if (value is Map) return asMap(value);
     if (value is List) {
-      return value
-          .map((e) => e is Map || e is List ? _convert(e) : e)
-          .toList();
+      return value.map((e) => e is Map || e is List ? _convert(e) : e).toList();
     }
     return value;
   }
@@ -271,8 +269,7 @@ class SyncService extends ChangeNotifier {
     final clean = code.trim();
     final normalizedPhone = validateMemberPhone(phoneNumber).number!;
     try {
-      final snap =
-          await _root.child(FirebaseConfig.invitePath(clean)).get();
+      final snap = await _root.child(FirebaseConfig.invitePath(clean)).get();
       if (!snap.exists || snap.value == null) {
         return (null, 'No circle found for that code — check the digits.');
       }
@@ -311,9 +308,8 @@ class SyncService extends ChangeNotifier {
           protection: await DeviceOwnerService().currentLevel(),
         );
       }
-      final infoSnap = await _root
-          .child(FirebaseConfig.circleInfoPath(circleId))
-          .get();
+      final infoSnap =
+          await _root.child(FirebaseConfig.circleInfoPath(circleId)).get();
       if (!infoSnap.exists) return (null, 'That circle no longer exists.');
       final info = asMap(infoSnap.value);
       final circle = CircleInfo(
@@ -349,9 +345,8 @@ class SyncService extends ChangeNotifier {
       for (final entry in roles.entries) {
         final circleId = entry.key;
         final role = entry.value as String? ?? 'member';
-        final infoSnap = await _root
-            .child(FirebaseConfig.circleInfoPath(circleId))
-            .get();
+        final infoSnap =
+            await _root.child(FirebaseConfig.circleInfoPath(circleId)).get();
         if (!infoSnap.exists) continue;
         final info = asMap(infoSnap.value);
         fresh.add(CircleInfo(
@@ -492,10 +487,10 @@ class SyncService extends ChangeNotifier {
   static List<String> accountCleanupPaths(
     String uid,
     List<String> circleIds,
-  ) => [
+  ) =>
+      [
         'users/$uid',
-        for (final id in circleIds)
-          FirebaseConfig.circleMemberPath(id, uid),
+        for (final id in circleIds) FirebaseConfig.circleMemberPath(id, uid),
       ];
 
   /// Delete MY data from the Realtime Database (v0.5, account
@@ -568,8 +563,8 @@ class SyncService extends ChangeNotifier {
         'lon': me.lon,
         'battery': me.battery,
         'isOnline': me.isOnline,
-        'lastSeen': me.lastSeen?.toIso8601String() ??
-            DateTime.now().toIso8601String(),
+        'lastSeen':
+            me.lastSeen?.toIso8601String() ?? DateTime.now().toIso8601String(),
         'locationSharingOn': me.locationSharingOn,
       };
       if (me.batteryAt != null) {
@@ -581,7 +576,9 @@ class SyncService extends ChangeNotifier {
       if (me.protection != ProtectionLevel.unknown) {
         data['protection'] = me.protection.wireValue;
       }
-      await _root.child(FirebaseConfig.circleMemberPath(circleId, me.id)).update(data);
+      await _root
+          .child(FirebaseConfig.circleMemberPath(circleId, me.id))
+          .update(data);
     } catch (e) {
       debugPrint('ApnaCircle: publishMyLocation failed ($e)');
     }
@@ -677,6 +674,112 @@ class SyncService extends ChangeNotifier {
     }
   }
 
+  /// Delete one chat message for EVERYONE (v0.6.21): remove its
+  /// node. Returns false when offline or when the server refuses
+  /// — the RTDB rules (v3) allow ONLY the sender to delete their
+  /// own message, so a child can never delete the parent's
+  /// messages. The live subscription stops delivering the removed
+  /// message, so it vanishes from every phone (see
+  /// mergeLiveChatPage for how the local list drops it).
+  Future<bool> deleteChatMessage(String circleId, String messageId) async {
+    if (!isAvailable) return false;
+    try {
+      await _root
+          .child(FirebaseConfig.circleChatPath(circleId))
+          .child(messageId)
+          .remove();
+      return true;
+    } catch (e) {
+      debugPrint('ApnaCircle: deleteChatMessage failed ($e)');
+      return false;
+    }
+  }
+
+  /// 1-week retention (v0.6.21): delete expired chat messages from
+  /// the server. Runs at most once a day per phone (the check is
+  /// stored in SharedPreferences), so it costs almost nothing.
+  /// Deletes (a) ANY message whose atMs is older than 7 days —
+  /// rules v3 allow any circle member to delete those — and
+  /// (b) the current user's OWN older messages (sender-only
+  /// delete, already allowed by v2/v3). Returns how many were
+  /// removed. Old messages (sent before v0.6.21, no atMs) are
+  /// pruned by their own sender under (b); they are already
+  /// hidden everywhere by the local expiry filter.
+  Future<int> pruneOldChatMessages(String circleId) async {
+    if (!isAvailable) return 0;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final lastKey = 'chat_prune_last_$circleId';
+      final last = prefs.getInt(lastKey) ?? 0;
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      if (nowMs - last < const Duration(days: 1).inMilliseconds) {
+        return 0;
+      }
+      final snap =
+          await _root.child(FirebaseConfig.circleChatPath(circleId)).get();
+      if (!snap.exists) return 0;
+      final cutoff = retentionCutoffMs(nowMs);
+      final myUid = uid;
+      int removed = 0;
+      for (final child in snap.children) {
+        if (removed >= 200) break;
+        final raw = SyncService.asMap(child.value);
+        if (raw.isEmpty) continue;
+        final atMs = raw['atMs'];
+        final senderId = raw['senderId'] as String?;
+        final expiredByMs = atMs is int && atMs < cutoff;
+        final expiredOwn =
+            senderId != null && senderId == myUid && _isExpiredAt(raw['at']);
+        if (expiredByMs || expiredOwn) {
+          await child.ref.remove();
+          removed++;
+        }
+      }
+      await prefs.setInt(lastKey, nowMs);
+      if (removed > 0) {
+        debugPrint('ApnaCircle: pruned $removed expired chat messages');
+      }
+      return removed;
+    } catch (e) {
+      debugPrint('ApnaCircle: pruneOldChatMessages failed ($e)');
+      return 0;
+    }
+  }
+
+  static bool _isExpiredAt(Object? atRaw) {
+    if (atRaw is! String) return false;
+    try {
+      return isChatMessageExpired(at: DateTime.parse(atRaw));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Read receipts (v0.6.21): mark [messageIds] as read by me.
+  /// Writes `seenBy/{myUid} = nowMs` under each message in ONE
+  /// multi-path update. Rules v3 allow a member to write ONLY
+  /// their own seenBy entry, so nobody can fake someone else's
+  /// read. No-op offline.
+  Future<void> markMessagesSeen(
+    String circleId,
+    List<String> messageIds,
+  ) async {
+    if (!isAvailable || messageIds.isEmpty) return;
+    final myUid = uid;
+    if (myUid == null) return;
+    try {
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final updates = <String, Object?>{};
+      for (final id in messageIds) {
+        updates['${FirebaseConfig.circleChatPath(circleId)}/$id/seenBy/$myUid'] =
+            nowMs;
+      }
+      await _root.update(updates);
+    } catch (e) {
+      debugPrint('ApnaCircle: markMessagesSeen failed ($e)');
+    }
+  }
+
   /// SOS / battery-low / phone-off event for the whole circle.
   Future<void> sendEvent(String circleId, CircleEvent event) async {
     if (!isAvailable) return;
@@ -712,9 +815,8 @@ class SyncService extends ChangeNotifier {
   Future<String?> fetchPinHash(String circleId) async {
     if (!isAvailable) return null;
     try {
-      final snap = await _root
-          .child(FirebaseConfig.circleInfoPath(circleId))
-          .get();
+      final snap =
+          await _root.child(FirebaseConfig.circleInfoPath(circleId)).get();
       if (!snap.exists) return null;
       return asMap(snap.value)['pinHash'] as String?;
     } catch (e) {
