@@ -13,6 +13,7 @@ import 'package:apnacircle/services/family_service.dart';
 import 'package:apnacircle/services/notification_service.dart';
 import 'package:apnacircle/services/sms_location_service.dart';
 import 'package:apnacircle/services/sos_sms_service.dart';
+import 'package:apnacircle/services/media_service.dart';
 import 'package:apnacircle/services/sync_service.dart';
 import 'package:apnacircle/services/trial_service.dart';
 import 'package:flutter/material.dart';
@@ -205,6 +206,7 @@ void main() {
             ChangeNotifierProvider.value(
               value: ChatDeleteService(family: family),
             ),
+            Provider.value(value: MediaService(sync)),
             Provider.value(value: sms),
             Provider.value(value: SosSmsService(sms)),
           ],
