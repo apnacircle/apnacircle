@@ -8,9 +8,9 @@ import 'package:apnacircle/services/pin_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('14 alerts exist', () {
-    expect(AlertType.values.length, 14);
-    expect(defaultAlertSettings().length, 14);
+  test('15 alerts exist', () {
+    expect(AlertType.values.length, 15);
+    expect(defaultAlertSettings().length, 15);
   });
 
   test('family circle max is 10', () {
