@@ -16,14 +16,30 @@ import 'sync_service.dart';
 /// The loud alerts channel — high importance, sound + vibration +
 /// lights. Created at startup (and in the background handler) so it
 /// exists before any alert arrives.
+///
+/// v0.6.17: custom 3-second siren (`res/raw/sos_alert.wav`) +
+/// 3-second vibration pattern. The user reported (26 Nov 2026)
+/// the old alert was "bohat chhota" — the short default system
+/// ding, over before anyone noticed it. The siren is a loud hi-lo
+/// alarm at full amplitude; the pattern buzzes for the same 3 s.
+/// HONEST LIMIT: the sound still plays on the phone's notification
+/// volume — if the phone is on silent / Do Not Disturb, Android
+/// will not play it. Only an alarm-stream full-screen activity
+/// could bypass that, which this version does not add.
 local.AndroidNotificationChannel _alertChannel() =>
-    const local.AndroidNotificationChannel(
+    local.AndroidNotificationChannel(
       AlertNotifications.channelId,
       AlertNotifications.channelName,
       description: AlertNotifications.channelDescription,
       importance: local.Importance.max,
       playSound: true,
+      sound: const local.RawResourceAndroidNotificationSound(
+        AlertNotifications.alertSoundName,
+      ),
       enableVibration: true,
+      vibrationPattern: Int64List.fromList(
+        AlertNotifications.alertVibrationPatternMs,
+      ),
       enableLights: true,
     );
 
@@ -98,7 +114,15 @@ local.NotificationDetails _alertDetails({required bool isSos}) {
       importance: local.Importance.max,
       priority: local.Priority.high,
       playSound: true,
+      // v0.6.17: same 3-second siren + 3-second buzz as the channel
+      // (pre-Android-8 devices read the sound from here).
+      sound: const local.RawResourceAndroidNotificationSound(
+        AlertNotifications.alertSoundName,
+      ),
       enableVibration: true,
+      vibrationPattern: Int64List.fromList(
+        AlertNotifications.alertVibrationPatternMs,
+      ),
       enableLights: true,
       fullScreenIntent: isSos,
       category: isSos
@@ -314,6 +338,12 @@ class NotificationService extends ChangeNotifier {
       final android = _local
           .resolvePlatformSpecificImplementation<
               local.AndroidFlutterLocalNotificationsPlugin>();
+      // v0.6.17: drop the old channel — its sound/vibration are
+      // frozen by Android and can never become the 3-second siren.
+      // Deleting is safe: nothing posts to it anymore.
+      await android?.deleteNotificationChannel(
+        channelId: AlertNotifications.legacyChannelId,
+      );
       await android?.createNotificationChannel(_alertChannel());
       await android?.createNotificationChannel(_chatChannel());
       _localReady = true;
