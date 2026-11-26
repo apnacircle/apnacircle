@@ -5,6 +5,9 @@ import 'package:apnacircle/screens/home_map_screen.dart';
 import 'package:apnacircle/services/auth_service.dart';
 import 'package:apnacircle/services/billing_service.dart';
 import 'package:apnacircle/services/family_service.dart';
+import 'package:apnacircle/services/chat_delete_service.dart';
+import 'package:apnacircle/services/call_service.dart';
+import 'package:apnacircle/services/alert_history_service.dart';
 import 'package:apnacircle/services/notification_service.dart';
 import 'package:apnacircle/services/sms_location_service.dart';
 import 'package:apnacircle/services/sync_service.dart';
@@ -30,17 +33,14 @@ void main() {
       final live = [_msg('k50', 2), _msg('k51', 1)];
       final older = [_msg('k48', 5), _msg('k49', 3)];
       final merged = mergeChatMessages(live, older);
-      expect(merged.map((m) => m.id).toList(),
-          ['k48', 'k49', 'k50', 'k51']);
+      expect(merged.map((m) => m.id).toList(), ['k48', 'k49', 'k50', 'k51']);
     });
 
-    test('a live update never drops messages from a loaded older page',
-        () {
+    test('a live update never drops messages from a loaded older page', () {
       final loaded = [_msg('k48', 5), _msg('k49', 3), _msg('k50', 2)];
       final liveUpdate = [_msg('k50', 2), _msg('k51', 1)];
       final merged = mergeChatMessages(loaded, liveUpdate);
-      expect(merged.map((m) => m.id).toList(),
-          ['k48', 'k49', 'k50', 'k51']);
+      expect(merged.map((m) => m.id).toList(), ['k48', 'k49', 'k50', 'k51']);
     });
 
     test('de-duplicates by id, newest copy wins', () {
@@ -161,6 +161,15 @@ void main() {
               value: NotificationService(sync),
             ),
             ChangeNotifierProvider.value(value: family),
+            ChangeNotifierProvider.value(
+              value: CallService(family: family),
+            ),
+            ChangeNotifierProvider.value(
+              value: AlertHistoryService(family: family),
+            ),
+            ChangeNotifierProvider.value(
+              value: ChatDeleteService(family: family),
+            ),
             Provider.value(value: SmsLocationService()),
           ],
           child: const MaterialApp(home: HomeMapScreen()),
