@@ -6,10 +6,12 @@ import 'package:provider/provider.dart';
 import '../core/chat_delete.dart';
 import '../core/chat_paging.dart';
 import '../core/chat_receipts.dart';
+import '../core/media_share.dart';
 import '../models/chat_message.dart';
 import '../services/auth_service.dart';
 import '../services/chat_delete_service.dart';
 import '../services/family_service.dart';
+import '../services/media_service.dart';
 import '../services/notification_service.dart';
 import '../services/sync_service.dart';
 
@@ -52,6 +54,11 @@ class _ChatScreenState extends State<ChatScreen> {
   // v0.6.21 read receipts: message ids already marked seen by me
   // this session, so we never write the same mark twice.
   final Set<String> _seenMarked = {};
+  // v0.6.23 media sharing: message ids currently downloading
+  // (their button shows a spinner instead), and whether a media
+  // send (pick → compress → upload) is in flight.
+  final Set<String> _downloadingIds = {};
+  bool _sendingMedia = false;
 
   @override
   void initState() {
@@ -66,6 +73,13 @@ class _ChatScreenState extends State<ChatScreen> {
       // v0.6.21: 1-week retention — prune expired messages from the
       // server (at most once a day per phone, inside the call).
       unawaited(sync.pruneOldChatMessages(sync.activeCircleId!));
+      // v0.6.23: media prune — delete expired / fully-downloaded
+      // files from Storage (at most once a day per phone).
+      final family = context.read<FamilyService>();
+      unawaited(context.read<MediaService>().pruneExpiredMedia(
+            circleId: sync.activeCircleId!,
+            memberIds: family.members.map((m) => m.id).toList(),
+          ));
       if (_subscribed) return;
       _subscribed = true;
       sync.subscribeChat(sync.activeCircleId!, (remote) {
@@ -223,6 +237,263 @@ class _ChatScreenState extends State<ChatScreen> {
         at: DateTime.now(),
       ));
     });
+  }
+
+  /// Media sharing (v0.6.23): the attach sheet — Photo / Video /
+  /// Audio / Document. Demo mode (no sync) refuses with a plain
+  /// message: there is no server to upload to.
+  Future<void> _showAttachSheet() async {
+    final sync = context.read<SyncService>();
+    if (!sync.isAvailable || sync.activeCircleId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Media bhejne ke liye internet aur circle chahiye.'),
+        ),
+      );
+      return;
+    }
+    final choice = await showModalBottomSheet<MediaType>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo),
+              title: const Text('Photo'),
+              subtitle: const Text('Compress ho kar jayegi.'),
+              onTap: () => Navigator.pop(ctx, MediaType.photo),
+            ),
+            ListTile(
+              leading: const Icon(Icons.videocam),
+              title: const Text('Video'),
+              subtitle: const Text('Chhoti kar ke bhejta hai.'),
+              onTap: () => Navigator.pop(ctx, MediaType.video),
+            ),
+            ListTile(
+              leading: const Icon(Icons.audiotrack),
+              title: const Text('Audio'),
+              onTap: () => Navigator.pop(ctx, MediaType.audio),
+            ),
+            ListTile(
+              leading: const Icon(Icons.insert_drive_file),
+              title: const Text('Document'),
+              onTap: () => Navigator.pop(ctx, MediaType.document),
+            ),
+            ListTile(
+              leading: const Icon(Icons.close),
+              title: const Text('Cancel'),
+              onTap: () => Navigator.pop(ctx),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    unawaited(_sendMedia(choice));
+  }
+
+  /// Media sharing (v0.6.23): pick → compress → upload → send
+  /// the chat message. The message appears on every phone through
+  /// the normal live subscription.
+  Future<void> _sendMedia(MediaType type) async {
+    if (_sendingMedia) return;
+    final sync = context.read<SyncService>();
+    final family = context.read<FamilyService>();
+    final auth = context.read<AuthService>();
+    final media = context.read<MediaService>();
+    final circleId = sync.activeCircleId;
+    if (circleId == null) return;
+    setState(() => _sendingMedia = true);
+    _snack('Bhej raha hun…');
+    final (file, pickError) = await media.pickAndCompress(type);
+    if (!mounted) return;
+    if (pickError != null) {
+      setState(() => _sendingMedia = false);
+      _snack(pickError);
+      return;
+    }
+    if (file == null) {
+      // User cancelled the picker.
+      setState(() => _sendingMedia = false);
+      return;
+    }
+    final fileName = file.path.split('/').last;
+    final messageId = sync.newChatMessageKey(circleId);
+    final (url, uploadError) = await media.uploadMedia(
+      circleId: circleId,
+      messageId: messageId,
+      file: file,
+      fileName: fileName,
+    );
+    if (!mounted) return;
+    if (uploadError != null || url == null) {
+      setState(() => _sendingMedia = false);
+      _snack(uploadError ?? 'Upload nahi ho saki.');
+      return;
+    }
+    final size = await file.length();
+    final mine = family.myMember;
+    final ok = await sync.sendMediaMessage(
+      circleId,
+      ChatMessage(
+        id: messageId,
+        senderId: sync.uid ?? 'me',
+        senderName: mine?.name ?? auth.displayName ?? auth.phoneNumber ?? 'Me',
+        text: fileName,
+        at: DateTime.now(),
+        mediaType: type,
+        mediaUrl: url,
+        storagePath: MediaService.storagePath(
+          circleId: circleId,
+          senderUid: sync.uid ?? 'me',
+          messageId: messageId,
+          fileName: fileName,
+        ),
+        fileName: fileName,
+        fileSize: size,
+        mediaUploadedAtMs: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
+    if (!mounted) return;
+    setState(() => _sendingMedia = false);
+    _snack(ok ? 'Bhej di.' : 'Bhej nahi saki — dobara try karo.');
+  }
+
+  void _snack(String text) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  /// Media sharing (v0.6.23): download one shared file to this
+  /// phone. Photos/videos land in the gallery; audio/documents
+  /// open the share sheet (the user picks where they go).
+  Future<void> _downloadMedia(ChatMessage m) async {
+    if (_downloadingIds.contains(m.id)) return;
+    final family = context.read<FamilyService>();
+    setState(() => _downloadingIds.add(m.id));
+    final (ok, message) = await context.read<MediaService>().downloadMedia(
+          m: m,
+          memberIds: family.members.map((e) => e.id).toList(),
+        );
+    if (!mounted) return;
+    setState(() => _downloadingIds.remove(m.id));
+    _snack(message);
+    if (ok) setState(() {});
+  }
+
+  /// Media sharing (v0.6.23): one shared file's row — thumbnail
+  /// (photo), play tile (video), or file line (audio/document),
+  /// with Download / Downloaded / Removed states. "Removed"
+  /// means the server file is gone: 24 hours passed, or every
+  /// member already downloaded it. The chat message itself stays
+  /// until the 1-week chat rule.
+  Widget _mediaRow(ChatMessage m) {
+    final sync = context.read<SyncService>();
+    final family = context.read<FamilyService>();
+    final memberIds = family.members.map((e) => e.id).toList();
+    final myUid = sync.isAvailable ? (sync.uid ?? '') : 'me';
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final uploadedAt = m.mediaUploadedAtMs ?? m.atMs;
+    final expired = isMediaExpired(uploadedAtMs: uploadedAt, nowMs: nowMs);
+    final allDownloaded = allMembersDownloaded(
+      downloadedBy: m.downloadedBy,
+      memberIds: memberIds,
+      senderId: m.senderId,
+    );
+    final iDownloaded = m.downloadedBy.containsKey(myUid);
+    final removed = expired || allDownloaded;
+    final type = m.mediaType ?? MediaType.document;
+    final sizeLabel = m.fileSize == null
+        ? ''
+        : ' · ${formatMediaSize(m.fileSize!)}';
+    final downloading = _downloadingIds.contains(m.id);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (type == MediaType.photo && !removed && m.mediaUrl != null)
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.network(
+              m.mediaUrl!,
+              height: 180,
+              width: double.infinity,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) =>
+                  const SizedBox(
+                height: 120,
+                child: Center(child: Icon(Icons.broken_image)),
+              ),
+            ),
+          )
+        else if (type == MediaType.video && !removed)
+          Container(
+            height: 120,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.black87,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.play_circle_fill,
+                    color: Colors.white, size: 44),
+                const SizedBox(height: 4),
+                Text(
+                  'Video$sizeLabel',
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ],
+            ),
+          )
+        else
+          Row(
+            children: [
+              Icon(
+                type == MediaType.audio
+                    ? Icons.audiotrack
+                    : Icons.insert_drive_file,
+                size: 20,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  '${mediaTypeLabel(type)}: ${m.fileName ?? m.text}$sizeLabel',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        const SizedBox(height: 6),
+        if (removed)
+          const Text(
+            'Removed from server — 24 hours passed or everyone downloaded it.',
+            style: TextStyle(fontSize: 11, color: Colors.grey),
+          )
+        else if (downloading)
+          const Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              SizedBox(width: 8),
+              Text('Downloading…', style: TextStyle(fontSize: 12)),
+            ],
+          )
+        else if (iDownloaded)
+          const Text(
+            'Downloaded ✓',
+            style: TextStyle(fontSize: 12, color: Colors.green),
+          )
+        else
+          FilledButton.tonal(
+            onPressed: () => _downloadMedia(m),
+            child: const Text('Download'),
+          ),
+      ],
+    );
   }
 
   /// Long-press a message (v0.6.21): delete it for me (any
@@ -402,7 +673,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(m.text),
+                            if (m.hasMedia) _mediaRow(m) else Text(m.text),
                             if (mine && readN > 0)
                               Text(
                                 'Read by $readN',
@@ -424,6 +695,12 @@ class _ChatScreenState extends State<ChatScreen> {
           padding: const EdgeInsets.all(12),
           child: Row(
             children: [
+              // v0.6.23: attach — photo / video / audio / document.
+              IconButton(
+                icon: const Icon(Icons.attach_file),
+                tooltip: 'Send photo, video or file',
+                onPressed: _sendingMedia ? null : _showAttachSheet,
+              ),
               Expanded(
                 child: TextField(
                   controller: _ctrl,
