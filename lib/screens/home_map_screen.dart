@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/alert_notification.dart';
+import '../core/alerts.dart';
 import '../core/app_lock_service.dart';
 import '../core/chat_notification.dart';
 import '../core/location_service.dart';
@@ -28,6 +29,7 @@ import '../screens/plan_screen.dart';
 import '../screens/settings_screen.dart';
 import '../services/background_location_service.dart';
 import '../services/family_service.dart';
+import '../services/sos_sms_service.dart';
 import '../services/notification_service.dart';
 import '../services/sms_location_service.dart';
 import '../services/sync_service.dart';
@@ -705,10 +707,10 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   /// Settings. The map platform view was never mounted for other
   /// tabs, but the widget subtree + marker work was wasted on
   /// every setState. The selected tab renders exactly as before.
-  Widget _pageFor(int tab, List<Member> members) {
+  Widget _pageFor(int tab, List<Member> members, bool smsSosOn) {
     switch (tab) {
       case 0:
-        return _mapTab(members);
+        return _mapTab(members, smsSosOn);
       case 1:
         return const AlertsScreen();
       case 2:
@@ -726,6 +728,10 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   Widget build(BuildContext context) {
     final family = context.watch<FamilyService>();
     final members = family.members;
+    // v0.6.18: the separate SMS SOS button shows only when the
+    // parent turned the "SOS by SMS" alert ON (default OFF).
+    final smsSosOn =
+        family.myMember?.alerts[AlertType.sosSms] ?? false;
     return Scaffold(
       appBar: AppBar(
         title: const Text('ApnaCircle'),
@@ -752,17 +758,37 @@ class _HomeMapScreenState extends State<HomeMapScreen>
           ),
         ],
       ),
-      body: _pageFor(_tab, members),
+      body: _pageFor(_tab, members, smsSosOn),
       floatingActionButton: _tab == 0
-          ? FloatingActionButton.extended(
-              onPressed: () => _sendSos(context),
-              backgroundColor: Colors.red,
-              // v0.6.1: was Icons.sos — that icon IS the letters "SOS",
-              // so next to the "SOS" label the button read "SOS SOS".
-              // Icons.emergency is a siren glyph, so the label "SOS"
-              // now appears exactly once.
-              icon: const Icon(Icons.emergency),
-              label: const Text('SOS'),
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // v0.6.18: a SEPARATE SMS SOS button — only when the
+                // parent turned the "SOS by SMS" alert ON (default
+                // OFF). Orange, above the normal SOS button, so the
+                // two can never be confused; it asks first (see
+                // _sendSmsSos) because every press costs money.
+                if (smsSosOn)
+                  FloatingActionButton.extended(
+                    heroTag: 'sms_sos',
+                    onPressed: () => _sendSmsSos(context),
+                    backgroundColor: Colors.orange,
+                    icon: const Icon(Icons.sms),
+                    label: const Text('SMS SOS'),
+                  ),
+                if (smsSosOn) const SizedBox(height: 12),
+                FloatingActionButton.extended(
+                  heroTag: 'sos',
+                  onPressed: () => _sendSos(context),
+                  backgroundColor: Colors.red,
+                  // v0.6.1: was Icons.sos — that icon IS the letters "SOS",
+                  // so next to the "SOS" label the button read "SOS SOS".
+                  // Icons.emergency is a siren glyph, so the label "SOS"
+                  // now appears exactly once.
+                  icon: const Icon(Icons.emergency),
+                  label: const Text('SOS'),
+                ),
+              ],
             )
           : null,
       bottomNavigationBar: BottomNavigationBar(
@@ -781,7 +807,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     );
   }
 
-  Widget _mapTab(List<Member> members) => Column(
+  Widget _mapTab(List<Member> members, bool smsSosOn) => Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
@@ -865,9 +891,13 @@ class _HomeMapScreenState extends State<HomeMapScreen>
             height: 220,
             child: ListView(
               // Bottom padding clears the floating SOS button —
-              // see membersListBottomPadding above.
-              padding: const EdgeInsets.only(
-                bottom: membersListBottomPadding,
+              // see membersListBottomPadding above. With the
+              // second (SMS SOS) button showing, the list needs
+              // room for both.
+              padding: EdgeInsets.only(
+                bottom: smsSosOn
+                    ? membersListBottomPadding + 60
+                    : membersListBottomPadding,
               ),
               children: [
                 for (final m in members) _memberCard(m),
@@ -1030,13 +1060,49 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     );
   }
 
-  Future<void> _sendSos(BuildContext context) async {
+  Future<void> _sendSos(BuildContext context) =>
+      _sendAlert(context, viaSms: false);
+
+  /// v0.6.18: the SEPARATE SMS SOS button. It asks FIRST, because
+  /// it costs money (~Rs. 2 per member SMS, charged to this SIM):
+  /// nothing is sent unless the user confirms. Only for a real
+  /// emergency — when the net is off or the family's apps are
+  /// closed, so the normal SOS cannot reach them.
+  Future<void> _sendSmsSos(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Send SMS SOS?'),
+        content: const Text(
+          'This texts every family member (about Rs. 2 per member '
+          'SMS, charged to your SIM). Use only in a real emergency.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Send SMS'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    await _sendAlert(context, viaSms: true);
+  }
+
+  Future<void> _sendAlert(BuildContext context,
+      {required bool viaSms}) async {
     final family = context.read<FamilyService>();
     final sync = context.read<SyncService>();
+    final sosSms = context.read<SosSmsService>();
     final mine = family.myMember;
     // v0.3: the SOS event goes to the whole circle (RTDB) so the
     // parent's phone gets it live; FCM push for the same event
     // needs a server (see NotificationService — not faked here).
+    var rtdbSent = false;
     if (sync.isAvailable && sync.activeCircleId != null && mine != null) {
       await sync.sendEvent(
         sync.activeCircleId!,
@@ -1049,10 +1115,53 @@ class _HomeMapScreenState extends State<HomeMapScreen>
           lon: mine.lon,
         ),
       );
+      rtdbSent = true;
+    }
+    // v0.6.18: SOS by SMS to the whole family — only from the
+    // separate SMS SOS button (viaSms), never from the normal SOS
+    // button. It works even when the app is closed on their phones
+    // (and even when THIS phone has no data), because it needs no
+    // server and no internet, only mobile signal. It runs whether
+    // or not the RTDB event above went out. Costs the sender
+    // ~Rs. 2 per member SMS without a bundle; a successful batch
+    // is throttled for 60 s so a double-tap does not charge twice.
+    var smsSent = 0;
+    var smsNeeded = false;
+    var smsDenied = false;
+    var smsThrottled = false;
+    if (viaSms && mine != null) {
+      final result = await sosSms.sendSosSms(
+        fromName: mine.name,
+        members: family.members,
+        senderId: mine.id,
+        lat: mine.lat,
+        lon: mine.lon,
+      );
+      smsSent = result.sent;
+      smsNeeded = result.recipients > 0;
+      smsDenied = result.permissionDenied;
+      smsThrottled = result.throttled;
     }
     if (!context.mounted) return;
+    final plural = smsSent == 1 ? '' : 's';
+    final String message;
+    if (rtdbSent && smsSent > 0) {
+      message = 'SOS sent to your family! SMS to $smsSent member$plural.';
+    } else if (rtdbSent && smsDenied && smsNeeded) {
+      message = 'SOS sent to your family! (SMS blocked — SMS permission needed.)';
+    } else if (rtdbSent) {
+      message = 'SOS sent to your family!';
+    } else if (smsSent > 0) {
+      message = 'SOS sent by SMS to $smsSent member$plural (no internet).';
+    } else if (smsThrottled) {
+      message = 'SOS already sent a moment ago — wait a minute before sending again.';
+    } else if (smsDenied) {
+      message = 'SOS could not be sent — allow SMS permission and try again.';
+    } else {
+      message = 'SOS could not be sent — check signal and try again.';
+    }
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('SOS sent to your family!')),
+      SnackBar(content: Text(message)),
     );
   }
 }
