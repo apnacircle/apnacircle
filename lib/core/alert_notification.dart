@@ -42,7 +42,42 @@ class AlertNotifications {
   /// FCM's default channel at this id, so a push that arrives while
   /// the app is closed/killed is still shown by the system on THIS
   /// loud channel instead of the silent default one.
-  static const String channelId = 'apnacircle_alerts';
+  ///
+  /// v0.6.17: id is `..._v2`, NOT the original `apnacircle_alerts`.
+  /// Android NEVER updates an existing channel's sound/vibration —
+  /// the v0.6.10 channel on the user's phone is stuck on the short
+  /// default system "ding", which is exactly the complaint (26 Nov
+  /// 2026: "bohat chhota hai, pata hi nahi chalta"). A fresh id is
+  /// the only way the new 3-second siren + 3-second vibration
+  /// actually apply. The old channel is deleted at startup and is
+  /// never used again.
+  static const String channelId = 'apnacircle_alerts_v2';
+
+  /// Previous channel id (v0.6.10–v0.6.16) — deleted at startup,
+  /// never posted to again.
+  static const String legacyChannelId = 'apnacircle_alerts';
+
+  /// Custom alarm sound (v0.6.17): `res/raw/sos_alert.wav`, a
+  /// 3-second hi-lo siren generated for this app. Used as the
+  /// channel sound AND the per-notification sound, so the alert
+  /// rings a full 3 seconds instead of the ~1 s default ding.
+  static const String alertSoundName = 'sos_alert';
+
+  /// Vibration pattern in milliseconds (v0.6.17): wait 0, then 4
+  /// buzzes of 600 ms with 200 ms gaps — 3000 ms total, matching
+  /// the 3-second siren, so the phone buzzes for as long as it
+  /// rings. Stored on the channel at creation (Android 8+ reads
+  /// the pattern from the channel, not the notification).
+  static const List<int> alertVibrationPatternMs = [
+    0, 600, 200, 600, 200, 600, 200, 600,
+  ];
+
+  /// Total vibration time (pattern sum) — the test asserts this is
+  /// at least 2.5 s, so a future edit cannot silently shorten the
+  /// alert back to a single buzz.
+  static int get alertVibrationTotalMs =>
+      alertVibrationPatternMs.fold(0, (a, b) => a + b);
+
   static const String channelName = 'ApnaCircle Alerts';
   static const String channelDescription =
       'Loud emergency alerts from your family — SOS and safety '
