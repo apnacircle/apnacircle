@@ -1,4 +1,5 @@
-/// The 14 alerts in ApnaCircle (agreed 21 Nov 2026).
+/// The 15 alerts in ApnaCircle (agreed 21 Nov 2026; SOS by SMS
+/// added 26 Nov 2026).
 /// Every alert has its OWN on/off switch, and changing any of them
 /// requires the parent PIN (see PinService + AlertsScreen).
 /// Remote control: the parent changes these on THEIR phone; the
@@ -15,6 +16,7 @@ enum AlertType {
   longStay,
   noMovement,
   smsLocationWhenNetOff,
+  sosSms,
   shakeSos,
   loudSosOnSilent,
   autoCall1122,
@@ -47,6 +49,8 @@ extension AlertTypeInfo on AlertType {
         return 'No movement';
       case AlertType.smsLocationWhenNetOff:
         return 'SMS location when net is off';
+      case AlertType.sosSms:
+        return 'SOS by SMS';
       case AlertType.shakeSos:
         return 'Shake phone for SOS';
       case AlertType.loudSosOnSilent:
@@ -60,11 +64,29 @@ extension AlertTypeInfo on AlertType {
 
   /// Only the parent can turn this one on: it dials 1122.
   bool get needsExplicitOptIn => this == AlertType.autoCall1122;
+
+  /// Small print under the switch, or null for plain alerts.
+  /// SOS by SMS costs the sender's mobile balance, so the price
+  /// is shown right where the switch is.
+  String? get hintEn {
+    switch (this) {
+      case AlertType.autoCall1122:
+        return 'Needs explicit parent opt-in (dials 1122).';
+      case AlertType.sosSms:
+        return 'Costs about Rs. 2 per member SMS — the sender pays.';
+      default:
+        return null;
+    }
+  }
 }
 
-/// Default state: safety alerts ON, the two intrusive ones OFF
-/// until the parent explicitly turns them on.
+/// Default state: safety alerts ON, the intrusive or costly ones
+/// OFF until the parent explicitly turns them on. SOS by SMS is
+/// OFF by default because every SOS press then costs the sender
+/// about Rs. 2 per member SMS — nobody pays without choosing to.
 Map<AlertType, bool> defaultAlertSettings() => {
       for (final a in AlertType.values)
-        a: !(a == AlertType.autoCall1122 || a == AlertType.shakeSos),
+        a: !(a == AlertType.autoCall1122 ||
+            a == AlertType.shakeSos ||
+            a == AlertType.sosSms),
     };
