@@ -20,14 +20,16 @@ import 'services/pin_service.dart';
 import 'services/sim_change_service.dart';
 import 'services/sms_location_service.dart';
 import 'services/sos_sms_service.dart';
+import 'services/setup_service.dart';
 import 'services/sync_service.dart';
 import 'services/trial_service.dart';
 
 /// ApnaCircle entry point.
 ///
 /// First run flow: LanguageSelect -> Auth (sign in / demo) ->
-/// PinSetup (parent) -> Home (map). Returning users go straight
-/// to Home if language + PIN are saved.
+/// PinSetup (parent) -> Setup (one-time guided permissions) ->
+/// Home (map). Returning users go straight to Home if language +
+/// PIN are saved.
 ///
 /// v0.3: Firebase is initialised FIRST, guarded — when no Firebase
 /// project exists yet (no google-services.json), initialiseApp()
@@ -58,6 +60,7 @@ Future<void> main() async {
   final simChange = SimChangeService();
   final deviceAdmin = DeviceAdminService();
   final emailOtp = EmailOtpService();
+  final setup = SetupService();
 
   if (FirebaseBootstrap.available) {
     FirebaseMessaging.onBackgroundMessage(
@@ -74,6 +77,7 @@ Future<void> main() async {
   await sync.load();
   await trial.load();
   await family.load();
+  await setup.load();
 
   runApp(
     MultiProvider(
@@ -91,6 +95,7 @@ Future<void> main() async {
         Provider.value(value: sosSms),
         Provider.value(value: simChange),
         Provider.value(value: deviceAdmin),
+        ChangeNotifierProvider.value(value: setup),
       ],
       child: const ApnaCircleApp(),
     ),
