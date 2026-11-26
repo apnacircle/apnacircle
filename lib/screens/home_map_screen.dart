@@ -80,7 +80,11 @@ class HomeMapScreen extends StatefulWidget {
 
 class _HomeMapScreenState extends State<HomeMapScreen>
     with WidgetsBindingObserver {
-  int _tab = 0;
+  // v0.6.24: tab order is Chat, Map, Alerts, Locks, Plan,
+  // Settings (the user asked for Chat first, then Map). The app
+  // still OPENS on the Map (index 1) — the live family locations
+  // are the home screen; Chat is one tap to the left.
+  int _tab = 1;
 
   // Map camera fallback — Lahore, in lib/core/osm_map.dart
   // (osmMapFallbackLat/osmMapFallbackLon). It is the initial camera
@@ -406,21 +410,21 @@ class _HomeMapScreenState extends State<HomeMapScreen>
       notifications.tapRequests.listen((payload) {
         if (!mounted) return;
         if (payload == AlertNotifications.tapPayload) {
-          setState(() => _tab = 1);
+          setState(() => _tab = 2);
         }
         if (payload == ChatNotifications.tapPayload) {
-          setState(() => _tab = 3);
+          setState(() => _tab = 0);
         }
       });
       final pendingTap = notifications.takePendingTap();
       if (pendingTap == AlertNotifications.tapPayload) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) setState(() => _tab = 1);
+          if (mounted) setState(() => _tab = 2);
         });
       }
       if (pendingTap == ChatNotifications.tapPayload) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) setState(() => _tab = 3);
+          if (mounted) setState(() => _tab = 0);
         });
       }
       // v0.6.21: incoming calls — a ringing call for me opens
@@ -752,15 +756,17 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   /// tabs, but the widget subtree + marker work was wasted on
   /// every setState. The selected tab renders exactly as before.
   Widget _pageFor(int tab, List<Member> members, bool smsSosOn) {
+    // v0.6.24 order: 0 Chat, 1 Map, 2 Alerts, 3 Locks, 4 Plan,
+    // 5 Settings (default).
     switch (tab) {
       case 0:
-        return _mapTab(members, smsSosOn);
-      case 1:
-        return const AlertsScreen();
-      case 2:
-        return const LocksScreen();
-      case 3:
         return const ChatScreen();
+      case 1:
+        return _mapTab(members, smsSosOn);
+      case 2:
+        return const AlertsScreen();
+      case 3:
+        return const LocksScreen();
       case 4:
         return const PlanScreen();
       default:
@@ -817,7 +823,9 @@ class _HomeMapScreenState extends State<HomeMapScreen>
         ],
       ),
       body: _pageFor(_tab, members, smsSosOn),
-      floatingActionButton: _tab == 0 && !_mapFullscreen
+      // v0.6.24: the SOS buttons live on the Map tab, which is
+      // now index 1 (Chat is 0).
+      floatingActionButton: _tab == 1 && !_mapFullscreen
           ? Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -856,11 +864,13 @@ class _HomeMapScreenState extends State<HomeMapScreen>
               type: BottomNavigationBarType.fixed,
               onTap: (i) => setState(() => _tab = i),
               items: const [
+                // v0.6.24 order: Chat first, then Map, then the
+                // rest as before.
+                BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Chat'),
                 BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Map'),
                 BottomNavigationBarItem(
                     icon: Icon(Icons.notifications), label: 'Alerts'),
                 BottomNavigationBarItem(icon: Icon(Icons.lock), label: 'Locks'),
-                BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Chat'),
                 BottomNavigationBarItem(icon: Icon(Icons.star), label: 'Plan'),
                 BottomNavigationBarItem(
                     icon: Icon(Icons.settings), label: 'Settings'),
