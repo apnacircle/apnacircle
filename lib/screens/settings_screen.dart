@@ -19,6 +19,7 @@ import 'auth_screen.dart';
 import 'circle_screen.dart';
 import 'device_owner_setup_screen.dart';
 import 'pin_gate_dialog.dart';
+import 'setup_screen.dart';
 
 /// Settings: language, member count (max 10), lite mode.
 ///
@@ -152,9 +153,8 @@ class _SettingsScreenState extends State<SettingsScreen>
       );
       if (ok != true) return;
       if (!mounted) return;
-      final granted = await context
-          .read<SmsLocationService>()
-          .ensureSmsPermission();
+      final granted =
+          await context.read<SmsLocationService>().ensureSmsPermission();
       if (!mounted) return;
       if (!granted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -357,6 +357,22 @@ class _SettingsScreenState extends State<SettingsScreen>
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const CircleScreen()),
+          ),
+        ),
+        // v0.6.19: the guided setup is re-openable from here — a
+        // parent can re-check every permission on this phone at
+        // any time (e.g. after the child turned one off).
+        ListTile(
+          leading: const Icon(Icons.checklist),
+          title: const Text('Setup — permissions'),
+          subtitle: const Text(
+            'Step-by-step: location, notifications, SMS, overlay, '
+            'App Lock, Device Admin, battery.',
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const SetupScreen()),
           ),
         ),
         if (!live)
