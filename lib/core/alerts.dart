@@ -65,6 +65,16 @@ extension AlertTypeInfo on AlertType {
   /// Only the parent can turn this one on: it dials 1122.
   bool get needsExplicitOptIn => this == AlertType.autoCall1122;
 
+  /// v0.6.21: does changing this switch need the parent PIN?
+  /// Every alert EXCEPT SOS by SMS: yes — a child cannot change
+  /// alerts from their own phone. SOS by SMS is the exception the
+  /// user ordered (26 Nov 2026): trouble can come to any child at
+  /// any time, and they must be able to turn the SMS alert on
+  /// THEMSELVES, without waiting for the admin's permission —
+  /// otherwise they cannot send an alert at all. The confirm
+  /// dialog (with the cost) still guards every send.
+  bool get needsParentPin => this != AlertType.sosSms;
+
   /// Small print under the switch, or null for plain alerts.
   /// SOS by SMS costs the sender's mobile balance, so the price
   /// is shown right where the switch is.
@@ -73,7 +83,7 @@ extension AlertTypeInfo on AlertType {
       case AlertType.autoCall1122:
         return 'Needs explicit parent opt-in (dials 1122).';
       case AlertType.sosSms:
-        return 'Costs about Rs. 2 per member SMS — the sender pays.';
+        return 'Costs about Rs. 2 per member SMS — the sender pays. Anyone in the family can turn this on — no parent PIN needed.';
       default:
         return null;
     }
