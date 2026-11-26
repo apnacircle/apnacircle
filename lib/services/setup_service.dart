@@ -129,6 +129,25 @@ extension SetupStepInfo on SetupStep {
   }
 }
 
+/// Opens the app's own Settings page (App info) — the manual route
+/// to the battery exemption.
+///
+/// v0.6.22: on Oppo/ColorOS (and on any phone after one denial)
+/// the exemption dialog never appears again — tapping "Allow" in
+/// the wizard then does nothing, no matter how often it is tapped.
+/// The only route left is the manual one the user was told in
+/// chat: Settings → Apps → ApnaCircle → Battery → "Unrestricted".
+/// This opens exactly that App info page, so the user never has
+/// to hunt for it. Returns false when the page could not be
+/// opened (never a crash).
+Future<bool> openBatterySettings() async {
+  try {
+    return await ph.openAppSettings();
+  } catch (_) {
+    return false;
+  }
+}
+
 /// Live status of one setup step on THIS phone.
 Future<bool> isSetupStepDone(SetupStep step) async {
   try {
