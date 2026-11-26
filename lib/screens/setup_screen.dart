@@ -162,12 +162,31 @@ class _SetupScreenState extends State<SetupScreen> with WidgetsBindingObserver {
                   const SizedBox(height: 4),
                   Text(step.why),
                   const SizedBox(height: 8),
-                  if (done != true)
+                  if (done != true) ...[
                     FilledButton.tonal(
                       onPressed: () => _runStep(step),
                       child: Text(step.actionLabel),
-                    )
-                  else
+                    ),
+                    if (step == SetupStep.battery) ...[
+                      // v0.6.22: the exemption dialog never comes
+                      // back on Oppo/ColorOS after one denial, so
+                      // "Allow" alone can be a dead button. The
+                      // manual route is always visible next to it:
+                      // it opens the App info page, where Battery
+                      // → "Unrestricted" lives.
+                      const SizedBox(height: 8),
+                      FilledButton.tonal(
+                        onPressed: () async {
+                          await openBatterySettings();
+                          if (!mounted) return;
+                          final d = await isSetupStepDone(step);
+                          if (!mounted) return;
+                          setState(() => _done[step] = d);
+                        },
+                        child: const Text('Open battery settings'),
+                      ),
+                    ],
+                  ] else
                     const Text(
                       'Done ✓',
                       style: TextStyle(color: Colors.green),
