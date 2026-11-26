@@ -28,18 +28,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('CARTO tiles (v0.6.19)', () {
-    test('tile template is CARTO light, no key', () {
+  group('OSM tiles (v0.6.20 — CARTO reverted)', () {
+    test('tile template is OSM, no key', () {
       expect(
         osmTileUrlTemplate,
-        'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
       );
       expect(osmTileUrlTemplate, isNot(contains('key')));
     });
 
-    test('attribution names CARTO as well as OSM', () {
-      expect(osmAttributionText, contains('OpenStreetMap contributors'));
-      expect(osmAttributionText, contains('CARTO'));
+    test('attribution is OSM only', () {
+      expect(osmAttributionText, 'OpenStreetMap contributors');
+      expect(osmAttributionText, isNot(contains('CARTO')));
     });
   });
 
