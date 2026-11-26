@@ -37,12 +37,13 @@ import '../services/sync_service.dart';
 /// Home: live map + member cards with distance (km), battery,
 /// online/offline + last location. SOS button is always visible.
 ///
-/// NOTE (v0.6.15): the map is OpenStreetMap (flutter_map) — free,
-/// no API key, no card. Google Maps was removed because the map tab
-/// was blank without a key, and the key needs Google Cloud billing.
-/// Tiles need internet (offline shows no tiles; the members list
-/// still works). Attribution "© OpenStreetMap contributors" is
-/// shown on the map, bottom-left (OSM licence).
+/// NOTE (v0.6.15, tiles v0.6.19): the map is flutter_map with
+/// CARTO's light basemap (OpenStreetMap data) — free, no API key,
+/// no card. Google Maps was removed because the map tab was blank
+/// without a key, and the key needs Google Cloud billing. Tiles
+/// need internet (offline shows no tiles; the members list still
+/// works). Attribution "© OpenStreetMap contributors, © CARTO" is
+/// shown on the map, bottom-left (licence).
 ///
 /// v0.3: this screen also runs the location loop — every 60 s it
 /// takes a GPS fix and:
@@ -53,6 +54,17 @@ import '../services/sync_service.dart';
 ///   (see SmsLocationService). SMS fallback needs the user's OK
 ///   first — the app explains why, then asks for the SMS
 ///   permission. Nothing is sent without that OK.
+///
+/// v0.6.19: the big status card shrinks to one small line exactly
+/// when sharing is fully working — "always" permission AND the
+/// background service running. Any problem keeps the full card
+/// (with its Fix button) visible.
+bool showCompactSharingCard({
+  required LocationSharingState? state,
+  required bool serviceRunning,
+}) =>
+    state == LocationSharingState.always && serviceRunning;
+
 class HomeMapScreen extends StatefulWidget {
   const HomeMapScreen({super.key});
   @override
@@ -92,6 +104,12 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   // running. Shown in the status card at the top of the Map tab.
   LocationSharingState? _sharingState;
   bool _serviceRunning = false;
+
+  // v0.6.19: fullscreen map (tap the map to enlarge it) + the
+  // members list collapsed by default, so the map gets most of the
+  // screen instead of the status card + list squeezing it.
+  bool _mapFullscreen = false;
+  bool _membersExpanded = false;
 
   // v0.6.9: the parent's Location Lock for ME (from my locks node
   // — see _ensureLockSubscription). When it is on and sharing is
@@ -153,9 +171,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   void _ensureLockSubscription() {
     if (!mounted) return;
     final sync = context.read<SyncService>();
-    if (!sync.isAvailable ||
-        sync.activeCircleId == null ||
-        sync.uid == null) {
+    if (!sync.isAvailable || sync.activeCircleId == null || sync.uid == null) {
       return;
     }
     if (sync.activeCircle?.isAdmin == true) return;
@@ -682,8 +698,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
             child: GestureDetector(
               onTap: () => _moveCamera(d.point, 14),
               child: CircleAvatar(
-                backgroundColor:
-                    d.isOnline ? Colors.green : Colors.grey,
+                backgroundColor: d.isOnline ? Colors.green : Colors.grey,
                 child: Text(
                   d.name[0],
                   style: const TextStyle(color: Colors.white),
@@ -730,8 +745,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     final members = family.members;
     // v0.6.18: the separate SMS SOS button shows only when the
     // parent turned the "SOS by SMS" alert ON (default OFF).
-    final smsSosOn =
-        family.myMember?.alerts[AlertType.sosSms] ?? false;
+    final smsSosOn = family.myMember?.alerts[AlertType.sosSms] ?? false;
     return Scaffold(
       appBar: AppBar(
         title: const Text('ApnaCircle'),
@@ -759,7 +773,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
         ],
       ),
       body: _pageFor(_tab, members, smsSosOn),
-      floatingActionButton: _tab == 0
+      floatingActionButton: _tab == 0 && !_mapFullscreen
           ? Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -791,25 +805,58 @@ class _HomeMapScreenState extends State<HomeMapScreen>
               ],
             )
           : null,
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _tab,
-        type: BottomNavigationBarType.fixed,
-        onTap: (i) => setState(() => _tab = i),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Map'),
-          BottomNavigationBarItem(icon: Icon(Icons.notifications), label: 'Alerts'),
-          BottomNavigationBarItem(icon: Icon(Icons.lock), label: 'Locks'),
-          BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Chat'),
-          BottomNavigationBarItem(icon: Icon(Icons.star), label: 'Plan'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
-        ],
-      ),
+      bottomNavigationBar: _mapFullscreen
+          ? null
+          : BottomNavigationBar(
+              currentIndex: _tab,
+              type: BottomNavigationBarType.fixed,
+              onTap: (i) => setState(() => _tab = i),
+              items: const [
+                BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Map'),
+                BottomNavigationBarItem(
+                    icon: Icon(Icons.notifications), label: 'Alerts'),
+                BottomNavigationBarItem(icon: Icon(Icons.lock), label: 'Locks'),
+                BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Chat'),
+                BottomNavigationBarItem(icon: Icon(Icons.star), label: 'Plan'),
+                BottomNavigationBarItem(
+                    icon: Icon(Icons.settings), label: 'Settings'),
+              ],
+            ),
     );
   }
 
-  Widget _mapTab(List<Member> members, bool smsSosOn) => Column(
-        children: [
-          Padding(
+  Widget _mapTab(List<Member> members, bool smsSosOn) {
+    // v0.6.19: when sharing is fine, the big status card shrinks
+    // to one small green line — the map is the point of this tab,
+    // and the user asked for it to be bigger.
+    final sharingOk = showCompactSharingCard(
+      state: _sharingState,
+      serviceRunning: _serviceRunning,
+    );
+    final Widget statusWidget = sharingOk
+        ? Container(
+            width: double.infinity,
+            color: Colors.green.shade50,
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 6,
+            ),
+            child: const Row(
+              children: [
+                Icon(
+                  Icons.check_circle,
+                  color: Colors.green,
+                  size: 18,
+                ),
+                SizedBox(width: 6),
+                Text(
+                  'Location sharing ON — your family can see you',
+                  style: TextStyle(fontSize: 13),
+                ),
+              ],
+            ),
+          )
+        : Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
             child: LocationStatusCard(
               state: _sharingState,
@@ -821,74 +868,106 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                 unawaited(_ensureBackgroundSharing());
               },
             ),
+          );
+    return Column(
+      children: [
+        if (!_mapFullscreen) statusWidget,
+        if (!_mapFullscreen && _iAmOffline)
+          Container(
+            width: double.infinity,
+            color: Colors.orange.shade100,
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 8,
+            ),
+            child: Text(
+              _smsFallbackOn
+                  ? 'You are offline (no data). Location is sent to your parent by SMS, every 15 min.'
+                  : 'You are offline (no data). Turn on SMS location in Settings to keep sharing.',
+              style: const TextStyle(fontSize: 13),
+            ),
           ),
-          if (_iAmOffline)
-            Container(
-              width: double.infinity,
-              color: Colors.orange.shade100,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 8,
-              ),
-              child: Text(
-                _smsFallbackOn
-                    ? 'You are offline (no data). Location is sent to your parent by SMS, every 15 min.'
-                    : 'You are offline (no data). Turn on SMS location in Settings to keep sharing.',
-                style: const TextStyle(fontSize: 13),
-              ),
-            ),
-          Expanded(
-            child: Stack(
-              children: [
-                FlutterMap(
-                  mapController: _mapController,
-                  options: MapOptions(
-                    initialCenter:
-                        osmInitialCenter(viewer: _viewerPosition),
-                    initialZoom: osmMapInitialZoom,
-                    onMapReady: () => _mapReady = true,
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate: osmTileUrlTemplate,
-                      userAgentPackageName: osmUserAgentPackageName,
-                    ),
-                    MarkerLayer(markers: _markers(members)),
-                  ],
+        Expanded(
+          child: Stack(
+            children: [
+              FlutterMap(
+                mapController: _mapController,
+                options: MapOptions(
+                  initialCenter: osmInitialCenter(viewer: _viewerPosition),
+                  initialZoom: osmMapInitialZoom,
+                  onMapReady: () => _mapReady = true,
+                  // v0.6.19: tap the map to make it fullscreen.
+                  onTap: (_, __) {
+                    if (!_mapFullscreen) {
+                      setState(() => _mapFullscreen = true);
+                    }
+                  },
                 ),
-                // Required OSM attribution — always visible,
-                // bottom-left (OSM licence).
-                Positioned(
-                  left: 6,
-                  bottom: 4,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 1,
-                    ),
-                    color: Colors.white70,
-                    child: const Text(
-                      '© $osmAttributionText',
-                      style: TextStyle(fontSize: 10),
-                    ),
+                children: [
+                  TileLayer(
+                    urlTemplate: osmTileUrlTemplate,
+                    userAgentPackageName: osmUserAgentPackageName,
+                  ),
+                  MarkerLayer(markers: _markers(members)),
+                ],
+              ),
+              // Required OSM attribution — always visible,
+              // bottom-left (OSM licence).
+              Positioned(
+                left: 6,
+                bottom: 4,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 1,
+                  ),
+                  color: Colors.white70,
+                  child: const Text(
+                    '© $osmAttributionText',
+                    style: TextStyle(fontSize: 10),
                   ),
                 ),
-                // Follow-me: centre the map on my live position.
+              ),
+              // Follow-me: centre the map on my live position.
+              Positioned(
+                right: 12,
+                bottom: 12,
+                child: FloatingActionButton.small(
+                  heroTag: 'follow_me',
+                  onPressed: () => unawaited(_centreOnViewer()),
+                  tooltip: 'Centre on me',
+                  child: const Icon(Icons.my_location),
+                ),
+              ),
+              // v0.6.19: close button, only in fullscreen.
+              if (_mapFullscreen)
                 Positioned(
+                  top: 12,
                   right: 12,
-                  bottom: 12,
                   child: FloatingActionButton.small(
-                    heroTag: 'follow_me',
-                    onPressed: () => unawaited(_centreOnViewer()),
-                    tooltip: 'Centre on me',
-                    child: const Icon(Icons.my_location),
+                    heroTag: 'close_fullscreen',
+                    onPressed: () => setState(() => _mapFullscreen = false),
+                    tooltip: 'Close fullscreen map',
+                    child: const Icon(Icons.close),
                   ),
                 ),
-              ],
+            ],
+          ),
+        ),
+        // v0.6.19: the members list is collapsed by default
+        // (just a header row) so the map gets most of the
+        // screen; tap the header to expand it.
+        if (!_mapFullscreen) ...[
+          ListTile(
+            dense: true,
+            title: Text('Family (${members.length})'),
+            trailing: Icon(
+              _membersExpanded ? Icons.expand_less : Icons.expand_more,
             ),
+            onTap: () => setState(() => _membersExpanded = !_membersExpanded),
           ),
           SizedBox(
-            height: 220,
+            height: _membersExpanded ? 220 : 0,
             child: ListView(
               // Bottom padding clears the floating SOS button —
               // see membersListBottomPadding above. With the
@@ -905,7 +984,9 @@ class _HomeMapScreenState extends State<HomeMapScreen>
             ),
           ),
         ],
-      );
+      ],
+    );
+  }
 
   Widget _memberCard(Member m) {
     // v0.6.14: measured from THIS phone's live position — never
@@ -938,9 +1019,8 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     // parent sees at a glance which child can uninstall and which
     // cannot. Unknown shows nothing (never a guess).
     final protectionLabel = m.protection.label;
-    final fullStatus = protectionLabel.isEmpty
-        ? status
-        : '$status · $protectionLabel';
+    final fullStatus =
+        protectionLabel.isEmpty ? status : '$status · $protectionLabel';
     // v0.6.13 (D): "child gayab" notice — a CHILD with no update
     // for 2+ hours. No loud notification (no-data is common);
     // a clear line on the row, keeping "Offline since [time]".
@@ -963,9 +1043,8 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     );
     return ListTile(
       // v0.6.15: tap a member's row to centre the map on them.
-      onTap: m.hasLocation
-          ? () => _moveCamera(LatLng(m.lat!, m.lon!), 14)
-          : null,
+      onTap:
+          m.hasLocation ? () => _moveCamera(LatLng(m.lat!, m.lon!), 14) : null,
       leading: CircleAvatar(child: Text(m.name[0])),
       title: Text(m.name),
       subtitle: showMissing
@@ -1093,8 +1172,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     await _sendAlert(context, viaSms: true);
   }
 
-  Future<void> _sendAlert(BuildContext context,
-      {required bool viaSms}) async {
+  Future<void> _sendAlert(BuildContext context, {required bool viaSms}) async {
     final family = context.read<FamilyService>();
     final sync = context.read<SyncService>();
     final sosSms = context.read<SosSmsService>();
@@ -1148,13 +1226,15 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     if (rtdbSent && smsSent > 0) {
       message = 'SOS sent to your family! SMS to $smsSent member$plural.';
     } else if (rtdbSent && smsDenied && smsNeeded) {
-      message = 'SOS sent to your family! (SMS blocked — SMS permission needed.)';
+      message =
+          'SOS sent to your family! (SMS blocked — SMS permission needed.)';
     } else if (rtdbSent) {
       message = 'SOS sent to your family!';
     } else if (smsSent > 0) {
       message = 'SOS sent by SMS to $smsSent member$plural (no internet).';
     } else if (smsThrottled) {
-      message = 'SOS already sent a moment ago — wait a minute before sending again.';
+      message =
+          'SOS already sent a moment ago — wait a minute before sending again.';
     } else if (smsDenied) {
       message = 'SOS could not be sent — allow SMS permission and try again.';
     } else {
