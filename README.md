@@ -184,6 +184,13 @@ Function + email sender.
    dobara dikhata hi nahi. Ab card par "Allow" ke saath hi
    **"Open battery settings"** ka button bhi hai, jo seedha App
    info page kholta hai (wahan Battery → "Unrestricted" chuno).
+   **v0.6.24 — Chat first in the bottom bar:** neeche wale
+   options ka order ab Chat, Map, Alerts, Locks, Plan, Settings
+   hai (pehle Map pehle tha). SOS button, alert/chat
+   notification se khulne wale tab, aur har jagah tab number
+   naye order ke hisaab se badle gaye. App khulte hi ab bhi
+   **Map** dikhta hai (live locations home screen hain) — Chat
+   ek tap door, pehle number par hai.
    **v0.6.23 — media sharing (chat mein photo/video/audio/
    document):** chat ke neeche attach (+) button — Photo, Video,
    Audio, Document. Photo pehle compress hoti hai (1280 px,
