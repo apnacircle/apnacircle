@@ -19,7 +19,6 @@ import 'services/notification_service.dart';
 import 'services/pin_service.dart';
 import 'services/sim_change_service.dart';
 import 'services/sms_location_service.dart';
-import 'services/sos_sms_service.dart';
 import 'services/sync_service.dart';
 import 'services/trial_service.dart';
 
@@ -50,7 +49,6 @@ Future<void> main() async {
   final sync = SyncService(auth);
   final notifications = NotificationService(sync);
   final sms = SmsLocationService();
-  final sosSms = SosSmsService(sms);
   final pin = PinService();
   final family = FamilyService()..attachSync(sync);
   final trial = TrialService()..attachSync(sync);
@@ -88,7 +86,6 @@ Future<void> main() async {
         ChangeNotifierProvider.value(value: notifications),
         ChangeNotifierProvider.value(value: family),
         Provider.value(value: sms),
-        Provider.value(value: sosSms),
         Provider.value(value: simChange),
         Provider.value(value: deviceAdmin),
       ],
