@@ -11,6 +11,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/alert_notification.dart';
 import '../core/alerts.dart';
 import '../core/app_lock_service.dart';
+import '../core/call_notification.dart';
+import '../core/call_signaling.dart';
 import '../core/chat_notification.dart';
 import '../core/location_service.dart';
 import '../core/osm_map.dart';
@@ -19,15 +21,19 @@ import '../core/remove_member.dart';
 import '../core/viewer_position.dart';
 import '../models/circle.dart';
 import '../models/member.dart';
+import '../screens/alerts_center_sheet.dart';
 import '../screens/alerts_screen.dart';
 import '../screens/call_overlay_screen.dart';
+import '../screens/call_screen.dart';
 import '../screens/chat_screen.dart';
 import '../screens/locks_screen.dart';
 import '../screens/location_status_card.dart';
 import '../screens/pin_gate_dialog.dart';
 import '../screens/plan_screen.dart';
 import '../screens/settings_screen.dart';
+import '../services/alert_history_service.dart';
 import '../services/background_location_service.dart';
+import '../services/call_service.dart';
 import '../services/family_service.dart';
 import '../services/sos_sms_service.dart';
 import '../services/notification_service.dart';
@@ -111,6 +117,9 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   // screen instead of the status card + list squeezing it.
   bool _mapFullscreen = false;
   bool _membersExpanded = false;
+  // v0.6.21: guard so a ringing call opens the call screen once
+  // (the incoming stream + the notification tap can both fire).
+  bool _callScreenOpen = false;
 
   // v0.6.9: the parent's Location Lock for ME (from my locks node
   // — see _ensureLockSubscription). When it is on and sharing is
@@ -412,6 +421,25 @@ class _HomeMapScreenState extends State<HomeMapScreen>
       if (pendingTap == ChatNotifications.tapPayload) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) setState(() => _tab = 3);
+        });
+      }
+      // v0.6.21: incoming calls — a ringing call for me opens
+      // the call screen; tapping the call notification (or a
+      // cold-start tap) does the same.
+      final calls = context.read<CallService>();
+      calls.incomingCalls.listen((_) {
+        if (!mounted) return;
+        _openIncomingCall();
+      });
+      notifications.tapRequests.listen((payload) {
+        if (!mounted) return;
+        if (CallNotifications.callIdFromPayload(payload) != null) {
+          _openIncomingCall();
+        }
+      });
+      if (CallNotifications.callIdFromPayload(pendingTap ?? '') != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _openIncomingCall();
         });
       }
       family.circleEvents.listen((event) {
@@ -751,6 +779,21 @@ class _HomeMapScreenState extends State<HomeMapScreen>
       appBar: AppBar(
         title: const Text('ApnaCircle'),
         actions: [
+          // v0.6.21: the alerts bell — the badge is the TOTAL
+          // unread SOS/alerts for the whole family. Tap it for
+          // the centre: every member separately, with their own
+          // count and what each alert was, with its time.
+          _AlertsBell(onTap: _showAlertsCenter),
+          // v0.6.21: group call lives in the AppBar, NOT beside
+          // the Family header — the header sits at the bottom of
+          // the screen, where the floating SOS buttons cover its
+          // right side (real bug found by the widget test: the
+          // tap landed on the SOS FAB, never on the button).
+          IconButton(
+            icon: const Icon(Icons.group_add),
+            tooltip: 'Group call',
+            onPressed: () => _showGroupCallPicker(members),
+          ),
           IconButton(
             icon: const Icon(Icons.phone),
             tooltip: 'Simulate SIM call',
@@ -959,13 +1002,18 @@ class _HomeMapScreenState extends State<HomeMapScreen>
         // (just a header row) so the map gets most of the
         // screen; tap the header to expand it.
         if (!_mapFullscreen) ...[
+          // Members header — just the expandable list title now
+          // (the group-call button moved to the AppBar: the
+          // header sits at the bottom, under the SOS FABs).
           ListTile(
             dense: true,
             title: Text('Family (${members.length})'),
             trailing: Icon(
               _membersExpanded ? Icons.expand_less : Icons.expand_more,
             ),
-            onTap: () => setState(() => _membersExpanded = !_membersExpanded),
+            onTap: () => setState(
+              () => _membersExpanded = !_membersExpanded,
+            ),
           ),
           SizedBox(
             height: _membersExpanded ? 220 : 0,
@@ -1046,7 +1094,13 @@ class _HomeMapScreenState extends State<HomeMapScreen>
       // v0.6.15: tap a member's row to centre the map on them.
       onTap:
           m.hasLocation ? () => _moveCamera(LatLng(m.lat!, m.lon!), 14) : null,
-      leading: CircleAvatar(child: Text(m.name[0])),
+      // v0.6.21: tap a member's PICTURE to call them — audio or
+      // video. (Tapping the row itself still centres the map.)
+      // Never on my own row: I cannot call myself.
+      leading: GestureDetector(
+        onTap: m.id == family.myId ? null : () => _showCallMenu(m),
+        child: CircleAvatar(child: Text(m.name[0])),
+      ),
       title: Text(m.name),
       subtitle: showMissing
           ? Column(
@@ -1088,6 +1142,154 @@ class _HomeMapScreenState extends State<HomeMapScreen>
         ],
       ),
     );
+  }
+
+  /// Open the call screen once (v0.6.21). The guard stops the
+  /// incoming stream and the notification tap from pushing it
+  /// twice for the same call.
+  void _openCallScreen() {
+    if (_callScreenOpen || !mounted) return;
+    _callScreenOpen = true;
+    Navigator.of(context)
+        .push(
+      MaterialPageRoute(builder: (_) => const CallScreen()),
+    )
+        .then((_) {
+      _callScreenOpen = false;
+    });
+  }
+
+  /// A ringing call arrived for me — open it if one is waiting.
+  void _openIncomingCall() {
+    final calls = context.read<CallService>();
+    if (calls.incomingCall == null) return;
+    _openCallScreen();
+  }
+
+  /// Tap a member's picture (v0.6.21): pick audio or video call.
+  /// A failed start (offline, no permission, demo mode) shows the
+  /// plain-words error; a started call opens the call screen.
+  Future<void> _showCallMenu(Member m) async {
+    final type = await showModalBottomSheet<CallType>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.call),
+              title: Text('Audio call ${m.name}'),
+              onTap: () => Navigator.pop(ctx, CallType.audio),
+            ),
+            ListTile(
+              leading: const Icon(Icons.videocam),
+              title: Text('Video call ${m.name}'),
+              onTap: () => Navigator.pop(ctx, CallType.video),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (type == null || !mounted) return;
+    final calls = context.read<CallService>();
+    final error = await calls.startCall(callees: [m], type: type);
+    if (!mounted) return;
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error)),
+      );
+      return;
+    }
+    _openCallScreen();
+  }
+
+  /// Group call (v0.6.21): tick the members to invite, then pick
+  /// audio or video — a conference call to all of them at once.
+  Future<void> _showGroupCallPicker(List<Member> members) async {
+    final family = context.read<FamilyService>();
+    final others = members.where((m) => m.id != family.myId).toList();
+    if (others.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No one else in the circle to call.'),
+        ),
+      );
+      return;
+    }
+    final selected = <String>{};
+    final type = await showDialog<CallType>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Group call — pick members'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final m in others)
+                CheckboxListTile(
+                  title: Text(m.name),
+                  value: selected.contains(m.id),
+                  onChanged: (v) {
+                    setDialogState(() {
+                      if (v == true) {
+                        selected.add(m.id);
+                      } else {
+                        selected.remove(m.id);
+                      }
+                    });
+                  },
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: selected.isEmpty
+                  ? null
+                  : () => Navigator.pop(ctx, CallType.audio),
+              icon: const Icon(Icons.call),
+              label: const Text('Audio call'),
+            ),
+            FilledButton.icon(
+              onPressed: selected.isEmpty
+                  ? null
+                  : () => Navigator.pop(ctx, CallType.video),
+              icon: const Icon(Icons.videocam),
+              label: const Text('Video call'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (type == null || !mounted) return;
+    final callees = others.where((m) => selected.contains(m.id)).toList();
+    final calls = context.read<CallService>();
+    final error = await calls.startCall(callees: callees, type: type);
+    if (!mounted) return;
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error)),
+      );
+      return;
+    }
+    _openCallScreen();
+  }
+
+  /// The alerts centre (v0.6.21): bottom sheet with every member
+  /// separately, their own count, and what each alert was, with
+  /// its time. Closing it marks everything read (the bell badge
+  /// clears; the counts stay).
+  Future<void> _showAlertsCenter() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => const AlertsCenterSheet(),
+    );
+    if (!mounted) return;
+    await context.read<AlertHistoryService>().markAllRead();
   }
 
   /// Remove a member (v0.6.16, parent only): confirm dialog first,
@@ -1243,6 +1445,55 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
+    );
+  }
+}
+
+/// The alerts bell (v0.6.21) — AppBar icon with the total unread
+/// SOS/alert count as a red badge. Zero unread = a plain bell,
+/// no badge. The count comes from AlertHistoryService.
+class _AlertsBell extends StatelessWidget {
+  const _AlertsBell({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final unread = context.watch<AlertHistoryService>().totalUnread;
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.notifications),
+          tooltip: 'Alerts',
+          onPressed: onTap,
+        ),
+        if (unread > 0)
+          Positioned(
+            right: 6,
+            top: 6,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: const BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+              constraints: const BoxConstraints(
+                minWidth: 18,
+                minHeight: 18,
+              ),
+              child: Text(
+                unread > 99 ? '99+' : '$unread',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
