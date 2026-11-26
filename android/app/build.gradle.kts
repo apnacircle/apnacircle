@@ -16,12 +16,13 @@ if (file("google-services.json").exists()) {
 
 android {
     namespace = "com.apnacircle.app"
-    // Regenerated with Flutter 3.35.7 template (22 Nov 2026, Run #8 fix):
-    // the old Flutter 3.24 Groovy Gradle files are rejected by Flutter
-    // 3.35 ("unsupported Gradle project"). Template is now Kotlin DSL.
-    // compileSdk/targetSdk 35 (not 36): SDK 35 is guaranteed on the GitHub
-    // runner; plugins that need 36 (geolocator_android) only log a warning.
-    compileSdk = 35
+    // compileSdk 36 (raised from 35 in v0.6.25, 27 Nov 2026):
+    // the v0.6.23 media packages pulled androidx.core 1.18.0 /
+    // activity 1.12.4, whose AAR metadata REQUIRES compileSdk
+    // >= 36 — CI run #376 failed at :app:checkReleaseAarMetadata
+    // on 35. The workflow installs the android-36 platform
+    // explicitly (see build-apk.yml), so the runner always has it.
+    compileSdk = 36
     // NDK 27.0.12077973 = AGP 8.9.1 default.
     ndkVersion = "27.0.12077973"
 
