@@ -13,7 +13,10 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('alert channel (v0.6.10)', () {
     test('channel id/name are the ones the manifest points FCM at', () {
-      expect(AlertNotifications.channelId, 'apnacircle_alerts');
+      // v0.6.17: id moved to ..._v2 — Android never updates an
+      // existing channel's sound, so the 3-second siren needed a
+      // fresh channel. Name and tap payload are unchanged.
+      expect(AlertNotifications.channelId, 'apnacircle_alerts_v2');
       expect(AlertNotifications.channelName, 'ApnaCircle Alerts');
       expect(AlertNotifications.tapPayload, 'alerts');
     });
