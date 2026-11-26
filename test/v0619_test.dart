@@ -1,6 +1,9 @@
 import 'package:apnacircle/core/location_service.dart';
 import 'package:apnacircle/core/osm_map.dart';
 import 'package:apnacircle/screens/home_map_screen.dart';
+import 'package:apnacircle/services/alert_history_service.dart';
+import 'package:apnacircle/services/call_service.dart';
+import 'package:apnacircle/services/chat_delete_service.dart';
 import 'package:apnacircle/services/setup_service.dart';
 import 'package:apnacircle/core/language_service.dart';
 import 'package:apnacircle/screens/setup_screen.dart';
@@ -9,6 +12,7 @@ import 'package:apnacircle/services/billing_service.dart';
 import 'package:apnacircle/services/family_service.dart';
 import 'package:apnacircle/services/notification_service.dart';
 import 'package:apnacircle/services/sms_location_service.dart';
+import 'package:apnacircle/services/sos_sms_service.dart';
 import 'package:apnacircle/services/sync_service.dart';
 import 'package:apnacircle/services/trial_service.dart';
 import 'package:flutter/material.dart';
@@ -179,6 +183,7 @@ void main() {
       final auth = AuthService();
       final sync = SyncService(auth);
       final family = FamilyService()..attachSync(sync);
+      final sms = SmsLocationService();
       await tester.pumpWidget(
         MultiProvider(
           providers: [
@@ -191,7 +196,17 @@ void main() {
               value: NotificationService(sync),
             ),
             ChangeNotifierProvider.value(value: family),
-            Provider.value(value: SmsLocationService()),
+            ChangeNotifierProvider.value(
+              value: CallService(family: family),
+            ),
+            ChangeNotifierProvider.value(
+              value: AlertHistoryService(family: family),
+            ),
+            ChangeNotifierProvider.value(
+              value: ChatDeleteService(family: family),
+            ),
+            Provider.value(value: sms),
+            Provider.value(value: SosSmsService(sms)),
           ],
           child: const MaterialApp(home: HomeMapScreen()),
         ),
