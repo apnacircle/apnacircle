@@ -191,6 +191,7 @@ Function + email sender.
    par lagti hai), aur admin ke phone par purani list ek dafa
    clear ho jati hai. Bachay ke phone par lock ke liye
    Accessibility service ON hona zaroori hai (Setup step 5).
+   **v0.6.28 — parent ki apps phir lock (asli wajah + circle delete):** v0.6.27 install karne ke baad parent ki apni apps phir lock ho gayi thin. Asli wajah: fresh install par KOI circle active nahi hota tha (refresh sirf purana id badalta tha, null ko nahi) — is liye admin wipe kabhi chala hi nahi, aur `?? false` wale checks parent ko child samajh kar us ke phone par bachay ki list laga dete thay. Ab (1) circle list load hote hi pehla circle khud active ho jata hai, (2) admin status unknown ho to locks bilkul nahi lagte (fail closed), (3) admin ke phone ki list Home khulte hi HAR dafa clear hoti hai (pehle sirf ek dafa). **Circle delete:** Account & Circles mein jis circle ke parent hain us ke saamne delete button — PIN ke baad circle sab ke liye delete (rules v6 mein creator info node delete kar sakta hai). Khaali naam "Family" wale ghalti se bane circles is se hat jayenge.
    **v0.6.27 — nikala hua member wapas nahi aata (bug fix +
    rules v5):** parent kisi ko circle se nikalta tha to wo 60
    second mein wapas aa jata tha — us ke phone ki background
