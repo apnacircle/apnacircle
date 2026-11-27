@@ -87,11 +87,37 @@ class _LocksScreenState extends State<LocksScreen>
   Future<void> _afterFirstFrame() async {
     if (!mounted) return;
     _checkService();
+    _maybeSetupRemote();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Retry the remote setup when the watched services change —
+    // the circle list loads after the first frame.
+    _maybeSetupRemote();
+  }
+
+  /// v0.6.28: remote lock setup, retried whenever the screen's
+  /// dependencies change (the circle list loads AFTER the first
+  /// frame — v0.6.26 ran this once in _afterFirstFrame, so when
+  /// the circle was still loading the screen silently never set
+  /// anything up). Runs once per screen instance. FAIL CLOSED:
+  /// when the admin status is still unknown (activeCircle null)
+  /// this returns without doing anything — the old `?? false`
+  /// treated the parent as a child and subscribed + applied the
+  /// parent's own locks on their own phone.
+  bool _remoteSetupDone = false;
+
+  Future<void> _maybeSetupRemote() async {
+    if (_remoteSetupDone || !mounted) return;
     final sync = context.read<SyncService>();
     final family = context.read<FamilyService>();
     if (!sync.isAvailable || sync.activeCircleId == null) return;
+    final amAdmin = sync.activeCircle?.isAdmin;
+    if (amAdmin == null) return;
+    _remoteSetupDone = true;
     final circleId = sync.activeCircleId!;
-    final amAdmin = sync.activeCircle?.isAdmin ?? false;
     if (!amAdmin) {
       // Child side: listen to MY locks and enforce them live.
       if (_remoteSubscribed) return;
@@ -261,7 +287,9 @@ class _LocksScreenState extends State<LocksScreen>
   /// own locks may apply locally; the parent only publishes to
   /// RTDB and the child's phone enforces them.
   bool get _mayApplyLocally => AppLockService.mayApplyLocally(
-        isAdmin: context.read<SyncService>().activeCircle?.isAdmin ?? false,
+        // v0.6.28: nullable on purpose — unknown (no active circle
+        // yet) must NOT apply locally; mayApplyLocally fails closed.
+        isAdmin: context.read<SyncService>().activeCircle?.isAdmin,
       );
 
   void _updateApp(LockedApp app, LockedApp updated) {
