@@ -156,6 +156,27 @@ class SyncService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Drop one circle from the local list (v0.6.27 — the phone
+  /// was removed from it). If it was the active circle, switch
+  /// to another circle when one exists, otherwise clear the
+  /// active circle entirely (subs are cancelled either way).
+  /// Returns the new active circle id, or null when none is
+  /// left. The server `users/{uid}/circles` entry is left alone
+  /// — the next refresh drops it by itself (its info read is
+  /// denied once membership is gone), and re-joining with the
+  /// invite code still works.
+  Future<String?> removeCircleLocally(String circleId) async {
+    _myCircles.removeWhere((c) => c.id == circleId);
+    if (_activeCircleId == circleId) {
+      _cancelSubs();
+      _activeCircleId =
+          _myCircles.isEmpty ? null : _myCircles.first.id;
+    }
+    await _saveLocal();
+    notifyListeners();
+    return _activeCircleId;
+  }
+
   void _cancelSubs() {
     for (final s in _subs) {
       s.cancel();
@@ -207,12 +228,14 @@ class SyncService extends ChangeNotifier {
         if (pinHash != null) 'pinHash': pinHash,
       };
       // ORDER MATTERS (RTDB rules, see FIREBASE_SETUP.md §2): the
-      // circle-level write rule requires membership, so write MY
-      // OWN member node FIRST (the rules allow anyone to write
-      // their own members/{uid} node), and only then the info node.
+      // circle-level read rule requires membership, so write MY
+      // OWN member node FIRST (rules v5 accept the create — a
+      // full node with name + phone + role, plus the invite
+      // code as proof), and only then the info node.
       await _writeMyMemberNode(
         circleId,
         'parent',
+        inviteCode: code,
         protection: await DeviceOwnerService().currentLevel(),
       );
       await _root.child(FirebaseConfig.circleInfoPath(circleId)).set(info);
@@ -254,9 +277,14 @@ class SyncService extends ChangeNotifier {
   /// write that node again — it must NOT skip the write when the
   /// role entry already exists, and it must NOT read the node
   /// first to check: under v2 the read is DENIED once membership
-  /// is gone, so a read-first check would never write. The
-  /// self-write is always allowed under v2, so join writes the
-  /// node directly (see [resolveJoinRole]).
+  /// is gone, so a read-first check would never write.
+  ///
+  /// v0.6.27 (rules v5): the node write carries the invite code
+  /// as proof — rules v5 accept a member-node CREATE with a valid
+  /// invite code (or, for older apps, a full node). A removed
+  /// member's background task can never write one: its blind
+  /// location updates carry no invite code and no name/phone/role.
+  /// (see [resolveJoinRole]).
   Future<(CircleInfo?, String?)> joinCircle(
     String code, {
     required String phoneNumber,
@@ -305,6 +333,7 @@ class SyncService extends ChangeNotifier {
           myRole,
           displayName: displayName,
           phone: normalizedPhone,
+          inviteCode: clean,
           protection: await DeviceOwnerService().currentLevel(),
         );
       }
@@ -395,6 +424,7 @@ class SyncService extends ChangeNotifier {
     String role, {
     String? displayName,
     String? phone,
+    String? inviteCode,
     ProtectionLevel protection = ProtectionLevel.unknown,
   }) async {
     final member = Member(
@@ -411,11 +441,38 @@ class SyncService extends ChangeNotifier {
       lastSeen: DateTime.now(),
       isOnline: true,
       protection: protection,
+      // v0.6.27 (rules v5): the invite code is the proof that
+      // this node was created by a real join/create, not by a
+      // removed member's blind location publish.
+      inviteCode: inviteCode,
     );
     await _root
         .child(FirebaseConfig.circleMemberPath(circleId, uid!))
         .set(member.toJson());
     await saveProfile();
+  }
+
+  /// One-time membership check (v0.6.27): does MY member node
+  /// still exist in [circleId]? `true` = yes, keep sharing.
+  /// `false` = definitely gone (node missing, or the read was
+  /// permission-denied — the circle-level read rule denies
+  /// anyone whose node is gone). `null` = the check itself
+  /// failed (no network, unknown error) — the caller must NOT
+  /// treat that as a removal. Never throws.
+  Future<bool?> myMemberNodeCheck(String circleId) async {
+    if (!isAvailable) return null;
+    try {
+      final snap = await _root
+          .child(FirebaseConfig.circleMemberPath(circleId, uid!))
+          .get();
+      return snap.exists;
+    } catch (e) {
+      if (e is FirebaseException && e.code == 'permission-denied') {
+        return false;
+      }
+      debugPrint('ApnaCircle: myMemberNodeCheck failed ($e)');
+      return null;
+    }
   }
 
   /// Make sure my member node exists in a circle (fresh circle /
@@ -963,10 +1020,20 @@ class SyncService extends ChangeNotifier {
   // --- Live data: subscribe (RTDB -> this phone) ---
 
   /// Live member list of a circle (location, battery, online).
+  ///
+  /// [onError] (v0.6.27): stream errors — a removed member's
+  /// read is DENIED by the circle-level read rule, so the
+  /// subscription dies with permission-denied instead of
+  /// delivering an empty list. The caller treats that as
+  /// "I was removed" (after verifying — see
+  /// FamilyService.handleMembersReadError). Without a handler
+  /// the error is unhandled and the app keeps its stale cached
+  /// members while the background task keeps publishing.
   void subscribeMembers(
     String circleId,
-    void Function(List<Member>) onData,
-  ) {
+    void Function(List<Member>) onData, {
+    void Function(Object error)? onError,
+  }) {
     if (!isAvailable) return;
     final sub = _root
         .child(FirebaseConfig.circleMembersPath(circleId))
@@ -989,7 +1056,7 @@ class SyncService extends ChangeNotifier {
         }
       }
       onData(members);
-    });
+    }, onError: onError);
     _subs.add(sub);
   }
 
