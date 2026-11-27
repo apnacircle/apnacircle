@@ -191,6 +191,17 @@ Function + email sender.
    par lagti hai), aur admin ke phone par purani list ek dafa
    clear ho jati hai. Bachay ke phone par lock ke liye
    Accessibility service ON hona zaroori hai (Setup step 5).
+   **v0.6.27 — nikala hua member wapas nahi aata (bug fix +
+   rules v5):** parent kisi ko circle se nikalta tha to wo 60
+   second mein wapas aa jata tha — us ke phone ki background
+   location blind update se node dobara bana deti thi, aur
+   alerts bhi phir aane lagte thay. Rules v5 mein member node
+   sirf join/create se banta hai (invite code ya poora node) aur
+   update sirf current member kar sakta hai; nikala hua member
+   ab khud bhi notice karta hai (us ki location sharing band,
+   Account & Circles par "removed" notice) aur dobara sirf
+   invite code se join kar ke aata hai. Alerts centre mein
+   nikale hue member ke purane alerts bhi nahi dikhte.
    **v0.6.25 — compileSdk 36 (build fix):** v0.6.23 ki CI run
    #376 APK banate waqt fail hui — nayi media packages
    (androidx.core 1.18 / activity 1.12) ko compileSdk 36
