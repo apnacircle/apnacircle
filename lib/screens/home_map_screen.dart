@@ -155,6 +155,12 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   // this (not the Locks tab) is where lock enforcement starts.
   String? _lockSubscribedFor;
 
+  // v0.6.26: which circle+user the admin-side lock clear ran for
+  // (below) — the buggy Locks screen applied the child's list on
+  // the parent's own phone, and native code persists it, so the
+  // admin's apps stayed locked until it is wiped once.
+  String? _lockClearedFor;
+
   @override
   void initState() {
     super.initState();
@@ -188,7 +194,22 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     if (!sync.isAvailable || sync.activeCircleId == null || sync.uid == null) {
       return;
     }
-    if (sync.activeCircle?.isAdmin == true) return;
+    if (sync.activeCircle?.isAdmin == true) {
+      // v0.6.26: WIPE any lock list the buggy Locks screen applied
+      // on this (parent) phone before the fix. Native code persists
+      // the schedule in SharedPreferences, so the admin's own apps
+      // stayed locked across restarts until an empty list is
+      // applied once. Keyed once per circle+user; harmless when
+      // nothing was ever applied. A phone that is a child in
+      // ANOTHER circle gets its own locks back when that circle
+      // becomes active (the non-admin branch below).
+      final clearKey = '${sync.activeCircleId}|${sync.uid}';
+      if (_lockClearedFor != clearKey) {
+        _lockClearedFor = clearKey;
+        AppLockService.applyLocks([]);
+      }
+      return;
+    }
     final key = '${sync.activeCircleId}|${sync.uid}';
     if (_lockSubscribedFor == key) return;
     _lockSubscribedFor = key;
