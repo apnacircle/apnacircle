@@ -133,6 +133,13 @@ class SyncService extends ChangeNotifier {
         _myCircles.clear();
       }
     }
+    // v0.6.28: never leave the app with circles but NO active
+    // circle (a fresh install used to show the list with nothing
+    // selected — every admin check then saw activeCircle == null).
+    _activeCircleId = resolveActiveCircleId(
+      currentActiveId: _activeCircleId,
+      circleIds: _myCircles.map((c) => c.id).toList(),
+    );
     notifyListeners();
   }
 
@@ -175,6 +182,60 @@ class SyncService extends ChangeNotifier {
     await _saveLocal();
     notifyListeners();
     return _activeCircleId;
+  }
+
+  /// Delete a whole circle (v0.6.28, parent only — the user asked
+  /// why circles they never created show up: only the Create
+  /// button can make a parent circle, and an empty name becomes
+  /// "Family", so accidental creates lingered with no way to
+  /// remove them). Removes every member node, the invite code,
+  /// my own role entry and — LAST, so read access survives the
+  /// operation — the info node (rules v6 let the creator delete
+  /// info). Other members' `users/{uid}/circles` entries are left
+  /// alone (only they can write them); their next refresh skips
+  /// the circle because its info node is gone. If it was the
+  /// active circle, the first remaining circle becomes active.
+  /// Returns false when the circle is not mine or not a circle
+  /// I parent. Server failures still drop it locally, so it never
+  /// shows again on this phone.
+  Future<bool> deleteCircle(String circleId) async {
+    if (!isAvailable) return false;
+    final circle =
+        _myCircles.where((c) => c.id == circleId).firstOrNull;
+    if (circle == null || circle.role != 'parent') return false;
+    try {
+      final membersSnap = await _root
+          .child(FirebaseConfig.circleMembersPath(circleId))
+          .get();
+      final memberIds = membersSnap.exists && membersSnap.value != null
+          ? asMap(membersSnap.value).keys.toList()
+          : <String>[uid!];
+      for (final m in memberIds) {
+        await _root
+            .child(FirebaseConfig.circleMemberPath(circleId, m))
+            .remove();
+      }
+      if (circle.inviteCode.isNotEmpty) {
+        await _root
+            .child(FirebaseConfig.invitePath(circle.inviteCode))
+            .remove();
+      }
+      await _root
+          .child(FirebaseConfig.userCircleRolePath(uid!, circleId))
+          .remove();
+      await _root.child(FirebaseConfig.circleInfoPath(circleId)).remove();
+    } catch (_) {
+      // Best effort on the server side — still drop it locally.
+    }
+    _myCircles.removeWhere((c) => c.id == circleId);
+    if (_activeCircleId == circleId) {
+      _cancelSubs();
+      _activeCircleId =
+          _myCircles.isEmpty ? null : _myCircles.first.id;
+    }
+    await _saveLocal();
+    notifyListeners();
+    return true;
   }
 
   void _cancelSubs() {
@@ -391,10 +452,15 @@ class SyncService extends ChangeNotifier {
       _myCircles
         ..clear()
         ..addAll(fresh);
-      if (_activeCircleId != null &&
-          !_myCircles.any((c) => c.id == _activeCircleId)) {
-        _activeCircleId = _myCircles.isEmpty ? null : _myCircles.first.id;
-      }
+      // v0.6.28: pick a default active circle when none is set
+      // (fresh install) or the old one is gone — before this the
+      // refresh only replaced a STALE id, never a null one, so a
+      // freshly installed app showed circles with nothing active
+      // and every admin check saw activeCircle == null.
+      _activeCircleId = resolveActiveCircleId(
+        currentActiveId: _activeCircleId,
+        circleIds: _myCircles.map((c) => c.id).toList(),
+      );
       await _saveLocal();
       notifyListeners();
     } catch (e) {
