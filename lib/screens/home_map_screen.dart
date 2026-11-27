@@ -155,12 +155,6 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   // this (not the Locks tab) is where lock enforcement starts.
   String? _lockSubscribedFor;
 
-  // v0.6.26: which circle+user the admin-side lock clear ran for
-  // (below) — the buggy Locks screen applied the child's list on
-  // the parent's own phone, and native code persists it, so the
-  // admin's apps stayed locked until it is wiped once.
-  String? _lockClearedFor;
-
   @override
   void initState() {
     super.initState();
@@ -195,21 +189,23 @@ class _HomeMapScreenState extends State<HomeMapScreen>
       return;
     }
     if (sync.activeCircle?.isAdmin == true) {
-      // v0.6.26: WIPE any lock list the buggy Locks screen applied
-      // on this (parent) phone before the fix. Native code persists
-      // the schedule in SharedPreferences, so the admin's own apps
-      // stayed locked across restarts until an empty list is
-      // applied once. Keyed once per circle+user; harmless when
-      // nothing was ever applied. A phone that is a child in
-      // ANOTHER circle gets its own locks back when that circle
+      // v0.6.28: WIPE any lock list the buggy Locks screen applied
+      // on this (parent) phone before the fix — on EVERY visit,
+      // not once per key. v0.6.26 wiped once, but a stale list
+      // applied AFTER the wipe (by the old `?? false` holes) then
+      // stayed forever. For the admin of the active circle the
+      // local list must always be empty; a phone that is a child
+      // in ANOTHER circle gets its own locks back when that circle
       // becomes active (the non-admin branch below).
-      final clearKey = '${sync.activeCircleId}|${sync.uid}';
-      if (_lockClearedFor != clearKey) {
-        _lockClearedFor = clearKey;
-        AppLockService.applyLocks([]);
-      }
+      AppLockService.applyLocks([]);
       return;
     }
+    // v0.6.28 (FAIL CLOSED): admin status unknown (circle still
+    // loading) is NOT "not admin" — do nothing until it is known.
+    // Treating unknown as a child applied the parent's own locks
+    // on their own phone (reported again 27 Nov 2026, after
+    // installing v0.6.27).
+    if (sync.activeCircle?.isAdmin != false) return;
     final key = '${sync.activeCircleId}|${sync.uid}';
     if (_lockSubscribedFor == key) return;
     _lockSubscribedFor = key;
