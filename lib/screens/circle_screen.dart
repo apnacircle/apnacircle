@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../core/escape_gate.dart';
 import '../services/auth_service.dart';
+import '../services/family_service.dart';
 import '../services/firebase_bootstrap.dart';
 import '../services/pin_service.dart';
 import '../services/sync_service.dart';
@@ -261,11 +262,27 @@ class _CircleScreenState extends State<CircleScreen> {
     }
 
     final identity = auth.email ?? auth.phoneNumber ?? 'Account';
+    // v0.6.27: I was removed from a circle — say so plainly, with
+    // a way back in (join again with the parent's code below).
+    final family = context.watch<FamilyService>();
+    final removedNotice = family.removedNotice;
     return Scaffold(
       appBar: AppBar(title: const Text('Account & Circles')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (removedNotice != null)
+            Card(
+              color: Colors.orange.shade50,
+              child: ListTile(
+                leading: const Icon(Icons.info_outline, color: Colors.orange),
+                title: Text(removedNotice),
+                trailing: TextButton(
+                  onPressed: family.clearRemovedNotice,
+                  child: const Text('Dismiss'),
+                ),
+              ),
+            ),
           ListTile(
             leading: const Icon(Icons.account_circle),
             title: Text(identity),
