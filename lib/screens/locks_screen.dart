@@ -255,12 +255,21 @@ class _LocksScreenState extends State<LocksScreen>
     super.dispose();
   }
 
+  /// v0.6.26: on the parent's phone this screen edits a CHILD's
+  /// locks — applying them locally would lock the ADMIN's own
+  /// apps (reported 27 Nov 2026). Only a non-admin editing their
+  /// own locks may apply locally; the parent only publishes to
+  /// RTDB and the child's phone enforces them.
+  bool get _mayApplyLocally => AppLockService.mayApplyLocally(
+        isAdmin: context.read<SyncService>().activeCircle?.isAdmin ?? false,
+      );
+
   void _updateApp(LockedApp app, LockedApp updated) {
     setState(() {
       final i = _apps.indexOf(app);
       if (i >= 0) _apps[i] = updated;
     });
-    AppLockService.applyLocks(_apps);
+    if (_mayApplyLocally) AppLockService.applyLocks(_apps);
     _publishLocks();
   }
 
@@ -340,7 +349,9 @@ class _LocksScreenState extends State<LocksScreen>
         _apps.add(AppLockService.customApp(name));
         _customName.clear();
       });
-      AppLockService.applyLocks(_apps);
+      // v0.6.26: same guard as _updateApp — never apply a child's
+      // list on the parent's own phone.
+      if (_mayApplyLocally) AppLockService.applyLocks(_apps);
       _publishLocks();
     });
   }
