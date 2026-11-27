@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -14,6 +16,7 @@ import '../services/family_service.dart';
 import '../services/media_service.dart';
 import '../services/notification_service.dart';
 import '../services/sync_service.dart';
+import '../services/voice_message_service.dart';
 
 /// Family chat (text). Voice/video calls are a v0.2 item:
 /// they need a calling SDK (e.g. Agora / Firebase + WebRTC) and a
@@ -59,11 +62,24 @@ class _ChatScreenState extends State<ChatScreen> {
   // send (pick → compress → upload) is in flight.
   final Set<String> _downloadingIds = {};
   bool _sendingMedia = false;
+  // v0.6.29 voice messages: hold-to-record state + the timer
+  // shown while recording, and in-chat audio playback (one player:
+  // tapping another voice note stops the one playing).
+  bool _recordingVoice = false;
+  int _recordSeconds = 0;
+  Timer? _recordTimer;
+  final _audioPlayer = AudioPlayer();
+  String? _playingAudioId;
 
   @override
   void initState() {
     super.initState();
     _notifications = context.read<NotificationService>();
+    // v0.6.29: when a voice note finishes playing, its row goes
+    // back to the play icon.
+    _audioPlayer.onPlayerComplete.listen((_) {
+      if (mounted) setState(() => _playingAudioId = null);
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final sync = context.read<SyncService>();
@@ -202,6 +218,8 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     // v0.6.11: chat no longer open — notifications resume.
     _notifications?.openChatCircleId = null;
+    _recordTimer?.cancel();
+    _audioPlayer.dispose();
     _ctrl.dispose();
     super.dispose();
   }
@@ -299,8 +317,6 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _sendMedia(MediaType type) async {
     if (_sendingMedia) return;
     final sync = context.read<SyncService>();
-    final family = context.read<FamilyService>();
-    final auth = context.read<AuthService>();
     final media = context.read<MediaService>();
     final circleId = sync.activeCircleId;
     if (circleId == null) return;
@@ -319,6 +335,31 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
     final fileName = file.path.split('/').last;
+    await _uploadAndSendMediaFile(
+      file: file,
+      type: type,
+      fileName: fileName,
+    );
+  }
+
+  /// Upload one file and send it as a media message. Called by
+  /// [_sendMedia] (after picking/compressing) and by
+  /// [_sendVoiceMessage] (after recording). Assumes [_sendingMedia]
+  /// is already true; clears it on every path out.
+  Future<void> _uploadAndSendMediaFile({
+    required File file,
+    required MediaType type,
+    required String fileName,
+  }) async {
+    final sync = context.read<SyncService>();
+    final family = context.read<FamilyService>();
+    final auth = context.read<AuthService>();
+    final media = context.read<MediaService>();
+    final circleId = sync.activeCircleId;
+    if (circleId == null) {
+      if (mounted) setState(() => _sendingMedia = false);
+      return;
+    }
     final messageId = sync.newChatMessageKey(circleId);
     final (url, uploadError) = await media.uploadMedia(
       circleId: circleId,
@@ -358,6 +399,89 @@ class _ChatScreenState extends State<ChatScreen> {
     if (!mounted) return;
     setState(() => _sendingMedia = false);
     _snack(ok ? 'Bhej di.' : 'Bhej nahi saki — dobara try karo.');
+  }
+
+  /// Voice message (v0.6.29) — hold the mic to start recording.
+  /// Demo mode / no circle: refuse with the plain-words reason
+  /// (same as the attach button).
+  Future<void> _startVoiceRecording() async {
+    if (_recordingVoice || _sendingMedia) return;
+    final sync = context.read<SyncService>();
+    if (!sync.isAvailable || sync.activeCircleId == null) {
+      _snack('Voice bhejne ke liye internet aur circle chahiye.');
+      return;
+    }
+    final voice = context.read<VoiceMessageService>();
+    final (_, error) = await voice.startRecording();
+    if (!mounted) return;
+    if (error != null) {
+      _snack(error);
+      return;
+    }
+    setState(() {
+      _recordingVoice = true;
+      _recordSeconds = 0;
+    });
+    _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _recordSeconds++);
+    });
+  }
+
+  /// Release the mic: stop and send the recording. A too-short
+  /// recording is discarded with the plain-words reason.
+  Future<void> _finishVoiceRecording() async {
+    if (!_recordingVoice) return;
+    _recordTimer?.cancel();
+    setState(() => _recordingVoice = false);
+    final voice = context.read<VoiceMessageService>();
+    final (file, error) = await voice.stopRecording();
+    if (!mounted) return;
+    if (error != null || file == null) {
+      _snack(error ?? 'Recording nahi ho saki.');
+      return;
+    }
+    await _sendVoiceMessage(file);
+  }
+
+  /// Cancel a recording in progress (the Cancel button on the
+  /// recording banner, or the long-press cancelled).
+  Future<void> _cancelVoiceRecording() async {
+    if (!_recordingVoice) return;
+    _recordTimer?.cancel();
+    setState(() => _recordingVoice = false);
+    await context.read<VoiceMessageService>().cancelRecording();
+  }
+
+  /// Send a finished recording as an audio media message.
+  Future<void> _sendVoiceMessage(File file) async {
+    if (_sendingMedia) return;
+    setState(() => _sendingMedia = true);
+    _snack('Bhej raha hun…');
+    await _uploadAndSendMediaFile(
+      file: file,
+      type: MediaType.audio,
+      fileName: file.path.split('/').last,
+    );
+  }
+
+  /// Voice-note playback (v0.6.29): stream the audio from its
+  /// media URL. Tapping again (or another note) stops it. A
+  /// removed note has no URL and shows the removed line instead.
+  Future<void> _toggleAudio(ChatMessage m) async {
+    if (_playingAudioId == m.id) {
+      await _audioPlayer.stop();
+      if (mounted) setState(() => _playingAudioId = null);
+      return;
+    }
+    if (m.mediaUrl == null) return;
+    await _audioPlayer.stop();
+    try {
+      await _audioPlayer.play(UrlSource(m.mediaUrl!));
+      if (!mounted) return;
+      setState(() => _playingAudioId = m.id);
+    } catch (_) {
+      _snack('Play nahi ho saki.');
+    }
   }
 
   void _snack(String text) {
@@ -449,6 +573,19 @@ class _ChatScreenState extends State<ChatScreen> {
         else
           Row(
             children: [
+              // v0.6.29: voice notes play in the chat — tap to
+              // listen, tap again to stop. (Documents keep the
+              // file line; photos/videos use the tiles above.)
+              if (type == MediaType.audio && !removed && m.mediaUrl != null)
+                IconButton(
+                  icon: Icon(
+                    _playingAudioId == m.id
+                        ? Icons.stop_circle
+                        : Icons.play_circle_fill,
+                  ),
+                  tooltip: _playingAudioId == m.id ? 'Stop' : 'Play',
+                  onPressed: () => _toggleAudio(m),
+                ),
               Icon(
                 type == MediaType.audio
                     ? Icons.audiotrack
@@ -691,27 +828,82 @@ class _ChatScreenState extends State<ChatScreen> {
             ],
           ),
         ),
+        // v0.6.29 recording banner: while the mic is held, the
+        // input row becomes a timer + Cancel — release to send.
+        if (_recordingVoice)
+          Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Row(
+              children: [
+                const Icon(Icons.mic, color: Colors.red),
+                const SizedBox(width: 8),
+                Text('Recording… $_recordSeconds s — release to send'),
+                const Spacer(),
+                TextButton(
+                  onPressed: _cancelVoiceRecording,
+                  child: const Text('Cancel'),
+                ),
+              ],
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
             children: [
-              // v0.6.23: attach — photo / video / audio / document.
-              IconButton(
-                icon: const Icon(Icons.attach_file),
-                tooltip: 'Send photo, video or file',
-                onPressed: _sendingMedia ? null : _showAttachSheet,
-              ),
+              // v0.6.29: WhatsApp-style input — the attach button
+              // sits INSIDE the round text box (suffixIcon), not
+              // outside it.
               Expanded(
                 child: TextField(
                   controller: _ctrl,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     hintText: 'Message family…',
-                    border: OutlineInputBorder(),
+                    filled: true,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: BorderSide.none,
+                    ),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.attach_file),
+                      tooltip: 'Send photo, video or file',
+                      onPressed:
+                          _sendingMedia ? null : _showAttachSheet,
+                    ),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
-              FilledButton(onPressed: _send, child: const Text('Send')),
+              // v0.6.29: WhatsApp-style trailing button — mic while
+              // the box is empty (HOLD to record, release to
+              // send), send circle once text is typed.
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _ctrl,
+                builder: (context, value, _) {
+                  if (value.text.trim().isNotEmpty) {
+                    return CircleAvatar(
+                      child: IconButton(
+                        icon: const Icon(Icons.send),
+                        tooltip: 'Send',
+                        onPressed: _send,
+                      ),
+                    );
+                  }
+                  return GestureDetector(
+                    onLongPressStart: (_) => _startVoiceRecording(),
+                    onLongPressEnd: (_) => _finishVoiceRecording(),
+                    onLongPressCancel: _cancelVoiceRecording,
+                    child: CircleAvatar(
+                      backgroundColor:
+                          _recordingVoice ? Colors.red : null,
+                      child: Icon(
+                        _recordingVoice ? Icons.mic : Icons.mic_none,
+                        color: Colors.white,
+                      ),
+                    ),
+                  );
+                },
+              ),
             ],
           ),
         ),
