@@ -8,10 +8,12 @@ import '../core/call_member_cache.dart';
 import '../core/constants.dart';
 import '../core/location_service.dart';
 import '../core/member_phone.dart';
+import '../core/removal_detection.dart';
 import '../core/remove_member.dart';
 import '../models/chat_message.dart';
 import '../models/circle.dart';
 import '../models/member.dart';
+import 'background_location_service.dart';
 import 'device_owner_service.dart';
 import 'sync_service.dart';
 
@@ -132,6 +134,20 @@ class FamilyService extends ChangeNotifier {
 
   bool _subscribed = false;
 
+  /// Notice shown when THIS phone was removed from its circle
+  /// (v0.6.27): the parent removed me, so my account in that
+  /// circle is closed — no more location sharing, no more alerts
+  /// from me, and I only come back if I join again with the
+  /// invite code. The Account & Circles screen shows it once;
+  /// dismissing clears it. Null when nothing happened.
+  String? removedNotice;
+
+  /// Dismiss the removal notice (Account & Circles screen).
+  void clearRemovedNotice() {
+    removedNotice = null;
+    notifyListeners();
+  }
+
   void attachSync(SyncService sync) {
     _sync = sync;
   }
@@ -157,11 +173,16 @@ class FamilyService extends ChangeNotifier {
   /// role entry is left alone, so they can re-join with the
   /// invite code (see SyncService.removeMemberNode).
   ///
-  /// HONEST LIMIT (rules v1): under the currently published
-  /// rules a removed member's app may re-create its own member
-  /// node on its next location publish (ensureMyMemberNode) — so
-  /// removal only sticks permanently after rules v2
-  /// (database.rules.json, written but not deployed) are deployed.
+  /// REMOVAL STICKS (rules v5, v0.6.27 — 27 Nov 2026): the old
+  /// v2 rules let anyone write their own member node, so a
+  /// removed member's phone re-created its node on its next
+  /// blind location publish and the member came back within a
+  /// minute, alerts and all. Under v5 a node CREATE needs a
+  /// valid invite code (or a full node), and an UPDATE needs
+  /// current membership — a blind publish satisfies neither.
+  /// The removed phone also notices (its members read is
+  /// denied) and stops sharing by itself; the parent's alerts
+  /// centre hides the removed member's old events.
   Future<(bool, String?)> removeMember(String id) async {
     if (!canRemoveMember(
       isAdmin: amParent,
@@ -536,7 +557,7 @@ class FamilyService extends ChangeNotifier {
       // A members event proves we are online again — retry any
       // alert publish that never landed while offline (v0.6.9).
       unawaited(retryPendingAlertPublishes());
-    });
+    }, onError: handleMembersReadError);
     sync.subscribeAlerts(circleId, sync.uid!, (alerts) {
       final i = _members.indexWhere((m) => m.id == sync.uid);
       if (i < 0) return;
@@ -586,6 +607,49 @@ class FamilyService extends ChangeNotifier {
       _seenChatIds = ids;
       _chatBaselineDone = true;
     });
+  }
+
+  /// The members subscription errored (v0.6.27). A removed
+  /// member's read is DENIED by the circle-level read rule, so
+  /// the stream dies with permission-denied instead of an empty
+  /// list. That is the removal signal — but a transient auth
+  /// glitch must never nuke the circle, so verify first with a
+  /// one-time read of my own node: gone (or still denied) means
+  /// removed; still there, or the check itself failed, means
+  /// ignore the error and keep going.
+  Future<void> handleMembersReadError(Object error) async {
+    if (!isPermissionDeniedError(error)) return;
+    final circleId = activeCircleId;
+    if (circleId == null || _sync == null) return;
+    final check = await _sync!.myMemberNodeCheck(circleId);
+    if (shouldTreatAsRemoved(memberNodeExists: check)) {
+      await handleRemovedFromCircle(circleId);
+    }
+  }
+
+  /// I was removed from [circleId] (v0.6.27): stop sharing at
+  /// once, drop the circle locally, and tell the user. The
+  /// background location service is stopped so it can never
+  /// re-create my node (rules v5 would deny the write anyway),
+  /// and the account stays closed until I join again with the
+  /// invite code. Guarded against double-runs (the members
+  /// stream can error more than once while it dies).
+  bool _removalHandling = false;
+  Future<void> handleRemovedFromCircle(String circleId) async {
+    if (_removalHandling) return;
+    _removalHandling = true;
+    try {
+      await BackgroundLocationService.stop();
+      _members.clear();
+      _subscribed = false;
+      await _save();
+      await _sync?.removeCircleLocally(circleId);
+      removedNotice =
+          'You were removed from the circle. Your location is no longer shared and your alerts have stopped. Join again with the parent\'s invite code to come back.';
+      notifyListeners();
+    } finally {
+      _removalHandling = false;
+    }
   }
 
   Future<void> _save() async {
