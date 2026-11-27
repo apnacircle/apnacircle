@@ -184,6 +184,13 @@ Function + email sender.
    dobara dikhata hi nahi. Ab card par "Allow" ke saath hi
    **"Open battery settings"** ka button bhi hai, jo seedha App
    info page kholta hai (wahan Battery → "Unrestricted" chuno).
+   **v0.6.26 — admin ki apni apps lock hona band (bug fix):**
+   Locks screen bachay ki list admin ke apne phone par bhi
+   apply kar deti thi, is liye admin ki apni saari apps lock ho
+   jati thin. Ab parent sirf publish karta hai (bachay ke phone
+   par lagti hai), aur admin ke phone par purani list ek dafa
+   clear ho jati hai. Bachay ke phone par lock ke liye
+   Accessibility service ON hona zaroori hai (Setup step 5).
    **v0.6.25 — compileSdk 36 (build fix):** v0.6.23 ki CI run
    #376 APK banate waqt fail hui — nayi media packages
    (androidx.core 1.18 / activity 1.12) ko compileSdk 36
