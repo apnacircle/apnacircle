@@ -27,6 +27,13 @@ class Member {
   final ProtectionLevel protection;
   final Map<AlertType, bool> alerts;
 
+  /// The invite code this member joined with (v0.6.27). Rules v5
+  /// accept a member-node CREATE only with a valid invite code
+  /// (or, for older apps, a full node) — so join/create writes
+  /// the code into the node as proof. Null for nodes written by
+  /// older apps; never sent on location/battery updates.
+  final String? inviteCode;
+
   /// True when this member's shown location arrived by SMS while
   /// their phone was offline (v0.3). The map labels it "SMS se
   /// aayi" with the SMS time — it is a 15-minute snapshot, not live.
@@ -46,6 +53,7 @@ class Member {
     this.locationSharingOn = true,
     this.locationViaSms = false,
     this.protection = ProtectionLevel.unknown,
+    this.inviteCode,
     Map<AlertType, bool>? alerts,
   }) : alerts = alerts ?? const {};
 
@@ -82,6 +90,7 @@ class Member {
     bool? locationViaSms,
     ProtectionLevel? protection,
     Map<AlertType, bool>? alerts,
+    String? inviteCode,
   }) =>
       Member(
         id: id,
@@ -97,6 +106,7 @@ class Member {
         locationSharingOn: locationSharingOn ?? this.locationSharingOn,
         locationViaSms: locationViaSms ?? this.locationViaSms,
         protection: protection ?? this.protection,
+        inviteCode: inviteCode ?? this.inviteCode,
         alerts: alerts ?? this.alerts,
       );
 
@@ -114,6 +124,7 @@ class Member {
         'locationSharingOn': locationSharingOn,
         'locationViaSms': locationViaSms,
         'protection': protection.wireValue,
+        if (inviteCode != null) 'inviteCode': inviteCode,
         'alerts': {for (final e in alerts.entries) e.key.name: e.value},
       };
 
@@ -136,6 +147,7 @@ class Member {
         locationViaSms: j['locationViaSms'] as bool? ?? false,
         protection:
             ProtectionLevel.fromWire(j['protection'] as String?),
+        inviteCode: j['inviteCode'] as String?,
         alerts: {
           for (final e in (j['alerts'] as Map? ?? {}).entries)
             AlertType.values.firstWhere(
