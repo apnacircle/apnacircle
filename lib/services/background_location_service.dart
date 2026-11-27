@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/battery_schedule.dart';
 import '../core/location_service.dart';
 import '../core/protection_level.dart';
+import '../core/removal_detection.dart';
 import '../models/circle.dart';
 import 'device_admin_service.dart';
 import 'device_owner_service.dart';
@@ -304,8 +305,63 @@ class BackgroundLocationTaskHandler extends TaskHandler {
     unawaited(_publishCycle());
   }
 
+  /// One-time membership check (v0.6.27): does MY member node
+  /// still exist? `true` = yes. `false` = definitely gone (node
+  /// missing, or the read was permission-denied — the read rule
+  /// denies anyone whose node is gone). `null` = the check
+  /// itself failed (offline, unknown error) — never treat that
+  /// as a removal. Never throws.
+  Future<bool?> _checkMembership() async {
+    try {
+      final snap = await _db!
+          .child(FirebaseConfig.circleMemberPath(_circleId!, _uid!))
+          .get();
+      return snap.exists;
+    } catch (e) {
+      if (isPermissionDeniedError(e)) return false;
+      return null;
+    }
+  }
+
+  /// Stop the foreground service because I was removed from the
+  /// circle (v0.6.27), and clear its saved data so a reboot or
+  /// auto-restart can never resume sharing for this circle.
+  /// Best effort — a failure to stop here is retried next cycle
+  /// (the check runs every cycle until the service is gone).
+  Future<void> _stopForRemoval() async {
+    try {
+      await FlutterForegroundTask.stopService();
+    } catch (_) {
+      // Retried next cycle.
+    }
+    try {
+      await FlutterForegroundTask.saveData(
+          key: BackgroundLocationService.dataCircleId, value: '');
+      await FlutterForegroundTask.saveData(
+          key: BackgroundLocationService.dataUid, value: '');
+      await FlutterForegroundTask.saveData(
+          key: BackgroundLocationService.dataName, value: '');
+    } catch (_) {
+      // Best effort.
+    }
+  }
+
   Future<void> _publishCycle() async {
     if (_db == null || _circleId == null || _uid == null) return;
+    // v0.6.27 — REMOVED FROM THE CIRCLE: the parent deleted my
+    // member node, so stop sharing at once. One membership read
+    // per cycle (cheap): node gone or read denied means removed
+    // — stop the service and clear its saved data so a reboot
+    // can never resume sharing for this circle. A check that
+    // itself failed (no network) changes nothing; the next cycle
+    // tries again. Without this, the publishes below would keep
+    // re-creating the node (rules v5 deny the write, but the
+    // service would still run and drain the battery for nothing).
+    final memberExists = await _checkMembership();
+    if (shouldTreatAsRemoved(memberNodeExists: memberExists)) {
+      await _stopForRemoval();
+      return;
+    }
     final now = DateTime.now();
     // v0.6.13 (B): a child deactivating Device Admin must alert
     // the parent WITHIN A MINUTE — while the app is still
