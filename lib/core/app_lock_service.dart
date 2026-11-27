@@ -222,7 +222,18 @@ class AppLockService {
   /// 27 Nov 2026: "meri apni hi saari apps lock ho jati hain"),
   /// while the child's phone enforced nothing extra. The child's
   /// phone enforces its own locks via its Home subscription.
-  static bool mayApplyLocally({required bool isAdmin}) => !isAdmin;
+  ///
+  /// v0.6.28 (FAIL CLOSED): [isAdmin] is nullable — null means
+  /// UNKNOWN (no active circle yet, e.g. right after a reinstall
+  /// before the circle list loads). Unknown must NEVER be treated
+  /// as "not admin": the v0.6.26 `?? false` default did exactly
+  /// that, so a parent toggling a child's lock while the circle
+  /// was still loading applied the child's list to their OWN
+  /// phone and locked their own apps all over again (reported
+  /// again 27 Nov 2026, after installing v0.6.27). Only an
+  /// explicit `false` may apply locally.
+  static bool mayApplyLocally({required bool? isAdmin}) =>
+      isAdmin == false;
 
   /// Tell native code to enforce this list on the CHILD phone.
   /// Sends both the currently-blocked packages and the full
