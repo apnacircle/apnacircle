@@ -192,6 +192,17 @@ void main() {
       expect(await AppLockService.isServiceEnabled(), isFalse);
     });
 
+    test('applyLocks([]) sends an empty schedule (the admin clear)',
+        () async {
+      await mockNative(applyResult: true);
+      final ok = await AppLockService.applyLocks([]);
+      expect(ok, isTrue);
+      expect(calls, hasLength(1));
+      final args = calls.single.arguments as Map;
+      expect((args['packages'] as List), isEmpty);
+      expect((args['schedule'] as List), isEmpty);
+    });
+
     test('openAccessibilitySettings calls the channel', () async {
       await mockNative();
       await AppLockService.openAccessibilitySettings();
@@ -199,6 +210,17 @@ void main() {
         calls.map((c) => c.method),
         contains('openAccessibilitySettings'),
       );
+    });
+  });
+
+  group('v0.6.26 — mayApplyLocally (admin apps must never lock)', () {
+    test('admin phone must NOT apply a lock list locally', () {
+      expect(AppLockService.mayApplyLocally(isAdmin: true), isFalse);
+    });
+
+    test('member/child phone DOES apply its own lock list locally',
+        () {
+      expect(AppLockService.mayApplyLocally(isAdmin: false), isTrue);
     });
   });
 }
