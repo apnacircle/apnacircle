@@ -496,8 +496,9 @@ class _FakeSync extends SyncService {
   @override
   void subscribeMembers(
     String circleId,
-    void Function(List<Member>) onData,
-  ) {
+    void Function(List<Member>) onData, {
+    void Function(Object error)? onError,
+  }) {
     membersCallback = onData;
   }
 
