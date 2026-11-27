@@ -212,6 +212,18 @@ class AppLockService {
           .map((a) => a.packageName)
           .toList();
 
+  /// v0.6.26 — WHO may apply a lock list LOCALLY on this phone.
+  /// Only the phone whose OWN locks these are (a child/member).
+  /// The parent's phone only PUBLISHES the child's list to RTDB —
+  /// it must never apply it locally. Before this fix the Locks
+  /// screen called applyLocks with the target child's list on the
+  /// parent's own phone, so the ADMIN's own apps got locked and
+  /// the parent had to enter the PIN to open them (reported
+  /// 27 Nov 2026: "meri apni hi saari apps lock ho jati hain"),
+  /// while the child's phone enforced nothing extra. The child's
+  /// phone enforces its own locks via its Home subscription.
+  static bool mayApplyLocally({required bool isAdmin}) => !isAdmin;
+
   /// Tell native code to enforce this list on the CHILD phone.
   /// Sends both the currently-blocked packages and the full
   /// schedule, so native code can re-evaluate time windows itself.
