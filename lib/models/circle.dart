@@ -55,6 +55,25 @@ class CircleInfo {
       );
 }
 
+/// Which circle should be active after the list loads (v0.6.28,
+/// pure): keep the current one when it is still in the list,
+/// otherwise take the first circle, or null when there are no
+/// circles at all. Before this, a fresh install left NO circle
+/// active (the refresh only replaced a STALE id, never a null
+/// one), so the app ran with activeCircle == null — the admin
+/// wipe in Home never ran and every `?? false` admin check
+/// treated the parent as a child, which re-locked the parent's
+/// own apps (reported 27 Nov 2026, after installing v0.6.27).
+String? resolveActiveCircleId({
+  required String? currentActiveId,
+  required List<String> circleIds,
+}) {
+  if (currentActiveId != null && circleIds.contains(currentActiveId)) {
+    return currentActiveId;
+  }
+  return circleIds.isEmpty ? null : circleIds.first;
+}
+
 /// A circle event pushed to the parent (SOS, battery-low, phone-off).
 /// Written to `circles/{id}/events/` in RTDB; the parent's phone
 /// listens to that node. FCM push for the same events needs a server
