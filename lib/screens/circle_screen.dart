@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/escape_gate.dart';
+import '../models/circle.dart';
 import '../services/auth_service.dart';
 import '../services/family_service.dart';
 import '../services/firebase_bootstrap.dart';
@@ -110,6 +111,53 @@ class _CircleScreenState extends State<CircleScreen> {
           : 'Circle "${circle.name}" created! Invite code: ${circle.inviteCode} — share it with the child.';
     });
     if (circle != null) _circleName.clear();
+  }
+
+  Future<void> _confirmDeleteCircle(CircleInfo c) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete "${c.name}"?'),
+        content: const Text(
+          'This deletes the circle for everyone in it. Members '
+          'will see that they were removed. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    // PIN-gate: deleting a circle is destructive — the same
+    // parent PIN as removing a member.
+    await askParentPin(
+      context,
+      onUnlocked: () {
+        unawaited(_doDeleteCircle(c));
+      },
+    );
+  }
+
+  Future<void> _doDeleteCircle(CircleInfo c) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+      _info = null;
+    });
+    final ok = await context.read<SyncService>().deleteCircle(c.id);
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _info = ok ? 'Circle "${c.name}" deleted.' : null;
+      _error = ok ? null : 'Could not delete "${c.name}".';
+    });
   }
 
   Future<void> _joinCircle() async {
@@ -316,6 +364,23 @@ class _CircleScreenState extends State<CircleScreen> {
                         'Role: ${c.role}${c.inviteCode.isNotEmpty ? ' · Code: ${c.inviteCode}' : ''}',
                       ),
                       value: c.id,
+                      // v0.6.28: delete a circle I parent — circles
+                      // created by accident (empty name becomes
+                      // "Family") used to linger with no way to
+                      // remove them. PIN-gated, like removing a
+                      // member. Members see only their own circles
+                      // (no delete button on a circle I don't parent).
+                      secondary: c.role == 'parent'
+                          ? IconButton(
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                color: Colors.red,
+                              ),
+                              tooltip: 'Delete circle',
+                              onPressed:
+                                  _busy ? null : () => _confirmDeleteCircle(c),
+                            )
+                          : null,
                     ),
                 ],
               ),
