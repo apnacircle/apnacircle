@@ -807,15 +807,15 @@ class _HomeMapScreenState extends State<HomeMapScreen>
           // the centre: every member separately, with their own
           // count and what each alert was, with its time.
           _AlertsBell(onTap: _showAlertsCenter),
-          // v0.6.21: group call lives in the AppBar, NOT beside
-          // the Family header — the header sits at the bottom of
-          // the screen, where the floating SOS buttons cover its
-          // right side (real bug found by the widget test: the
-          // tap landed on the SOS FAB, never on the button).
+          // v0.6.29: the call button opens a member LIST — tap a
+          // name to call that person directly. (v0.6.21's dialog
+          // kept its Audio/Video buttons GREYED OUT until a member
+          // was ticked, so tapping them did nothing — that is why
+          // the button felt dead. The list below has no ticking.)
           IconButton(
             icon: const Icon(Icons.group_add),
-            tooltip: 'Group call',
-            onPressed: () => _showGroupCallPicker(members),
+            tooltip: 'Call',
+            onPressed: () => _showCallSheet(members),
           ),
           IconButton(
             icon: const Icon(Icons.phone),
@@ -1228,6 +1228,58 @@ class _HomeMapScreenState extends State<HomeMapScreen>
       return;
     }
     _openCallScreen();
+  }
+
+  /// Call sheet (v0.6.29): tap a name to call that person
+  /// directly (audio/video choice, same as tapping their picture),
+  /// or tap "Group call" to tick several members and call them all
+  /// at once (conference). The v0.6.21 dialog is kept for the
+  /// conference part only — the sheet is the entry point.
+  Future<void> _showCallSheet(List<Member> members) async {
+    final family = context.read<FamilyService>();
+    final others = members.where((m) => m.id != family.myId).toList();
+    if (others.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No one else in the circle to call.'),
+        ),
+      );
+      return;
+    }
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.group_add),
+              title: const Text('Group call'),
+              subtitle: const Text('Call several members at once'),
+              onTap: () => Navigator.pop(ctx, 'group'),
+            ),
+            const Divider(height: 1),
+            for (final m in others)
+              ListTile(
+                leading: CircleAvatar(
+                  child: Text(m.name.isEmpty ? '?' : m.name[0]),
+                ),
+                title: Text(m.name),
+                trailing: const Icon(Icons.call),
+                onTap: () => Navigator.pop(ctx, m.id),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    if (choice == 'group') {
+      await _showGroupCallPicker(members);
+      return;
+    }
+    final target = others.where((m) => m.id == choice).toList();
+    if (target.isEmpty) return;
+    await _showCallMenu(target.first);
   }
 
   /// Group call (v0.6.21): tick the members to invite, then pick
