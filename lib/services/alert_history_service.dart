@@ -45,10 +45,19 @@ class AlertHistoryService extends ChangeNotifier {
   /// the initial load against the live listener).
   final Map<String, CircleEvent> _events = {};
 
-  /// All loaded events, newest first.
+  /// All loaded events, newest first — from CURRENT members
+  /// only (v0.6.27). A removed member's old events stay in the
+  /// `events` node (it is append-only — nobody can delete them),
+  /// but they must not keep showing up in the parent's alerts
+  /// centre after the removal. While the member list is still
+  /// loading (empty) nothing is filtered — fail open, never hide
+  /// a real SOS behind a loading state.
   List<CircleEvent> get events {
     final list = _events.values.toList()..sort((a, b) => b.at.compareTo(a.at));
-    return List.unmodifiable(list);
+    return List.unmodifiable(filterAlertsToMembers(
+      list,
+      _family.members.map((m) => m.id).toSet(),
+    ));
   }
 
   /// Events per member uid, newest first.
@@ -153,6 +162,19 @@ class AlertHistoryService extends ChangeNotifier {
     unawaited(_sub?.cancel());
     super.dispose();
   }
+}
+
+/// Keep only the alerts that come from CURRENT circle members
+/// (v0.6.27 — a removed member's old events must stop showing in
+/// the alerts centre). [memberIds] empty means the member list
+/// is still loading — return everything (fail open: never hide a
+/// real SOS behind a loading state). Pure, unit-tested.
+List<CircleEvent> filterAlertsToMembers(
+  List<CircleEvent> events,
+  Set<String> memberIds,
+) {
+  if (memberIds.isEmpty) return List.unmodifiable(events);
+  return events.where((e) => memberIds.contains(e.fromUid)).toList();
 }
 
 /// Plain-words label for one event type (v0.6.21). The stored
