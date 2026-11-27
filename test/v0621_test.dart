@@ -501,11 +501,18 @@ void main() {
       expect(find.text('Mujahid'), findsWidgets);
     });
 
-    testWidgets('group-call button is beside the Family header',
-        (tester) async {
+    testWidgets('call button opens the member list; Group call row '
+        'opens the picker (v0.6.29)', (tester) async {
       await pumpHome(tester);
-      expect(find.byTooltip('Group call'), findsOneWidget);
-      await tester.tap(find.byTooltip('Group call'));
+      expect(find.byTooltip('Call'), findsOneWidget);
+      await tester.tap(find.byTooltip('Call'));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+      // The sheet lists every other member + the Group call row.
+      expect(find.text('Group call'), findsOneWidget);
+      expect(find.text('Ali'), findsOneWidget);
+      // Group call row → the tick-members dialog.
+      await tester.tap(find.text('Group call'));
       await tester.pump(const Duration(milliseconds: 500));
       await tester.pump(const Duration(milliseconds: 500));
       expect(find.text('Group call — pick members'), findsOneWidget);
@@ -517,6 +524,19 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       await tester.pump(const Duration(milliseconds: 500));
       expect(find.textContaining('Calls need live sync'), findsOneWidget);
+    });
+
+    testWidgets('call sheet: tapping a member opens the call menu',
+        (tester) async {
+      await pumpHome(tester);
+      await tester.tap(find.byTooltip('Call'));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.text('Ali'));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('Audio call Ali'), findsOneWidget);
+      expect(find.text('Video call Ali'), findsOneWidget);
     });
 
     testWidgets('tap a member picture opens the call menu', (tester) async {
@@ -585,7 +605,12 @@ void main() {
         find.byType(TextField),
         'test receipt 123',
       );
-      await tester.tap(find.text('Send'));
+      // v0.6.29: the Send button is a circular send icon (mic
+      // while the box is empty) — the mic→send swap rebuilds on
+      // the controller, so pump once after typing or the icon
+      // is not in the tree yet when the tap runs.
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.send));
       await tester.pump();
       await tester.pump();
       expect(find.text('test receipt 123'), findsOneWidget);
