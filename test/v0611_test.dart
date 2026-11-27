@@ -249,8 +249,9 @@ class _FakeChatSync extends SyncService {
   @override
   void subscribeMembers(
     String circleId,
-    void Function(List<Member>) onData,
-  ) {}
+    void Function(List<Member>) onData, {
+    void Function(Object error)? onError,
+  }) {}
 
   @override
   void subscribeAlerts(
