@@ -133,7 +133,9 @@ void main() {
       await tester.longPress(find.byIcon(Icons.mic_none));
       await tester.pump();
       expect(
-        find.text('Voice bhejne ke liye internet aur circle chahiye.'),
+        find.text(
+          'You need internet and a circle to send a voice message.',
+        ),
         findsOneWidget,
       );
     });
