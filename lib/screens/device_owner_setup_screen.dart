@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../core/escape_gate.dart';
+import '../core/language_service.dart';
+import '../l10n/strings.dart';
 import '../services/device_admin_service.dart';
 import '../services/device_owner_service.dart';
 import '../services/pin_service.dart';
@@ -98,16 +100,16 @@ class _DeviceOwnerSetupScreenState extends State<DeviceOwnerSetupScreen> {
   /// message (the parent PIN must exist first).
   Future<void> _gateWithPin() async {
     if (_pinChecked || !mounted) return;
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     final sync = context.read<SyncService>();
     final pin = context.read<PinService>();
     final hash = await resolveParentPinHash(sync: sync, pin: pin);
     if (!mounted) return;
     if (hash == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Parent PIN is not set up yet — set the parent PIN first.',
-          ),
+        SnackBar(
+          content: Text(t('scr_ownerPinNotSet')),
         ),
       );
       Navigator.pop(context);
@@ -131,11 +133,13 @@ class _DeviceOwnerSetupScreenState extends State<DeviceOwnerSetupScreen> {
   bool _pinUnlocked = false;
 
   Future<void> _showQr() async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     final url = _urlCtrl.text.trim();
     if (url.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('APK download URL is needed for the QR code.'),
+        SnackBar(
+          content: Text(t('scr_ownerUrlNeeded')),
         ),
       );
       return;
@@ -145,10 +149,8 @@ class _DeviceOwnerSetupScreenState extends State<DeviceOwnerSetupScreen> {
     if (!mounted) return;
     if (checksum == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Could not read this app\'s signing certificate — no QR shown.',
-          ),
+        SnackBar(
+          content: Text(t('scr_ownerCertFailed')),
         ),
       );
       return;
@@ -167,6 +169,8 @@ class _DeviceOwnerSetupScreenState extends State<DeviceOwnerSetupScreen> {
   }
 
   Future<void> _removeProtection() async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     final sync = context.read<SyncService>();
     final pin = context.read<PinService>();
     await askParentPinForProtectionRemoval(
@@ -184,8 +188,8 @@ class _DeviceOwnerSetupScreenState extends State<DeviceOwnerSetupScreen> {
           SnackBar(
             content: Text(
               ok
-                  ? 'Protection removed — the app can now be uninstalled.'
-                  : 'Removal failed — check the protection status below.',
+                  ? t('scr_setProtectionRemoved')
+                  : t('scr_ownerRemovalFailed'),
             ),
           ),
         );
@@ -195,9 +199,11 @@ class _DeviceOwnerSetupScreenState extends State<DeviceOwnerSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageService>();
+    String t(String key) => tr(lang.isUrdu, key);
     final protected = _isOwner == true || _isAdmin == true;
     return Scaffold(
-      appBar: AppBar(title: const Text('Uninstall protection')),
+      appBar: AppBar(title: Text(t('scr_ownerTitle'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -210,69 +216,55 @@ class _DeviceOwnerSetupScreenState extends State<DeviceOwnerSetupScreen> {
                       ? Colors.orange
                       : Colors.grey,
             ),
-            title: const Text('This phone'),
+            title: Text(t('scr_ownerThisPhone')),
             subtitle: Text(
               _isOwner == null
                   ? '…'
                   : _isOwner!
-                      ? 'Device Owner ON — cannot be uninstalled from Settings'
+                      ? t('scr_ownerOn')
                       : _isAdmin == true
-                          ? 'Device Admin only — uninstall needs deactivation first (+ parent alert)'
-                          : 'Not protected — the app can be uninstalled freely',
+                          ? t('scr_ownerAdminOnly')
+                          : t('scr_ownerNotProtected'),
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Text(
-              'How the strongest protection works (one time, parent only):\n'
-              '1. Fill the APK link below and show the QR code.\n'
-              '2. Factory-reset the child\'s phone (or use a new phone).\n'
-              '3. On the welcome screen tap 6 times, then scan the QR.\n'
-              '4. Android installs the app as device owner — from then on '
-              'the child cannot uninstall it from Settings.\n\n'
-              'Honest limits: this needs a factory reset once — it cannot '
-              'be done on an already-set-up phone without one. A '
-              'recovery-mode factory reset still wipes the phone; no app '
-              'can stop that. The QR only works for the exact APK build '
-              'at the link (the checksum is computed from the app on '
-              'this phone). Protection itself needs no internet — '
-              'Android enforces it on the phone, even with data off. '
-              'Keep the parent PIN secret from the child — '
-              'anyone who knows the code can remove the protection. If '
-              'the parent forgets the PIN, only a factory reset removes it.',
-              style: TextStyle(fontSize: 13, color: Colors.grey),
+              t('scr_ownerHowItWorks'),
+              style: const TextStyle(fontSize: 13, color: Colors.grey),
             ),
           ),
           TextField(
             controller: _urlCtrl,
             keyboardType: TextInputType.url,
-            decoration: const InputDecoration(
-              labelText: 'APK download URL (required)',
+            decoration: InputDecoration(
+              labelText: t('scr_ownerApkUrl'),
               hintText: 'https://…/app-release.apk',
-              border: OutlineInputBorder(),
+              border: const OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _ssidCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Wi-Fi name (optional)',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: t('scr_ownerWifiName'),
+              border: const OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _wifiPassCtrl,
             obscureText: true,
-            decoration: const InputDecoration(
-              labelText: 'Wi-Fi password (optional)',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: t('scr_ownerWifiPass'),
+              border: const OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 12),
           FilledButton(
             onPressed: _showQr,
-            child: const Text('Show QR code'),
+            child: Text(t('scr_ownerShowQr')),
           ),
           if (_qrPayload != null) ...[
             const SizedBox(height: 16),
@@ -288,11 +280,10 @@ class _DeviceOwnerSetupScreenState extends State<DeviceOwnerSetupScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Scan this on the child\'s phone during setup (after the '
-              'factory reset, tap 6 times on the welcome screen).',
+            Text(
+              t('scr_ownerScanHint'),
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: Colors.grey),
+              style: const TextStyle(fontSize: 13, color: Colors.grey),
             ),
           ],
           const SizedBox(height: 16),
@@ -303,18 +294,16 @@ class _DeviceOwnerSetupScreenState extends State<DeviceOwnerSetupScreen> {
               onPressed: _removing ? null : _removeProtection,
               child: Text(
                 _removing
-                    ? 'Removing…'
-                    : 'Remove protection on this phone (parent code needed)',
+                    ? t('scr_ownerRemoving')
+                    : t('scr_ownerRemove'),
               ),
             ),
           if (protected)
-            const Padding(
-              padding: EdgeInsets.only(top: 8),
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
               child: Text(
-                'The parent enters HIS code → protection is removed → '
-                'only then can the app be uninstalled. The parent is '
-                'never locked out: his code always works.',
-                style: TextStyle(fontSize: 13, color: Colors.grey),
+                t('scr_ownerRemoveNote'),
+                style: const TextStyle(fontSize: 13, color: Colors.grey),
               ),
             ),
         ],
