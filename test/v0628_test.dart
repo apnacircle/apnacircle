@@ -11,6 +11,7 @@
 // visit, not once; (4) a parent circle can be deleted from
 // Account & Circles (rules v6 let the creator delete info).
 import 'package:apnacircle/core/app_lock_service.dart';
+import 'package:apnacircle/core/language_service.dart';
 import 'package:apnacircle/models/circle.dart';
 import 'package:apnacircle/screens/circle_screen.dart';
 import 'package:apnacircle/services/auth_service.dart';
@@ -109,6 +110,11 @@ void main() {
             ChangeNotifierProvider<FamilyService>.value(value: family),
             ChangeNotifierProvider<PinService>.value(value: PinService()),
             ChangeNotifierProvider<OnboardingService>.value(value: OnboardingService()),
+            // v0.6.32: CircleScreen localises via LanguageService
+            // (the app always provides it in production).
+            ChangeNotifierProvider<LanguageService>.value(
+              value: LanguageService(),
+            ),
           ],
           child: const MaterialApp(home: CircleScreen()),
         ),
