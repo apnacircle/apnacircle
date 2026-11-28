@@ -5,6 +5,7 @@ import '../core/language_service.dart';
 import '../l10n/strings.dart';
 import '../services/auth_service.dart';
 import '../services/email_otp_service.dart';
+import '../services/onboarding_service.dart';
 
 /// Sign in / sign up (v0.3, 22 Nov 2026; email-code login v0.6).
 ///
@@ -31,7 +32,19 @@ class AuthScreen extends StatefulWidget {
   /// Gmail code tab — phone OTP is billing-blocked, so the Gmail
   /// code is the working route.
   final int initialMode;
-  const AuthScreen({super.key, this.initialMode = 0});
+
+  /// v0.6.31: first-run only (AppRoot passes true) — a back arrow
+  /// that forgets the role and returns to the role screen, so a
+  /// wrong Parent/Child tap is undoable even at the login step.
+  /// When the screen is pushed from Settings (sign in later),
+  /// this stays false and the normal Navigator back applies.
+  final bool showRoleBack;
+
+  const AuthScreen({
+    super.key,
+    this.initialMode = 0,
+    this.showRoleBack = false,
+  });
   @override
   State<AuthScreen> createState() => _AuthScreenState();
 }
@@ -184,7 +197,17 @@ class _AuthScreenState extends State<AuthScreen> {
     final lang = context.watch<LanguageService>();
     String t(String key) => tr(lang.isUrdu, key);
     return Scaffold(
-      appBar: AppBar(title: const Text('Sign in — ApnaCircle')),
+      appBar: AppBar(
+        title: const Text('Sign in — ApnaCircle'),
+        leading: widget.showRoleBack
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back),
+                tooltip: 'Wapas — role badlein',
+                onPressed: () =>
+                    context.read<OnboardingService>().clearRole(),
+              )
+            : null,
+      ),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
