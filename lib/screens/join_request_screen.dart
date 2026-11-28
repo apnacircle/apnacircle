@@ -150,6 +150,15 @@ class _JoinRequestScreenState extends State<JoinRequestScreen> {
     await context.read<OnboardingService>().markJoinSkipped();
   }
 
+  /// v0.6.31: wrong role tapped by mistake — cancel the request
+  /// (if one was sent) and go back to the role screen.
+  Future<void> _backToRole() async {
+    final service = context.read<JoinRequestService>();
+    await service.cancelMyRequest();
+    if (!mounted) return;
+    await context.read<OnboardingService>().clearRole();
+  }
+
   @override
   Widget build(BuildContext context) {
     final sync = context.watch<SyncService>();
@@ -174,7 +183,14 @@ class _JoinRequestScreenState extends State<JoinRequestScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Join family circle')),
+      appBar: AppBar(
+        title: const Text('Join family circle'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          tooltip: 'Wapas — role badlein',
+          onPressed: _backToRole,
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
