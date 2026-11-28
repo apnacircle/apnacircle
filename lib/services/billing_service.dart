@@ -5,6 +5,7 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/constants.dart';
+import '../l10n/strings.dart';
 
 /// Play Billing — Family plan $5/year (v0.5, 23 Nov 2026).
 ///
@@ -80,6 +81,10 @@ class BillingService extends ChangeNotifier {
   String? _error;
   String? get error => _error;
 
+  /// Locale for user-facing error strings. Set by [initialize];
+  /// the purchase stream has no caller to pass one.
+  bool _isUrdu = false;
+
   /// Locally stored entitlement (from the last confirmed purchase).
   bool _subscribed = false;
   bool get isSubscribed => _subscribed;
@@ -89,24 +94,26 @@ class BillingService extends ChangeNotifier {
   /// Connect to the store, restore past purchases and fetch the
   /// product. Safe to call in demo mode — it just reports
   /// [BillingStatus.unavailable] when there is no store.
-  Future<void> initialize() async {
+  Future<void> initialize({bool isUrdu = false}) async {
+    _isUrdu = isUrdu;
     final prefs = await SharedPreferences.getInstance();
     _subscribed = prefs.getBool(_subscribedKey) ?? false;
     try {
       final available = await _store.isAvailable();
       if (!available) {
-        _set(BillingStatus.unavailable, 'Play Billing is not available.');
+        _set(BillingStatus.unavailable, tr(isUrdu, 'svc_billingUnavailable'));
         return;
       }
       _sub = _store.purchaseStream.listen(
         _onPurchases,
-        onError: (_) => _set(BillingStatus.error, 'Purchase stream failed.'),
+        onError: (_) =>
+            _set(BillingStatus.error, tr(isUrdu, 'svc_billingStreamFailed')),
       );
       final response = await _store.queryProductDetails(
         {AppConstants.billingProductId},
       );
       if (response.error != null) {
-        _set(BillingStatus.error, 'Could not reach Google Play.');
+        _set(BillingStatus.error, tr(isUrdu, 'svc_billingUnreachable'));
         return;
       }
       if (response.productDetails.isEmpty) {
@@ -115,7 +122,7 @@ class BillingService extends ChangeNotifier {
         // tells the user plainly.
         _set(
           BillingStatus.productMissing,
-          'The \$5/year plan is not in the Play Store yet.',
+          tr(isUrdu, 'svc_billingProductMissing'),
         );
         return;
       }
@@ -125,7 +132,10 @@ class BillingService extends ChangeNotifier {
         null,
       );
     } catch (e) {
-      _set(BillingStatus.error, 'Play Billing failed: $e');
+      _set(
+        BillingStatus.error,
+        trf(isUrdu, 'svc_billingFailed', {'e': e.toString()}),
+      );
     }
   }
 
@@ -146,7 +156,10 @@ class BillingService extends ChangeNotifier {
     }
     for (final p in purchases) {
       if (p.status == PurchaseStatus.error) {
-        _set(BillingStatus.error, 'The purchase did not go through.');
+        _set(
+          BillingStatus.error,
+          tr(_isUrdu, 'svc_billingPurchaseFailed'),
+        );
       }
       if (p.pendingCompletePurchase) {
         unawaited(_store.completePurchase(p));
@@ -170,7 +183,7 @@ class BillingService extends ChangeNotifier {
   /// Start the real Google Play purchase flow. Does nothing (and
   /// says so) when the product is missing or the store is
   /// unavailable. Returns false when no purchase was started.
-  Future<bool> buySubscription() async {
+  Future<bool> buySubscription({bool isUrdu = false}) async {
     if (_product == null) return false;
     try {
       final ok = await _store.buyNonConsumable(
@@ -179,17 +192,23 @@ class BillingService extends ChangeNotifier {
       if (ok) _set(BillingStatus.purchasePending, null);
       return ok;
     } catch (e) {
-      _set(BillingStatus.error, 'Could not start the purchase: $e');
+      _set(
+        BillingStatus.error,
+        trf(isUrdu, 'svc_billingStartFailed', {'e': e.toString()}),
+      );
       return false;
     }
   }
 
   /// Re-check past purchases (e.g. after reinstall / new phone).
-  Future<void> restorePurchases() async {
+  Future<void> restorePurchases({bool isUrdu = false}) async {
     try {
       await _store.restorePurchases();
     } catch (e) {
-      _set(BillingStatus.error, 'Could not restore purchases: $e');
+      _set(
+        BillingStatus.error,
+        trf(isUrdu, 'svc_billingRestoreFailed', {'e': e.toString()}),
+      );
     }
   }
 
