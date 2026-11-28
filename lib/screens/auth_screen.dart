@@ -26,14 +26,19 @@ import '../services/email_otp_service.dart';
 /// then works exactly like v0.2 (local only, no cross-phone sync).
 /// The user can sign in later from Settings -> Account & Circles.
 class AuthScreen extends StatefulWidget {
-  const AuthScreen({super.key});
+  /// Which tab opens first: 0 = Phone (SMS OTP), 1 = Gmail
+  /// (password), 2 = Email code. Onboarding (v0.6.30) opens the
+  /// Gmail code tab — phone OTP is billing-blocked, so the Gmail
+  /// code is the working route.
+  final int initialMode;
+  const AuthScreen({super.key, this.initialMode = 0});
   @override
   State<AuthScreen> createState() => _AuthScreenState();
 }
 
 class _AuthScreenState extends State<AuthScreen> {
   /// 0 = Phone (SMS OTP), 1 = Gmail (password), 2 = Email code.
-  int _mode = 0;
+  late int _mode;
   bool _isSignUp = false;
   bool _busy = false;
   String? _error;
@@ -45,6 +50,12 @@ class _AuthScreenState extends State<AuthScreen> {
   final _password = TextEditingController();
   final _name = TextEditingController();
   final _emailCode = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _mode = widget.initialMode;
+  }
 
   @override
   void dispose() {
