@@ -6,8 +6,10 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/app_lock_service.dart';
+import '../core/language_service.dart';
 import '../core/member_phone.dart';
 import '../core/time_lock.dart';
+import '../l10n/strings.dart';
 import '../models/member.dart';
 import '../services/family_service.dart';
 import '../services/sync_service.dart';
@@ -54,8 +56,6 @@ class _LocksScreenState extends State<LocksScreen>
   /// before v0.6.3 nothing showed this, so a parent could set locks
   /// that silently did nothing.
   bool? _serviceOn;
-
-  static const _dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   /// v0.3 remote locks: in synced mode the parent edits locks for
   /// ONE member (the child) — picked below. The child's phone
@@ -306,15 +306,18 @@ class _LocksScreenState extends State<LocksScreen>
 
   /// Plain-words status line under the number field (v0.6.14):
   /// what is saved now, or why the call card cannot appear yet.
-  String _targetPhoneStatus(List<Member> targets) {
+  String _targetPhoneStatus(List<Member> targets, {required bool isUrdu}) {
+    String tf(String key, [Map<String, Object> args = const {}]) =>
+        trf(isUrdu, key, args);
+    String t(String key) => tr(isUrdu, key);
     final target = _targetMemberId == null
         ? null
         : targets.where((m) => m.id == _targetMemberId).firstOrNull;
     if (target == null) return '';
     if (memberPhoneCanMatchCalls(target.phone)) {
-      return 'Saved: ${target.phone} — SIM calls from this member will show their distance.';
+      return tf('scr_lockPhoneSaved', {'phone': target.phone});
     }
-    return 'No number saved — the call-distance card will not appear for this member. Gmail login gives the app no number.';
+    return t('scr_lockNoNumber');
   }
 
   /// Save the target member's mobile number (v0.6.14 — the
@@ -326,11 +329,14 @@ class _LocksScreenState extends State<LocksScreen>
   Future<void> _saveTargetPhone() async {
     final target = _targetMemberId;
     if (target == null) return;
-    final validated = validateMemberPhone(_phoneController.text);
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
+    final validated =
+        validateMemberPhone(_phoneController.text, isUrdu: isUrdu);
     if (validated.number == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(validated.error ?? 'Invalid number.')),
+        SnackBar(content: Text(validated.error ?? t('scr_lockInvalidNumber'))),
       );
       return;
     }
@@ -340,18 +346,21 @@ class _LocksScreenState extends State<LocksScreen>
   }
 
   Future<void> _doSaveTargetPhone(String target) async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     final family = context.read<FamilyService>();
     final (ok, error) = await family.setMemberPhone(
       target,
       _phoneController.text,
+      isUrdu: isUrdu,
     );
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           ok
-              ? 'Number saved — SIM calls from this member will show their distance now.'
-              : (error ?? 'Could not save the number.'),
+              ? t('scr_lockNumberSaved')
+              : (error ?? t('scr_lockSaveFailed')),
         ),
       ),
     );
@@ -359,16 +368,18 @@ class _LocksScreenState extends State<LocksScreen>
   }
 
   void _addCustomApp() {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     final name = _customName.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please type an app name first.')),
+        SnackBar(content: Text(t('scr_lockTypeAppName'))),
       );
       return;
     }
     if (_apps.any((a) => a.name.toLowerCase() == name.toLowerCase())) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('That app is already in the list.')),
+        SnackBar(content: Text(t('scr_lockAppExists'))),
       );
       return;
     }
@@ -412,9 +423,10 @@ class _LocksScreenState extends State<LocksScreen>
     final days = Set<int>.of(window.days);
     if (days.contains(weekday)) {
       if (days.length == 1) {
+        final isUrdu = context.read<LanguageService>().isUrdu;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('At least one day must stay selected.'),
+          SnackBar(
+            content: Text(tr(isUrdu, 'scr_lockOneDay')),
           ),
         );
         return;
@@ -438,6 +450,11 @@ class _LocksScreenState extends State<LocksScreen>
   }
 
   Widget _timeLockEditor(LockedApp app) {
+    final lang = context.watch<LanguageService>();
+    final isUrdu = lang.isUrdu;
+    String t(String key) => tr(isUrdu, key);
+    String tf(String key, [Map<String, Object> args = const {}]) =>
+        trf(isUrdu, key, args);
     final window = app.window ?? TimeWindow.workday8to2;
     final now = DateTime.now();
     final active = app.isLockedAt(now);
@@ -448,16 +465,20 @@ class _LocksScreenState extends State<LocksScreen>
           children: [
             TextButton(
               onPressed: () => _pickTime(app, true),
-              child: Text('Start ${TimeWindow.formatMinutes(window.startMinutes)}'),
+              child: Text(tf('scr_lockStart', {
+                'time': TimeWindow.formatMinutes(window.startMinutes),
+              })),
             ),
             const Text('–'),
             TextButton(
               onPressed: () => _pickTime(app, false),
-              child: Text('End ${TimeWindow.formatMinutes(window.endMinutes)}'),
+              child: Text(tf('scr_lockEnd', {
+                'time': TimeWindow.formatMinutes(window.endMinutes),
+              })),
             ),
             const SizedBox(width: 8),
             Text(
-              active ? 'Locked now' : 'Open now',
+              active ? t('lockedNow') : t('openNow'),
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 color: active ? Colors.red : Colors.green,
@@ -470,7 +491,15 @@ class _LocksScreenState extends State<LocksScreen>
           children: [
             for (var d = 1; d <= 7; d++)
               ChoiceChip(
-                label: Text(_dayLabels[d - 1]),
+                label: Text([
+                  t('scr_lockDayMon'),
+                  t('scr_lockDayTue'),
+                  t('scr_lockDayWed'),
+                  t('scr_lockDayThu'),
+                  t('scr_lockDayFri'),
+                  t('scr_lockDaySat'),
+                  t('scr_lockDaySun'),
+                ][d - 1]),
                 selected: window.days.contains(d),
                 onSelected: (_) => _toggleDay(app, d),
               ),
@@ -478,13 +507,15 @@ class _LocksScreenState extends State<LocksScreen>
         ),
         const SizedBox(height: 4),
         Text(
-          '🔁 ${window.summary()}',
+          '🔁 ${window.summary(isUrdu: isUrdu)}',
           style: const TextStyle(fontSize: 12),
         ),
         Text(
           window.nextStartAfter(now) == null
               ? ''
-              : 'Next lock: ${window.nextStartAfter(now)}',
+              : tf('scr_lockNextLock', {
+                  'time': window.nextStartAfter(now).toString(),
+                }),
           style: const TextStyle(fontSize: 12, color: Colors.grey),
         ),
       ],
@@ -497,6 +528,8 @@ class _LocksScreenState extends State<LocksScreen>
   /// child's phone. The button opens Settings → Accessibility —
   /// only the user's own tap there can turn the service on.
   Widget _serviceStatusCard() {
+    final lang = context.watch<LanguageService>();
+    String t(String key) => tr(lang.isUrdu, key);
     final on = _serviceOn;
     final isOn = on == true;
     return Card(
@@ -528,10 +561,10 @@ class _LocksScreenState extends State<LocksScreen>
                 Expanded(
                   child: Text(
                     on == null
-                        ? 'Checking App Lock service…'
+                        ? t('scr_lockChecking')
                         : isOn
-                            ? 'App Lock is ON on this phone'
-                            : 'App Lock is OFF on this phone',
+                            ? t('scr_lockOn')
+                            : t('scr_lockOff'),
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
@@ -540,7 +573,7 @@ class _LocksScreenState extends State<LocksScreen>
                 ),
                 IconButton(
                   icon: const Icon(Icons.refresh),
-                  tooltip: 'Check again',
+                  tooltip: t('scr_lockCheckAgain'),
                   onPressed: _checkService,
                 ),
               ],
@@ -549,10 +582,8 @@ class _LocksScreenState extends State<LocksScreen>
               on == null
                   ? ''
                   : isOn
-                      ? 'Locked apps will be blocked on this phone.'
-                      : 'Locked apps will NOT be blocked until this is '
-                          'turned on. Tap Enable, then in Settings → '
-                          'Accessibility turn ON "ApnaCircle App Lock".',
+                      ? t('scr_lockBlockedNote')
+                      : t('scr_lockNotBlockedNote'),
             ),
             if (on == false) ...[
               const SizedBox(height: 8),
@@ -560,15 +591,13 @@ class _LocksScreenState extends State<LocksScreen>
                 onPressed: () async {
                   await AppLockService.openAccessibilitySettings();
                 },
-                child: const Text('Enable App Lock'),
+                child: Text(t('scr_lockEnable')),
               ),
             ],
             const SizedBox(height: 4),
-            const Text(
-              'Every child\'s phone needs this ON — it can only be '
-              'turned on from that phone itself, never from the '
-              'parent phone.',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+            Text(
+              t('scr_lockEveryChild'),
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ],
         ),
@@ -578,6 +607,10 @@ class _LocksScreenState extends State<LocksScreen>
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageService>();
+    String t(String key) => tr(lang.isUrdu, key);
+    String tf(String key, [Map<String, Object> args = const {}]) =>
+        trf(lang.isUrdu, key, args);
     final family = context.watch<FamilyService>();
     final sync = context.watch<SyncService>();
     final amAdmin = sync.activeCircle?.isAdmin ?? false;
@@ -602,9 +635,9 @@ class _LocksScreenState extends State<LocksScreen>
         _serviceStatusCard(),
         const SizedBox(height: 8),
         if (sync.isAvailable && amAdmin && targets.isNotEmpty) ...[
-          const Text(
-            'Locks for',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          Text(
+            t('scr_lockLocksFor'),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
           DropdownButton<String>(
             value: _targetMemberId,
@@ -617,18 +650,18 @@ class _LocksScreenState extends State<LocksScreen>
               if (v != null) _loadTargetLocks(v);
             },
           ),
-          const Text(
-            'Changes here are sent to that member\'s phone live.',
-            style: TextStyle(fontSize: 12, color: Colors.grey),
+          Text(
+            t('scr_lockChangesLive'),
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
           ),
           const Divider(),
           if (_targetMemberId != null) ...[
-            const Text(
-              'Call distance — member\u2019s mobile number',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            Text(
+              t('scr_lockCallDistance'),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             Text(
-              _targetPhoneStatus(targets),
+              _targetPhoneStatus(targets, isUrdu: lang.isUrdu),
               style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
             const SizedBox(height: 8),
@@ -638,32 +671,30 @@ class _LocksScreenState extends State<LocksScreen>
                   child: TextField(
                     controller: _phoneController,
                     keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(
-                      labelText: 'Mobile number',
+                    decoration: InputDecoration(
+                      labelText: t('scr_lockMobileNumber'),
                       hintText: 'e.g. 03001234567',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 FilledButton(
                   onPressed: _saveTargetPhone,
-                  child: const Text('Save'),
+                  child: Text(t('scr_lockSave')),
                 ),
               ],
             ),
-            const Text(
-              'Parent PIN is asked before saving. A child cannot change their own number.',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+            Text(
+              t('scr_lockPinNote'),
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
             const Divider(),
           ],
         ],
         SwitchListTile(
-          title: const Text('Location Lock'),
-          subtitle: const Text(
-            'Member cannot turn location off. Only the parent PIN can change this.',
-          ),
+          title: Text(t('scr_lockLocationLock')),
+          subtitle: Text(t('scr_lockLocationHint')),
           value: _locationLocked,
           // v0.6.9: the switch is saved + published now — before,
           // it only did a local setState and never stuck.
@@ -673,11 +704,8 @@ class _LocksScreenState extends State<LocksScreen>
           }),
         ),
         SwitchListTile(
-          title: const Text('Internet-off alert'),
-          subtitle: const Text(
-            'Alert the parent when internet is turned off. '
-            'Android does not allow a full lock on the data toggle.',
-          ),
+          title: Text(t('scr_lockInternetAlert')),
+          subtitle: Text(t('scr_lockInternetHint')),
           value: _internetLockAlert,
           // v0.6.9: same — saved + published, not just local.
           onChanged: (v) => _withPin(() {
@@ -686,14 +714,13 @@ class _LocksScreenState extends State<LocksScreen>
           }),
         ),
         const Divider(),
-        const Text(
-          'App Lock — parent locks any app',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        Text(
+          t('scr_lockAppLockTitle'),
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
-        const Text(
-          'Two modes per app: Always lock, or Time lock — set the time '
-          'once and it auto-locks / auto-unlocks every scheduled day.',
-          style: TextStyle(fontSize: 12, color: Colors.grey),
+        Text(
+          t('scr_lockModesHint'),
+          style: const TextStyle(fontSize: 12, color: Colors.grey),
         ),
         const SizedBox(height: 8),
         Row(
@@ -701,15 +728,16 @@ class _LocksScreenState extends State<LocksScreen>
             Expanded(
               child: TextField(
                 controller: _customName,
-                decoration: const InputDecoration(
-                  labelText: 'Add any other app yourself',
-                  hintText: 'e.g. Snapchat or a game',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: t('addApp'),
+                  hintText: t('scr_lockAddHint'),
+                  border: const OutlineInputBorder(),
                 ),
               ),
             ),
             const SizedBox(width: 8),
-            FilledButton(onPressed: _addCustomApp, child: const Text('Add & Lock')),
+            FilledButton(
+                onPressed: _addCustomApp, child: Text(t('addAndLock'))),
           ],
         ),
         const SizedBox(height: 12),
@@ -725,8 +753,12 @@ class _LocksScreenState extends State<LocksScreen>
                     title: Text(app.name),
                     subtitle: Text(
                       app.isCustom
-                          ? 'Added by parent · ${app.scheduleSummary()}'
-                          : app.scheduleSummary(),
+                          ? tf('scr_lockAddedByParent', {
+                              'summary': app.scheduleSummary(
+                                isUrdu: lang.isUrdu,
+                              ),
+                            })
+                          : app.scheduleSummary(isUrdu: lang.isUrdu),
                     ),
                     value: app.locked,
                     onChanged: (v) => _withPin(
@@ -734,14 +766,14 @@ class _LocksScreenState extends State<LocksScreen>
                     ),
                   ),
                   SegmentedButton<LockMode>(
-                    segments: const [
+                    segments: [
                       ButtonSegment(
                         value: LockMode.always,
-                        label: Text('Always lock'),
+                        label: Text(t('alwaysLock')),
                       ),
                       ButtonSegment(
                         value: LockMode.time,
-                        label: Text('Time lock'),
+                        label: Text(t('timeLock')),
                       ),
                     ],
                     selected: {app.mode},
