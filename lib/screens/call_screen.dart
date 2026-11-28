@@ -5,6 +5,8 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:provider/provider.dart';
 
 import '../core/call_signaling.dart';
+import '../core/language_service.dart';
+import '../l10n/strings.dart';
 import '../services/call_service.dart';
 
 /// The call screen (v0.6.21) — one screen for all three call
@@ -93,6 +95,10 @@ class _CallScreenState extends State<CallScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageService>();
+    String t(String key) => tr(lang.isUrdu, key);
+    String tf(String key, [Map<String, Object> args = const {}]) =>
+        trf(lang.isUrdu, key, args);
     final calls = context.watch<CallService>();
     _syncRenderers(calls);
 
@@ -108,15 +114,20 @@ class _CallScreenState extends State<CallScreen> {
     }
 
     if (calls.state == CallUiState.incoming) {
-      return _incomingView(context, calls);
+      return _incomingView(context, calls, t, tf);
     }
     if (calls.state == CallUiState.outgoing) {
-      return _outgoingView(context, calls);
+      return _outgoingView(context, calls, t, tf);
     }
-    return _inCallView(context, calls);
+    return _inCallView(context, calls, t, tf);
   }
 
-  Widget _incomingView(BuildContext context, CallService calls) {
+  Widget _incomingView(
+    BuildContext context,
+    CallService calls,
+    String Function(String) t,
+    String Function(String, [Map<String, Object>]) tf,
+  ) {
     final call = calls.incomingCall!;
     final isVideo = call.type == CallType.video;
     return Scaffold(
@@ -143,7 +154,7 @@ class _CallScreenState extends State<CallScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Incoming ${isVideo ? 'video' : 'audio'} call…',
+              isVideo ? t('scr_callIncomingVideo') : t('scr_callIncomingAudio'),
               style: const TextStyle(color: Colors.white70, fontSize: 16),
             ),
             const SizedBox(height: 48),
@@ -153,13 +164,13 @@ class _CallScreenState extends State<CallScreen> {
                 _roundButton(
                   icon: Icons.call_end,
                   color: Colors.red,
-                  label: 'Decline',
+                  label: t('scr_callDecline'),
                   onTap: () => unawaited(calls.declineCall()),
                 ),
                 _roundButton(
                   icon: isVideo ? Icons.videocam : Icons.call,
                   color: Colors.green,
-                  label: 'Accept',
+                  label: t('scr_callAccept'),
                   onTap: () async {
                     final error = await calls.answerCall();
                     if (error != null && context.mounted) {
@@ -177,7 +188,12 @@ class _CallScreenState extends State<CallScreen> {
     );
   }
 
-  Widget _outgoingView(BuildContext context, CallService calls) {
+  Widget _outgoingView(
+    BuildContext context,
+    CallService calls,
+    String Function(String) t,
+    String Function(String, [Map<String, Object>]) tf,
+  ) {
     final call = calls.activeCall!;
     final others = call.othersThan(calls.incomingCall?.from ?? '');
     final names = others.map(calls.nameFor).join(', ');
@@ -207,14 +223,14 @@ class _CallScreenState extends State<CallScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Calling… (${isVideo ? 'video' : 'audio'})',
+              isVideo ? t('scr_callCallingVideo') : t('scr_callCallingAudio'),
               style: const TextStyle(color: Colors.white70, fontSize: 16),
             ),
             const SizedBox(height: 48),
             _roundButton(
               icon: Icons.call_end,
               color: Colors.red,
-              label: 'Cancel',
+              label: t('cancel'),
               onTap: () => unawaited(calls.endCall()),
             ),
           ],
@@ -223,7 +239,12 @@ class _CallScreenState extends State<CallScreen> {
     );
   }
 
-  Widget _inCallView(BuildContext context, CallService calls) {
+  Widget _inCallView(
+    BuildContext context,
+    CallService calls,
+    String Function(String) t,
+    String Function(String, [Map<String, Object>]) tf,
+  ) {
     final call = calls.activeCall!;
     final isVideo = call.type == CallType.video;
     final duration = _formatDuration(calls.callDuration);
@@ -236,28 +257,34 @@ class _CallScreenState extends State<CallScreen> {
             Padding(
               padding: const EdgeInsets.all(12),
               child: Text(
-                isVideo ? 'Video call · $duration' : 'Audio call · $duration',
+                isVideo
+                    ? tf('scr_callVideoTitle', {'duration': duration})
+                    : tf('scr_callAudioTitle', {'duration': duration}),
                 style: const TextStyle(color: Colors.white70, fontSize: 16),
               ),
             ),
             Expanded(
               child: isVideo
-                  ? _videoGrid(calls, remoteUids)
-                  : _audioList(calls, remoteUids),
+                  ? _videoGrid(calls, remoteUids, t)
+                  : _audioList(calls, remoteUids, t),
             ),
-            _controls(context, calls, isVideo),
+            _controls(context, calls, isVideo, t),
           ],
         ),
       ),
     );
   }
 
-  Widget _videoGrid(CallService calls, List<String> remoteUids) {
+  Widget _videoGrid(
+    CallService calls,
+    List<String> remoteUids,
+    String Function(String) t,
+  ) {
     if (remoteUids.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
-          'Connecting…',
-          style: TextStyle(color: Colors.white70, fontSize: 18),
+          t('scr_callConnecting'),
+          style: const TextStyle(color: Colors.white70, fontSize: 18),
         ),
       );
     }
@@ -310,7 +337,11 @@ class _CallScreenState extends State<CallScreen> {
     );
   }
 
-  Widget _audioList(CallService calls, List<String> remoteUids) {
+  Widget _audioList(
+    CallService calls,
+    List<String> remoteUids,
+    String Function(String) t,
+  ) {
     final call = calls.activeCall!;
     final allUids = <String>{
       ...call.joinedUids,
@@ -329,23 +360,30 @@ class _CallScreenState extends State<CallScreen> {
               style: const TextStyle(color: Colors.white),
             ),
             subtitle: Text(
-              uid == calls.activeCall!.from ? 'Caller' : 'In call',
+              uid == calls.activeCall!.from
+                  ? t('scr_callCaller')
+                  : t('scr_callInCall'),
               style: const TextStyle(color: Colors.white70),
             ),
             trailing: const Icon(Icons.mic, color: Colors.green),
           ),
         if (allUids.isEmpty)
-          const Center(
+          Center(
             child: Text(
-              'Connecting…',
-              style: TextStyle(color: Colors.white70, fontSize: 18),
+              t('scr_callConnecting'),
+              style: const TextStyle(color: Colors.white70, fontSize: 18),
             ),
           ),
       ],
     );
   }
 
-  Widget _controls(BuildContext context, CallService calls, bool isVideo) {
+  Widget _controls(
+    BuildContext context,
+    CallService calls,
+    bool isVideo,
+    String Function(String) t,
+  ) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       child: Row(
@@ -354,33 +392,33 @@ class _CallScreenState extends State<CallScreen> {
           _roundButton(
             icon: calls.isMuted ? Icons.mic_off : Icons.mic,
             color: calls.isMuted ? Colors.orange : Colors.white24,
-            label: calls.isMuted ? 'Unmute' : 'Mute',
+            label: calls.isMuted ? t('scr_callUnmute') : t('scr_callMute'),
             onTap: calls.toggleMute,
           ),
           _roundButton(
             icon: calls.isSpeakerOn ? Icons.volume_up : Icons.volume_down,
             color: calls.isSpeakerOn ? Colors.orange : Colors.white24,
-            label: 'Speaker',
+            label: t('scr_callSpeaker'),
             onTap: () => unawaited(calls.toggleSpeaker()),
           ),
           if (isVideo) ...[
             _roundButton(
               icon: calls.isCameraOff ? Icons.videocam_off : Icons.videocam,
               color: calls.isCameraOff ? Colors.orange : Colors.white24,
-              label: 'Camera',
+              label: t('scr_callCamera'),
               onTap: calls.toggleCamera,
             ),
             _roundButton(
               icon: Icons.cameraswitch,
               color: Colors.white24,
-              label: 'Flip',
+              label: t('scr_callFlip'),
               onTap: () => unawaited(calls.switchCamera()),
             ),
           ],
           _roundButton(
             icon: Icons.call_end,
             color: Colors.red,
-            label: 'End',
+            label: t('scr_callEnd'),
             onTap: () => unawaited(calls.endCall()),
           ),
         ],
