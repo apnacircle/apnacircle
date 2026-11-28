@@ -12,6 +12,7 @@ import '../core/chat_paging.dart';
 import '../core/chat_retention.dart';
 import '../core/member_phone.dart';
 import '../core/protection_level.dart';
+import '../l10n/strings.dart';
 import '../models/chat_message.dart';
 import '../models/circle.dart';
 import '../models/member.dart';
@@ -351,16 +352,23 @@ class SyncService extends ChangeNotifier {
     required String phoneNumber,
     String role = 'child',
     String? displayName,
+    bool isUrdu = false,
   }) async {
-    if (!isAvailable) return (null, 'Sign in first to join a circle.');
-    final joinError = validateJoinInput(code: code, phone: phoneNumber);
+    if (!isAvailable) {
+      return (null, tr(isUrdu, 'svc_joinSignInFirst'));
+    }
+    final joinError = validateJoinInput(
+      code: code,
+      phone: phoneNumber,
+      isUrdu: isUrdu,
+    );
     if (joinError != null) return (null, joinError);
     final clean = code.trim();
     final normalizedPhone = validateMemberPhone(phoneNumber).number!;
     try {
       final snap = await _root.child(FirebaseConfig.invitePath(clean)).get();
       if (!snap.exists || snap.value == null) {
-        return (null, 'No circle found for that code — check the digits.');
+        return (null, tr(isUrdu, 'svc_joinNoCircle'));
       }
       final circleId = snap.value as String;
       // ORDER MATTERS (RTDB rules, see FIREBASE_SETUP.md §2): the
@@ -400,7 +408,9 @@ class SyncService extends ChangeNotifier {
       }
       final infoSnap =
           await _root.child(FirebaseConfig.circleInfoPath(circleId)).get();
-      if (!infoSnap.exists) return (null, 'That circle no longer exists.');
+      if (!infoSnap.exists) {
+        return (null, tr(isUrdu, 'svc_joinCircleGone'));
+      }
       final info = asMap(infoSnap.value);
       final circle = CircleInfo(
         id: circleId,
@@ -418,7 +428,7 @@ class SyncService extends ChangeNotifier {
       notifyListeners();
       return (circle, null);
     } catch (e) {
-      return (null, 'Could not join the circle: $e');
+      return (null, trf(isUrdu, 'svc_joinCircleFailed', {'e': e.toString()}));
     }
   }
 
