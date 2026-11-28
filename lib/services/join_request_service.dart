@@ -192,6 +192,31 @@ class JoinRequestService extends ChangeNotifier {
   /// or the child gave up). Does NOT delete the server node.
   Future<void> clearPendingCircle() => _savePendingCircle(null);
 
+  /// v0.6.31: the child backs out of the join (wrong role tapped
+  /// by mistake). Delete MY pending request node on the server
+  /// (best effort — the rules let the owner delete their own
+  /// pending request from v7+delete; until those rules are live
+  /// the remove is refused and the node simply lingers as
+  /// pending, which the parent can Deny), then clear the local
+  /// pending state either way so the child is never stuck.
+  Future<void> cancelMyRequest() async {
+    final circleId = _pendingCircleId;
+    _myRequest = null;
+    stopWatchingMyRequest();
+    if (circleId != null && isAvailable && _auth.uid != null) {
+      try {
+        await _root
+            .child(FirebaseConfig.joinRequestPath(circleId, _auth.uid!))
+            .remove();
+      } catch (_) {
+        // Server node lingers as pending — the parent can Deny
+        // it; the child is unblocked regardless.
+      }
+    }
+    await clearPendingCircle();
+    notifyListeners();
+  }
+
   // --- parent side ---
 
   final Map<String, JoinRequest> _circleRequests = {};
