@@ -179,14 +179,14 @@ void main() {
           now.subtract(const Duration(hours: 2, minutes: 30)),
           now,
         ),
-        contains('2 ghante se koi update nahi'),
+        contains('No update for 2 hours'),
       );
       expect(
         missingWarningText(
           now.subtract(const Duration(hours: 1, minutes: 5)),
           now,
         ),
-        contains('1 ghanta se koi update nahi'),
+        contains('No update for 1 hour'),
       );
     });
   });
