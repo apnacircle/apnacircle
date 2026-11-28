@@ -1,3 +1,5 @@
+import '../l10n/strings.dart';
+
 // Read receipts (v0.6.21) — WhatsApp-style "who read it, when".
 //
 // HOW IT WORKS: when a member opens the chat and a message is on
@@ -59,24 +61,29 @@ List<({Member member, DateTime? readAt})> readersOf(
   return rows;
 }
 
-const _months = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
+/// Month-name keys (Jan = 1 … Dec = 12), in order (v0.6.32).
+const _monthKeys = [
+  'core_monthJan',
+  'core_monthFeb',
+  'core_monthMar',
+  'core_monthApr',
+  'core_monthMay',
+  'core_monthJun',
+  'core_monthJul',
+  'core_monthAug',
+  'core_monthSep',
+  'core_monthOct',
+  'core_monthNov',
+  'core_monthDec',
 ];
 
 /// "26 Nov, 21:05" — the same plain format as the alerts centre.
-String formatReadTime(DateTime at) {
+/// v0.6.32: localized via [isUrdu] (default English, as before);
+/// Urdu renders e.g. "26 نومبر، 21:05" (Urdu comma).
+String formatReadTime(DateTime at, {bool isUrdu = false}) {
   final hh = at.hour.toString().padLeft(2, '0');
   final mm = at.minute.toString().padLeft(2, '0');
-  return '${at.day} ${_months[at.month - 1]}, $hh:$mm';
+  final month = tr(isUrdu, _monthKeys[at.month - 1]);
+  final sep = isUrdu ? '،' : ',';
+  return '${at.day} $month$sep $hh:$mm';
 }
