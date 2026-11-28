@@ -1,3 +1,5 @@
+import '../l10n/strings.dart';
+
 /// Time Lock — two lock modes per app (matches the web demo, 22 Nov 2026).
 ///
 /// * [LockMode.always]: the app stays locked all the time, until the
@@ -86,23 +88,42 @@ class TimeWindow {
     return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
   }
 
-  static const _dayShort = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  /// Day-short keys (Mon = weekday 1 … Sun = 7), in order.
+  static const _dayShortKeys = [
+    'core_dayMon',
+    'core_dayTue',
+    'core_dayWed',
+    'core_dayThu',
+    'core_dayFri',
+    'core_daySat',
+    'core_daySun',
+  ];
+
+  /// Short day name for [weekday] (1 = Mon … 7 = Sun), localized
+  /// via [isUrdu] (v0.6.32).
+  static String dayShort(int weekday, {bool isUrdu = false}) =>
+      tr(isUrdu, _dayShortKeys[weekday - 1]);
 
   /// "Every day" / "Mon–Fri" / "Mon, Wed, Fri".
-  String daysSummary() {
-    if (days.length == 7) return 'Every day';
+  /// v0.6.32: localized via [isUrdu]; reuses the existing
+  /// `everyDay` key for the all-days case.
+  String daysSummary({bool isUrdu = false}) {
+    if (days.length == 7) return tr(isUrdu, 'everyDay');
     final sorted = days.toList()..sort();
     final contiguous = sorted.last - sorted.first == sorted.length - 1;
     if (contiguous && sorted.length > 1) {
-      return '${_dayShort[sorted.first - 1]}–${_dayShort[sorted.last - 1]}';
+      return '${dayShort(sorted.first, isUrdu: isUrdu)}–'
+          '${dayShort(sorted.last, isUrdu: isUrdu)}';
     }
-    return sorted.map((d) => _dayShort[d - 1]).join(', ');
+    return sorted.map((d) => dayShort(d, isUrdu: isUrdu)).join(', ');
   }
 
   /// "Mon–Fri · 08:00 – 14:00 · set once — repeats automatically"
-  String summary() =>
-      '${daysSummary()} · ${formatMinutes(startMinutes)} – '
-      '${formatMinutes(endMinutes)} · set once — repeats automatically';
+  /// v0.6.32: localized via [isUrdu]; reuses the existing
+  /// `setOnceRepeats` key for the trailing phrase.
+  String summary({bool isUrdu = false}) =>
+      '${daysSummary(isUrdu: isUrdu)} · ${formatMinutes(startMinutes)} – '
+      '${formatMinutes(endMinutes)} · ${tr(isUrdu, 'setOnceRepeats')}';
 
   Map<String, dynamic> toJson() => {
         'start': startMinutes,
