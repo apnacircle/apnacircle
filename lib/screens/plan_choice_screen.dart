@@ -46,6 +46,17 @@ class PlanChoiceScreen extends StatelessWidget {
     final billing = context.watch<BillingService>();
     final canTrial = trial.canStartTrial && !billing.isSubscribed;
     return Scaffold(
+      // v0.6.31: back to the role screen — a parent who tapped
+      // the wrong role (or a child who meant to be a parent)
+      // can undo it here instead of being stuck.
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          tooltip: 'Wapas — role badlein',
+          onPressed: () =>
+              context.read<OnboardingService>().clearRole(),
+        ),
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),
