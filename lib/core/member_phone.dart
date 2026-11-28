@@ -1,3 +1,4 @@
+import '../l10n/strings.dart';
 import 'call_member_cache.dart';
 
 /// A member's mobile number, set by the parent (v0.6.14, 25 Nov 2026).
@@ -24,22 +25,22 @@ import 'call_member_cache.dart';
 /// normalized number (`+92…`) and no error, or null + a plain-words
 /// error for the SnackBar. Validation runs BEFORE the PIN prompt —
 /// a bad number needs no code.
-({String? number, String? error}) validateMemberPhone(String input) {
+({String? number, String? error}) validateMemberPhone(String input,
+    {bool isUrdu = false}) {
   final trimmed = input.trim();
   if (trimmed.isEmpty) {
-    return (number: null, error: 'Enter a mobile number first.');
+    return (number: null, error: tr(isUrdu, 'core_phoneEnterFirst'));
   }
   if (trimmed.contains('@')) {
     return (
       number: null,
-      error: 'This looks like an email, not a mobile number. '
-          'Enter the SIM number (e.g. 03001234567).',
+      error: tr(isUrdu, 'core_phoneLooksLikeEmail'),
     );
   }
   if (RegExp(r'[A-Za-z]').hasMatch(trimmed)) {
     return (
       number: null,
-      error: 'Only digits (and + at the start) are allowed.',
+      error: tr(isUrdu, 'core_phoneDigitsOnly'),
     );
   }
   final normalized = CallMemberCache.normalizePhoneNumber(trimmed);
@@ -47,8 +48,7 @@ import 'call_member_cache.dart';
   if (digits.length < 10 || digits.length > 13) {
     return (
       number: null,
-      error: 'Enter a full mobile number — 10 to 13 digits '
-          '(e.g. 03001234567).',
+      error: tr(isUrdu, 'core_phoneFullNumber'),
     );
   }
   return (number: normalized, error: null);
@@ -70,16 +70,16 @@ bool memberPhoneCanMatchCalls(String phone) {
 /// is unit-tested. A Gmail login gives the app no number, so the
 /// number must be typed at join time; without it the SIM-call
 /// overlay can never match the member and no card appears.
-String? validateJoinInput({required String code, required String phone}) {
+String? validateJoinInput(
+    {required String code, required String phone, bool isUrdu = false}) {
   final clean = code.trim();
   if (clean.length != 6 || int.tryParse(clean) == null) {
-    return 'The invite code is 6 digits.';
+    return tr(isUrdu, 'core_joinInviteCode6');
   }
   if (phone.trim().isEmpty) {
-    return 'Enter your mobile number too — the call-distance card '
-        'needs it to match your calls.';
+    return tr(isUrdu, 'core_joinPhoneToo');
   }
-  return validateMemberPhone(phone).error;
+  return validateMemberPhone(phone, isUrdu: isUrdu).error;
 }
 
 /// Parent-only guard for setting a member's number: only the
