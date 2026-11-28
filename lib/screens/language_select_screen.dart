@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/language_service.dart';
+import '../l10n/strings.dart';
 
 /// First screen: English or Urdu. Shown once; changeable in Settings.
 class LanguageSelectScreen extends StatelessWidget {
@@ -23,10 +24,17 @@ class LanguageSelectScreen extends StatelessWidget {
                 style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Choose your language / اپنی زبان منتخب کریں',
+              // Pre-locale picker: show the prompt in both languages,
+              // each in its own script, as two separate lines.
+              Text(
+                tr(false, 'chooseLanguage'),
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 17),
+                style: const TextStyle(fontSize: 17),
+              ),
+              Text(
+                tr(true, 'chooseLanguage'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 17),
               ),
               const SizedBox(height: 32),
               FilledButton(
