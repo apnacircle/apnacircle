@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/language_service.dart';
+import '../l10n/strings.dart';
 import '../models/member.dart';
 import '../services/alert_history_service.dart';
 import '../services/family_service.dart';
@@ -23,6 +25,10 @@ class AlertsCenterSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageService>();
+    String t(String key) => tr(lang.isUrdu, key);
+    String tf(String key, [Map<String, Object> args = const {}]) =>
+        trf(lang.isUrdu, key, args);
     final history = context.watch<AlertHistoryService>();
     final family = context.watch<FamilyService>();
     final members = family.members;
@@ -51,7 +57,8 @@ class AlertsCenterSheet extends StatelessWidget {
             Row(
               children: [
                 Text(
-                  'Alerts — ${history.events.length} total',
+                  tf('scr_alertsCenterTitle',
+                      {'count': history.events.length}),
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -61,7 +68,7 @@ class AlertsCenterSheet extends StatelessWidget {
                 if (history.totalUnread > 0)
                   TextButton(
                     onPressed: () => history.markAllRead(),
-                    child: const Text('Mark all read'),
+                    child: Text(t('scr_alertsMarkAllRead')),
                   ),
                 IconButton(
                   icon: const Icon(Icons.close),
@@ -70,9 +77,9 @@ class AlertsCenterSheet extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 4),
-            const Text(
-              'Tap a member to see their alerts — what it was, and when.',
-              style: TextStyle(color: Colors.grey),
+            Text(
+              t('scr_alertsCenterHint'),
+              style: const TextStyle(color: Colors.grey),
             ),
             const SizedBox(height: 8),
             Flexible(
@@ -80,16 +87,18 @@ class AlertsCenterSheet extends StatelessWidget {
                 shrinkWrap: true,
                 children: [
                   if (sorted.isEmpty)
-                    const ListTile(
-                      title: Text('No family members yet.'),
+                    ListTile(
+                      title: Text(t('scr_alertsNoMembers')),
                     ),
-                  for (final m in sorted) _memberRow(context, m, history),
+                  for (final m in sorted)
+                    _memberRow(context, m, history, lang.isUrdu),
                   if (history.events.isNotEmpty)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 12),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
                       child: Text(
-                        'Showing the latest 200 alerts.',
-                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                        t('scr_alertsShowingLatest'),
+                        style:
+                            const TextStyle(color: Colors.grey, fontSize: 12),
                       ),
                     ),
                 ],
@@ -105,7 +114,11 @@ class AlertsCenterSheet extends StatelessWidget {
     BuildContext context,
     Member m,
     AlertHistoryService history,
+    bool isUrdu,
   ) {
+    String t(String key) => tr(isUrdu, key);
+    String tf(String key, [Map<String, Object> args = const {}]) =>
+        trf(isUrdu, key, args);
     final mine = history.eventsByMember[m.id] ?? const [];
     final count = history.countByMember[m.id] ?? 0;
     final unread = history.unreadByMember[m.id] ?? 0;
@@ -113,7 +126,7 @@ class AlertsCenterSheet extends StatelessWidget {
       return ListTile(
         leading: CircleAvatar(child: Text(m.name[0])),
         title: Text(m.name),
-        subtitle: const Text('No alerts yet'),
+        subtitle: Text(t('scr_alertsNoneYet')),
         trailing: _countBadge(0, unread: 0),
       );
     }
@@ -122,16 +135,18 @@ class AlertsCenterSheet extends StatelessWidget {
       leading: CircleAvatar(child: Text(m.name[0])),
       title: Text(m.name),
       subtitle: Text(
-        'Latest: ${alertTypeLabel(latest.type)} · '
-        '${formatAlertTime(latest.at)}',
+        tf('scr_alertsLatest', {
+          'label': alertTypeLabel(latest.type, isUrdu: isUrdu),
+          'time': formatAlertTime(latest.at, isUrdu: isUrdu),
+        }),
       ),
       trailing: _countBadge(count, unread: unread),
       children: [
         for (final e in mine)
           ListTile(
             leading: Icon(_iconFor(e.type), color: _colorFor(e.type)),
-            title: Text(alertTypeLabel(e.type)),
-            subtitle: Text(formatAlertTime(e.at)),
+            title: Text(alertTypeLabel(e.type, isUrdu: isUrdu)),
+            subtitle: Text(formatAlertTime(e.at, isUrdu: isUrdu)),
           ),
       ],
     );
