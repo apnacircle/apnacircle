@@ -12,6 +12,9 @@ import 'package:apnacircle/services/notification_service.dart';
 import 'package:apnacircle/services/sms_location_service.dart';
 import 'package:apnacircle/services/media_service.dart';
 import 'package:apnacircle/services/sync_service.dart';
+import 'package:apnacircle/services/pin_service.dart';
+import 'package:apnacircle/services/onboarding_service.dart';
+import 'package:apnacircle/services/join_request_service.dart';
 import 'package:apnacircle/services/trial_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -156,6 +159,9 @@ void main() {
             ChangeNotifierProvider(create: (_) => LanguageService()),
             ChangeNotifierProvider.value(value: auth),
             ChangeNotifierProvider.value(value: sync),
+            ChangeNotifierProvider.value(value: PinService()),
+            ChangeNotifierProvider.value(value: OnboardingService()),
+            ChangeNotifierProvider.value(value: JoinRequestService(sync: sync, auth: auth)),
             ChangeNotifierProvider(create: (_) => TrialService()),
             ChangeNotifierProvider(create: (_) => BillingService()),
             ChangeNotifierProvider.value(
