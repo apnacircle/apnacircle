@@ -14,6 +14,7 @@ import '../core/app_lock_service.dart';
 import '../core/call_notification.dart';
 import '../core/call_signaling.dart';
 import '../core/chat_notification.dart';
+import '../core/join_request.dart';
 import '../core/location_service.dart';
 import '../core/osm_map.dart';
 import '../core/protection_level.dart';
@@ -35,8 +36,10 @@ import '../services/alert_history_service.dart';
 import '../services/background_location_service.dart';
 import '../services/call_service.dart';
 import '../services/family_service.dart';
+import '../services/join_request_service.dart';
 import '../services/sos_sms_service.dart';
 import '../services/notification_service.dart';
+import '../services/pin_service.dart';
 import '../services/sms_location_service.dart';
 import '../services/sync_service.dart';
 
@@ -170,9 +173,32 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     // The active circle can change after Home is already mounted
     // (fresh sign-in / circle switch) — re-check the subscription.
     _ensureLockSubscription();
+    // v0.6.30: same for join requests — the parent of the active
+    // circle must see a child's request the moment it arrives.
+    _ensureJoinRequestSubscription();
     // v0.6.4: same for background location — a circle switch
     // restarts the service so it publishes to the new circle.
     _ensureBackgroundSharingForCurrentCircle();
+  }
+
+  /// Join requests (v0.6.30): the parent of the active circle
+  /// live-watches its requests, wrong-PIN requests are auto-denied
+  /// at once (so the child gets a fast answer), and pending counts
+  /// in OTHER circles I parent are fetched too, so a request there
+  /// is still visible. Fail closed like the lock subscription:
+  /// unknown admin status watches nothing.
+  void _ensureJoinRequestSubscription() {
+    if (!mounted) return;
+    final sync = context.read<SyncService>();
+    if (!sync.isAvailable || sync.activeCircleId == null) return;
+    if (sync.activeCircle?.isAdmin != true) return;
+    final circleId = sync.activeCircleId!;
+    final joinRequests = context.read<JoinRequestService>();
+    final pin = context.read<PinService>();
+    joinRequests.watchCircleRequests(circleId);
+    unawaited(joinRequests.verifyPendingRequests(circleId, pin.pinHash));
+    final adminCircles = sync.myCircles.where((c) => c.isAdmin).toList();
+    unawaited(joinRequests.refreshAllPending(adminCircles));
   }
 
   /// Child-side lock enforcement (v0.6.3): subscribe to MY locks
@@ -795,6 +821,12 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   Widget build(BuildContext context) {
     final family = context.watch<FamilyService>();
     final members = family.members;
+    // v0.6.30: pending join requests across all circles I parent
+    // — the AppBar badge jumps to the Map tab, where the card
+    // with Allow / Deny lives.
+    final joinRequests = context.watch<JoinRequestService>();
+    final totalPending =
+        joinRequests.pendingByCircle.values.fold(0, (a, b) => a + b);
     // v0.6.18: the separate SMS SOS button shows only when the
     // parent turned the "SOS by SMS" alert ON (default OFF).
     final smsSosOn = family.myMember?.alerts[AlertType.sosSms] ?? false;
@@ -802,6 +834,15 @@ class _HomeMapScreenState extends State<HomeMapScreen>
       appBar: AppBar(
         title: const Text('ApnaCircle'),
         actions: [
+          if (totalPending > 0)
+            Badge(
+              label: Text('$totalPending'),
+              child: IconButton(
+                icon: const Icon(Icons.person_add),
+                tooltip: 'Join requests',
+                onPressed: () => setState(() => _tab = 1),
+              ),
+            ),
           // v0.6.21: the alerts bell — the badge is the TOTAL
           // unread SOS/alerts for the whole family. Tap it for
           // the centre: every member separately, with their own
@@ -896,6 +937,161 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     );
   }
 
+  /// Join requests card (v0.6.30): shows on the Map tab for the
+  /// parent of the active circle, the moment a child asks to join.
+  /// Each request shows who is asking + whether the parent PIN
+  /// they typed matched; Allow adds them, Deny keeps them out
+  /// (they can retry). Requests in OTHER circles I parent are
+  /// listed as a line, so nothing hides behind a circle switch.
+  Widget _joinRequestsCard() {
+    final joinRequests = context.watch<JoinRequestService>();
+    final sync = context.watch<SyncService>();
+    final pin = context.watch<PinService>();
+    if (sync.activeCircle?.isAdmin != true) return const SizedBox.shrink();
+    final pending = joinRequests.pendingRequests;
+    final otherPending = joinRequests.pendingByCircle.entries
+        .where((e) => e.key != sync.activeCircleId && e.value > 0)
+        .toList();
+    if (pending.isEmpty && otherPending.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Card(
+      color: Colors.orange.shade50,
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              pending.length == 1
+                  ? '1 bacha circle mein aana chahta hai'
+                  : '${pending.length} bache circle mein aana chahte hain',
+              style:
+                  const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            for (final req in pending) ...[
+              const SizedBox(height: 8),
+              _joinRequestRow(req, pin.pinHash),
+            ],
+            for (final e in otherPending) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Circle "${sync.myCircles.firstWhere((c) => c.id == e.key, orElse: () => CircleInfo(id: e.key, name: 'Family')).name}" mein ${e.value} request hai — wahan ja kar dekhein.',
+                style: const TextStyle(fontSize: 13),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _joinRequestRow(JoinRequest req, String? pinHash) {
+    final matches = JoinRequestService.pinMatches(req, pinHash);
+    final mins = DateTime.now()
+        .difference(DateTime.fromMillisecondsSinceEpoch(req.requestedAtMs))
+        .inMinutes;
+    final when = mins < 1
+        ? 'abhi'
+        : mins < 60
+            ? '$mins min pehle'
+            : '${mins ~/ 60} ghante pehle';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.person_add, color: Colors.orange),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '${req.name} (${req.phone}) — $when',
+                style: const TextStyle(fontSize: 15),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          pinHash == null
+              ? 'Parent PIN verify nahi ho saka (is phone par PIN recover nahi hua) — Allow karne se pehle bache se code confirm kar lein.'
+              : matches
+                  ? 'Parent PIN ✓ sahi hai.'
+                  : 'Parent PIN ✗ ghalat hai — is bache ne ghalat code likha.',
+          style: TextStyle(
+            fontSize: 13,
+            color: pinHash != null && !matches ? Colors.red : Colors.grey,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            FilledButton(
+              onPressed: () => _decideJoinRequest(req, allow: true),
+              style: FilledButton.styleFrom(backgroundColor: Colors.green),
+              child: const Text('Allow'),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton(
+              onPressed: () => _decideJoinRequest(req, allow: false),
+              child: const Text('Deny'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _decideJoinRequest(
+    JoinRequest req, {
+    required bool allow,
+  }) async {
+    final joinRequests = context.read<JoinRequestService>();
+    final pin = context.read<PinService>();
+    if (allow &&
+        pin.pinHash != null &&
+        !JoinRequestService.pinMatches(req, pin.pinHash)) {
+      // Wrong PIN typed — confirm before allowing anyway.
+      final go = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Ghalat parent code — phir bhi allow karein?'),
+          content: Text(
+            '${req.name} ne ghalat parent code likha tha. Agar aap '
+            'phir bhi allow karein ge to wo circle mein aa jaye ga.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Phir bhi allow karein'),
+            ),
+          ],
+        ),
+      );
+      if (go != true || !mounted) return;
+    }
+    final ok = allow
+        ? await joinRequests.approve(req.circleId, req.uid)
+        : await joinRequests.deny(req.circleId, req.uid);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? (allow
+                  ? '${req.name} ko allow kar diya — wo ab circle mein aa jaye ga.'
+                  : '${req.name} ko deny kar diya.')
+              : 'Faisla save nahi ho saka — internet check kar ke dobara try karein.',
+        ),
+      ),
+    );
+  }
+
   Widget _mapTab(List<Member> members, bool smsSosOn) {
     // v0.6.19: when sharing is fine, the big status card shrinks
     // to one small green line — the map is the point of this tab,
@@ -943,6 +1139,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     return Column(
       children: [
         if (!_mapFullscreen) statusWidget,
+        if (!_mapFullscreen) _joinRequestsCard(),
         if (!_mapFullscreen && _iAmOffline)
           Container(
             width: double.infinity,
