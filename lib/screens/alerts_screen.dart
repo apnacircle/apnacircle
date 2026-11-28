@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/alerts.dart';
+import '../core/language_service.dart';
+import '../l10n/strings.dart';
 import '../services/family_service.dart';
 import 'pin_gate_dialog.dart';
 
@@ -17,27 +19,35 @@ class AlertsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageService>();
+    final isUrdu = lang.isUrdu;
+    String t(String key) => tr(isUrdu, key);
+    String tf(String key, [Map<String, Object> args = const {}]) =>
+        trf(isUrdu, key, args);
     final family = context.watch<FamilyService>();
     final member = family.me;
     if (member == null) {
-      return const Center(child: Text('No family members yet.'));
+      return Center(child: Text(t('scr_alertsNoMembers')));
     }
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         Text(
-          'Alerts for ${member.name} — ${AlertType.values.length} alerts',
+          tf('scr_alertsFor', {
+            'name': member.name,
+            'count': AlertType.values.length,
+          }),
           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
-        const Text(
-          'Each alert has its own switch. Changing a switch needs the parent PIN — except "SOS by SMS", which anyone can turn on.',
-        ),
+        Text(t('scr_alertsIntro')),
         const SizedBox(height: 16),
         for (final type in AlertType.values)
           SwitchListTile(
-            title: Text(type.labelEn),
-            subtitle: type.hintEn == null ? null : Text(type.hintEn!),
+            title: Text(type.label(isUrdu: isUrdu)),
+            subtitle: type.hint(isUrdu: isUrdu) == null
+                ? null
+                : Text(type.hint(isUrdu: isUrdu)!),
             value: member.alerts[type] ?? false,
             onChanged: (value) {
               // v0.6.21: SOS by SMS is independent — no PIN, so
