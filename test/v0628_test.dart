@@ -17,6 +17,7 @@ import 'package:apnacircle/services/auth_service.dart';
 import 'package:apnacircle/services/family_service.dart';
 import 'package:apnacircle/services/firebase_bootstrap.dart';
 import 'package:apnacircle/services/pin_service.dart';
+import 'package:apnacircle/services/onboarding_service.dart';
 import 'package:apnacircle/services/sync_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -107,6 +108,7 @@ void main() {
             ChangeNotifierProvider<SyncService>.value(value: sync),
             ChangeNotifierProvider<FamilyService>.value(value: family),
             ChangeNotifierProvider<PinService>.value(value: PinService()),
+            ChangeNotifierProvider<OnboardingService>.value(value: OnboardingService()),
           ],
           child: const MaterialApp(home: CircleScreen()),
         ),
