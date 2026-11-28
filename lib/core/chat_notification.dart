@@ -16,6 +16,9 @@
 /// alert_notification.dart for the loud emergency channel.
 library;
 
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../l10n/strings.dart';
 import '../models/chat_message.dart';
 
 /// One chat message, ready to show — the sender's name is the
@@ -48,10 +51,30 @@ class ChatNotifications {
   /// system would display them on the default (loud alerts)
   /// channel instead and a chat message would ring like an SOS.
   static const String channelId = 'apnacircle_chat';
+  /// English default (kept for existing call sites). Use
+  /// [channelNameFor]/[channelDescriptionFor] for the locale.
   static const String channelName = 'ApnaCircle Chat';
   static const String channelDescription =
       'Family chat messages — sender name + preview, with sound. '
       'Quieter than emergency alerts.';
+
+  /// Localized channel name / description (v0.6.32).
+  static String channelNameFor({bool isUrdu = false}) =>
+      tr(isUrdu, 'core_chatChannelName');
+  static String channelDescriptionFor({bool isUrdu = false}) =>
+      tr(isUrdu, 'core_chatChannelDesc');
+
+  /// Reads the persisted language choice once (SharedPreferences
+  /// key `language_code_v1`, written by LanguageService). True
+  /// when the user chose Urdu. Defaults to English on any failure.
+  static Future<bool> isUrduPersisted() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('language_code_v1') == 'ur';
+    } catch (_) {
+      return false;
+    }
+  }
 
   /// Payload attached to every chat notification. Tapping it opens
   /// the app on the Chat tab.
@@ -62,9 +85,12 @@ class ChatNotifications {
   static const int snippetMaxLength = 120;
 
   /// Title is the sender's name — the receiver knows WHO at a
-  /// glance, before reading a word.
-  static String titleFor(String senderName) =>
-      senderName.isEmpty ? 'A family member' : senderName;
+  /// glance, before reading a word. v0.6.32: the empty-name
+  /// fallback is localized via [isUrdu] (default English).
+  static String titleFor(String senderName, {bool isUrdu = false}) =>
+      senderName.isEmpty
+          ? tr(isUrdu, 'core_alertFallbackName')
+          : senderName;
 
   /// Short preview of the message text: whitespace collapsed, cut
   /// at [snippetMaxLength] with an ellipsis when longer.
@@ -76,18 +102,34 @@ class ChatNotifications {
   }
 
   /// Build the notification for one chat message.
+  /// v0.6.32: pass [isUrdu] when the caller knows the locale, or
+  /// use [fromMessageLocalized] to read the persisted choice.
   static ChatNotification fromMessage({
     required ChatMessage msg,
     required String circleId,
+    bool isUrdu = false,
   }) {
     return ChatNotification(
-      title: titleFor(msg.senderName),
+      title: titleFor(msg.senderName, isUrdu: isUrdu),
       body: snippetFor(msg.text),
       circleId: circleId,
       messageId: msg.id,
       dedupeKey: dedupeKeyFor(msg.id),
     );
   }
+
+  /// Same as [fromMessage] but reads the persisted language once
+  /// from SharedPreferences, so the fallback sender name renders
+  /// in the phone's chosen locale.
+  static Future<ChatNotification> fromMessageLocalized({
+    required ChatMessage msg,
+    required String circleId,
+  }) async =>
+      fromMessage(
+        msg: msg,
+        circleId: circleId,
+        isUrdu: await isUrduPersisted(),
+      );
 
   /// Dedupe key shared by the FCM path and the RTDB path for the
   /// SAME message: the RTDB push key is the message's id, and the
