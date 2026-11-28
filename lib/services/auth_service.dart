@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../l10n/strings.dart';
 import 'firebase_bootstrap.dart';
 
 /// Firebase Auth — account-based identity (v0.3, 22 Nov 2026).
@@ -83,39 +84,45 @@ class AuthService extends ChangeNotifier {
   bool get emailVerified => user?.emailVerified ?? false;
 
   /// Friendly text for FirebaseAuthException codes.
-  static String _friendly(FirebaseAuthException e) {
+  /// Reuses existing l10n keys where the wording matches exactly.
+  static String _friendly(FirebaseAuthException e, {bool isUrdu = false}) {
     switch (e.code) {
       case 'invalid-email':
-        return 'That email address does not look right.';
+        return tr(isUrdu, 'emailCodeInvalidEmail');
       case 'user-not-found':
-        return 'No account with that email. Create one first.';
+        return tr(isUrdu, 'svc_authNoAccount');
       case 'wrong-password':
       case 'invalid-credential':
-        return 'Wrong email or password.';
+        return tr(isUrdu, 'svc_authWrongEmailPassword');
       case 'email-already-in-use':
-        return 'That email already has an account — sign in instead.';
+        return tr(isUrdu, 'svc_authEmailInUse');
       case 'weak-password':
-        return 'Password must be at least 6 characters.';
+        return tr(isUrdu, 'svc_authWeakPassword');
       case 'invalid-phone-number':
-        return 'That phone number does not look right. Use +92… format.';
+        return tr(isUrdu, 'svc_authBadPhone');
       case 'too-many-requests':
-        return 'Too many tries — wait a while, then try again.';
+        return tr(isUrdu, 'svc_authTooManyTries');
       case 'invalid-verification-code':
-        return 'Wrong OTP code — check the SMS and try again.';
+        return tr(isUrdu, 'svc_authWrongOtp');
       case 'session-expired':
-        return 'The SMS code expired — ask for a new one.';
+        return tr(isUrdu, 'svc_authOtpExpired');
       case 'network-request-failed':
-        return 'No internet — check the connection and try again.';
+        return tr(isUrdu, 'emailCodeNetwork');
       default:
-        return e.message ?? 'Sign-in failed (${e.code}).';
+        return e.message ??
+            trf(isUrdu, 'svc_authSignInFailedCode', {'code': e.code});
     }
   }
 
   /// Email + password sign-in. Returns null on success, else an
   /// error message to show.
-  Future<String?> signInWithEmail(String email, String password) async {
+  Future<String?> signInWithEmail(
+    String email,
+    String password, {
+    bool isUrdu = false,
+  }) async {
     if (!FirebaseBootstrap.available) {
-      return 'Firebase is not set up yet — use demo mode for now.';
+      return tr(isUrdu, 'svc_authFirebaseNotSetup');
     }
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
@@ -125,9 +132,9 @@ class AuthService extends ChangeNotifier {
       notifyListeners();
       return null;
     } on FirebaseAuthException catch (e) {
-      return _friendly(e);
+      return _friendly(e, isUrdu: isUrdu);
     } catch (e) {
-      return 'Sign-in failed: $e';
+      return trf(isUrdu, 'svc_authSignInFailed', {'e': e.toString()});
     }
   }
 
@@ -136,10 +143,11 @@ class AuthService extends ChangeNotifier {
   Future<String?> signUpWithEmail(
     String email,
     String password,
-    String name,
-  ) async {
+    String name, {
+    bool isUrdu = false,
+  }) async {
     if (!FirebaseBootstrap.available) {
-      return 'Firebase is not set up yet — use demo mode for now.';
+      return tr(isUrdu, 'svc_authFirebaseNotSetup');
     }
     try {
       final cred =
@@ -157,20 +165,20 @@ class AuthService extends ChangeNotifier {
       notifyListeners();
       return null;
     } on FirebaseAuthException catch (e) {
-      return _friendly(e);
+      return _friendly(e, isUrdu: isUrdu);
     } catch (e) {
-      return 'Sign-up failed: $e';
+      return trf(isUrdu, 'svc_authSignUpFailed', {'e': e.toString()});
     }
   }
 
   /// Re-send the Gmail verification link.
-  Future<String?> sendEmailVerification() async {
-    if (!signedIn) return 'Sign in first.';
+  Future<String?> sendEmailVerification({bool isUrdu = false}) async {
+    if (!signedIn) return tr(isUrdu, 'svc_authSignInFirst');
     try {
       await user!.sendEmailVerification();
       return null;
     } on FirebaseAuthException catch (e) {
-      return _friendly(e);
+      return _friendly(e, isUrdu: isUrdu);
     }
   }
 
@@ -186,9 +194,12 @@ class AuthService extends ChangeNotifier {
   /// Step 1: send the 6-digit SMS OTP to [phoneNumber]
   /// (E.164, e.g. +923001234567). Returns null when the SMS was
   /// sent (or auto-verified), else an error message.
-  Future<String?> startPhoneSignIn(String phoneNumber) async {
+  Future<String?> startPhoneSignIn(
+    String phoneNumber, {
+    bool isUrdu = false,
+  }) async {
     if (!FirebaseBootstrap.available) {
-      return 'Firebase is not set up yet — use demo mode for now.';
+      return tr(isUrdu, 'svc_authFirebaseNotSetup');
     }
     _codeSent = false;
     _verificationId = null;
@@ -203,11 +214,15 @@ class AuthService extends ChangeNotifier {
             notifyListeners();
             if (!completer.isCompleted) completer.complete(null);
           } on FirebaseAuthException catch (e) {
-            if (!completer.isCompleted) completer.complete(_friendly(e));
+            if (!completer.isCompleted) {
+              completer.complete(_friendly(e, isUrdu: isUrdu));
+            }
           }
         },
         verificationFailed: (FirebaseAuthException e) {
-          if (!completer.isCompleted) completer.complete(_friendly(e));
+          if (!completer.isCompleted) {
+            completer.complete(_friendly(e, isUrdu: isUrdu));
+          }
         },
         codeSent: (String verificationId, int? resendToken) {
           _verificationId = verificationId;
@@ -220,17 +235,20 @@ class AuthService extends ChangeNotifier {
         },
       );
     } on FirebaseAuthException catch (e) {
-      return _friendly(e);
+      return _friendly(e, isUrdu: isUrdu);
     } catch (e) {
-      return 'Could not send the OTP: $e';
+      return trf(isUrdu, 'svc_authOtpSendFailed', {'e': e.toString()});
     }
     return completer.future;
   }
 
   /// Step 2: verify the 6-digit SMS code. Returns null on success.
-  Future<String?> confirmPhoneCode(String smsCode) async {
+  Future<String?> confirmPhoneCode(
+    String smsCode, {
+    bool isUrdu = false,
+  }) async {
     if (_verificationId == null) {
-      return 'Ask for a new OTP code first.';
+      return tr(isUrdu, 'svc_authNeedOtpFirst');
     }
     try {
       final credential = PhoneAuthProvider.credential(
@@ -242,9 +260,9 @@ class AuthService extends ChangeNotifier {
       notifyListeners();
       return null;
     } on FirebaseAuthException catch (e) {
-      return _friendly(e);
+      return _friendly(e, isUrdu: isUrdu);
     } catch (e) {
-      return 'Could not verify the code: $e';
+      return trf(isUrdu, 'svc_authVerifyCodeFailed', {'e': e.toString()});
     }
   }
 
@@ -258,19 +276,19 @@ class AuthService extends ChangeNotifier {
 
   /// Delete the Firebase account (Play Store requirement).
   /// Needs a recent sign-in; returns an error message on failure.
-  Future<String?> deleteAccount() async {
-    if (!signedIn) return 'No account is signed in.';
+  Future<String?> deleteAccount({bool isUrdu = false}) async {
+    if (!signedIn) return tr(isUrdu, 'svc_authNoAccountSignedIn');
     try {
       await user!.delete();
       notifyListeners();
       return null;
     } on FirebaseAuthException catch (e) {
       if (e.code == 'requires-recent-login') {
-        return 'Sign in again first, then delete the account.';
+        return tr(isUrdu, 'signInAgainFirst');
       }
-      return _friendly(e);
+      return _friendly(e, isUrdu: isUrdu);
     } catch (e) {
-      return 'Could not delete the account: $e';
+      return trf(isUrdu, 'svc_authDeleteFailed', {'e': e.toString()});
     }
   }
 
