@@ -11,6 +11,9 @@
 /// intent (rings over the lock screen, like an incoming call).
 library;
 
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../l10n/strings.dart';
 /// One alert, ready to show — title/body already include the
 /// sender's name, so the receiver knows WHO at a glance.
 class AlertNotification {
@@ -78,10 +81,20 @@ class AlertNotifications {
   static int get alertVibrationTotalMs =>
       alertVibrationPatternMs.fold(0, (a, b) => a + b);
 
+  /// English default (kept for existing call sites). Use
+  /// [channelNameFor]/[channelDescriptionFor] for the locale.
   static const String channelName = 'ApnaCircle Alerts';
   static const String channelDescription =
       'Loud emergency alerts from your family — SOS and safety '
       'alerts. Keep sound on.';
+
+  /// Localized channel name / description (v0.6.32). Android shows
+  /// these in system Settings, so they follow the phone's chosen
+  /// language, not the build default.
+  static String channelNameFor({bool isUrdu = false}) =>
+      tr(isUrdu, 'core_notifChannelName');
+  static String channelDescriptionFor({bool isUrdu = false}) =>
+      tr(isUrdu, 'core_notifChannelDesc');
 
   /// Payload attached to every alert notification. Tapping it opens
   /// the app on the Alerts tab.
@@ -92,68 +105,110 @@ class AlertNotifications {
   /// Title for a local notification — always names the sender.
   /// (The Cloud Function's own titles do not include the name; the
   /// body does. Local notifications built here name them in both.)
-  static String titleFor(String type, String fromName) {
+  /// v0.6.32: localized via [isUrdu] (default English, as before).
+  static String titleFor(String type, String fromName,
+      {bool isUrdu = false}) {
+    final args = {'name': fromName};
     switch (type) {
       case 'sos':
-        return 'SOS from $fromName!';
+        return trf(isUrdu, 'core_alertTitleSos', args);
       case 'lowBattery':
-        return 'Battery low — $fromName';
+        return trf(isUrdu, 'core_alertTitleLowBattery', args);
       case 'phoneOff':
-        return 'Phone off — $fromName';
+        return trf(isUrdu, 'core_alertTitlePhoneOff', args);
       case 'internetOff':
-        return 'Internet off — $fromName';
+        return trf(isUrdu, 'core_alertTitleInternetOff', args);
       case 'locationOff':
-        return 'Location off — $fromName';
+        return trf(isUrdu, 'core_alertTitleLocationOff', args);
       case 'simChanged':
-        return 'SIM changed — $fromName';
+        return trf(isUrdu, 'core_alertTitleSimChanged', args);
       case 'adminDisabled':
-        return 'Protection off — $fromName';
+        return trf(isUrdu, 'core_alertTitleProtectionOff', args);
       default:
-        return 'Alert from $fromName';
+        return trf(isUrdu, 'core_alertTitleGeneric', args);
     }
   }
 
   /// Body — mirrors the Cloud Function's bodyFor() wording so the
   /// same event reads the same whether it arrives by push or live.
-  static String bodyFor(String type, String fromName) {
+  /// v0.6.32: localized via [isUrdu] (default English, as before).
+  static String bodyFor(String type, String fromName,
+      {bool isUrdu = false}) {
+    final args = {'name': fromName};
     switch (type) {
       case 'sos':
-        return '$fromName pressed SOS — check on them now.';
+        return trf(isUrdu, 'core_alertBodySos', args);
       case 'lowBattery':
-        return "$fromName's phone battery is low.";
+        return trf(isUrdu, 'core_alertBodyLowBattery', args);
       case 'phoneOff':
-        return "$fromName's phone went off. Last location saved.";
+        return trf(isUrdu, 'core_alertBodyPhoneOff', args);
       case 'internetOff':
-        return "$fromName's phone lost internet. Last location saved.";
+        return trf(isUrdu, 'core_alertBodyInternetOff', args);
       case 'locationOff':
-        return '$fromName turned location off. Last location saved.';
+        return trf(isUrdu, 'core_alertBodyLocationOff', args);
       case 'simChanged':
-        return 'A different SIM was detected in $fromName\'s phone.';
+        return trf(isUrdu, 'core_alertBodySimChanged', args);
       case 'adminDisabled':
-        return 'Uninstall protection was turned off on '
-            "$fromName's phone.";
+        return trf(isUrdu, 'core_alertBodyProtectionOff', args);
       default:
-        return '$fromName sent a family alert.';
+        return trf(isUrdu, 'core_alertBodyGeneric', args);
+    }
+  }
+
+  /// Reads the persisted language choice once (SharedPreferences
+  /// key `language_code_v1`, written by LanguageService). True
+  /// when the user chose Urdu. Defaults to English on any failure
+  /// — a notification must never fail because the locale could
+  /// not be read. Call sites with a locale already in hand should
+  /// pass [isUrdu] to [fromEvent] directly instead.
+  static Future<bool> isUrduPersisted() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('language_code_v1') == 'ur';
+    } catch (_) {
+      return false;
     }
   }
 
   /// Build the notification for one in-app (RTDB) circle event.
   /// [fromName] falls back to 'A family member' when empty.
+  /// v0.6.32: pass [isUrdu] when the caller knows the locale, or
+  /// use [fromEventLocalized] to read the persisted choice.
   static AlertNotification fromEvent({
     required String type,
     required String fromUid,
     required String fromName,
     required DateTime now,
+    bool isUrdu = false,
   }) {
-    final name = fromName.isEmpty ? 'A family member' : fromName;
+    final name = fromName.isEmpty
+        ? tr(isUrdu, 'core_alertFallbackName')
+        : fromName;
     return AlertNotification(
-      title: titleFor(type, name),
-      body: bodyFor(type, name),
+      title: titleFor(type, name, isUrdu: isUrdu),
+      body: bodyFor(type, name, isUrdu: isUrdu),
       type: type,
       isSos: isSos(type),
       dedupeKey: minuteKey(type, fromUid, now),
     );
   }
+
+  /// Same as [fromEvent] but reads the persisted language once
+  /// from SharedPreferences, so the notification renders in the
+  /// phone's chosen locale even when the caller has no locale.
+  static Future<AlertNotification> fromEventLocalized({
+    required String type,
+    required String fromUid,
+    required String fromName,
+    required DateTime now,
+  }) async =>
+      fromEvent(
+        type: type,
+        fromUid: fromUid,
+        fromName: fromName,
+        now: now,
+        isUrdu: await isUrduPersisted(),
+      );
 
   /// Dedupe key shared by the FCM path and the RTDB path for the
   /// SAME alert: type + sender + the minute it arrived. The Cloud
