@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/language_service.dart';
+import '../l10n/strings.dart';
 import '../services/onboarding_service.dart';
 
 /// Second first-run screen (v0.6.30): who is using THIS phone?
@@ -16,6 +17,8 @@ class RoleSelectScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageService>();
+    String t(String key) => tr(lang.isUrdu, key);
     return Scaffold(
       // v0.6.31: back to the language screen — a wrong tap is
       // undoable at every step (the user's report, 28 Nov 2026:
@@ -23,7 +26,7 @@ class RoleSelectScreen extends StatelessWidget {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          tooltip: 'Wapas — language badlein',
+          tooltip: t('onb_backChangeLanguage'),
           onPressed: () =>
               context.read<LanguageService>().clearChoice(),
         ),
@@ -41,36 +44,33 @@ class RoleSelectScreen extends StatelessWidget {
                 style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Aap kaun hain? / آپ کون ہیں؟',
+              Text(
+                t('onb_roleHeading'),
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 19),
+                style: const TextStyle(fontSize: 19),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Jis phone par app hai, us ke hisaab se chuniye. '
-                'Ghalti se ghalat dab gaya to upar wapas ja kar '
-                'badal sakte hain — baad mein Settings se bhi.',
+              Text(
+                t('onb_roleExplain'),
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: Colors.grey),
+                style: const TextStyle(fontSize: 14, color: Colors.grey),
               ),
               const SizedBox(height: 32),
               FilledButton(
                 onPressed: () => context
                     .read<OnboardingService>()
                     .chooseRole('parent'),
-                child: const Padding(
-                  padding: EdgeInsets.all(14),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
                   child: Column(
                     children: [
-                      Text('Parent / Admin',
-                          style: TextStyle(fontSize: 20)),
-                      SizedBox(height: 4),
+                      Text(t('onb_roleParent'),
+                          style: const TextStyle(fontSize: 20)),
+                      const SizedBox(height: 4),
                       Text(
-                        'Main family circle banunga — PIN, payment '
-                        'aur bachon ki apps mere control mein hon gi.',
+                        t('onb_roleParentSub'),
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 13),
+                        style: const TextStyle(fontSize: 13),
                       ),
                     ],
                   ),
@@ -81,18 +81,17 @@ class RoleSelectScreen extends StatelessWidget {
                 onPressed: () => context
                     .read<OnboardingService>()
                     .chooseRole('child'),
-                child: const Padding(
-                  padding: EdgeInsets.all(14),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
                   child: Column(
                     children: [
-                      Text('Child / بچہ',
-                          style: TextStyle(fontSize: 20)),
-                      SizedBox(height: 4),
+                      Text(t('onb_roleChild'),
+                          style: const TextStyle(fontSize: 20)),
+                      const SizedBox(height: 4),
                       Text(
-                        'Main parent ke circle mein join hounga — '
-                        'parent ki ijazat se.',
+                        t('onb_roleChildSub'),
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 13),
+                        style: const TextStyle(fontSize: 13),
                       ),
                     ],
                   ),
