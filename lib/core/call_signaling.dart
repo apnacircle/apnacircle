@@ -1,3 +1,5 @@
+import '../l10n/strings.dart';
+
 // Call signaling model + pure helpers (v0.6.21) — no Firebase, no
 // WebRTC here, so all of it is unit-testable.
 //
@@ -126,11 +128,17 @@ class CallInfo {
     };
   }
 
+  /// v0.6.32: the missing-name fallback is localized via
+  /// [isUrdu] (default English, as before), reusing the existing
+  /// `family` key. NOTE: the caller (call_service) does not pass a
+  /// locale yet, so the fallback stays English until the call site
+  /// is wired to pass isUrdu — the display layer must do that.
   static CallInfo fromMap(
     String id,
     String circleId,
-    Map<String, dynamic> map,
-  ) {
+    Map<String, dynamic> map, {
+    bool isUrdu = false,
+  }) {
     final rawParticipants = map['participants'];
     final participants = <String, String>{};
     if (rawParticipants is Map) {
@@ -142,7 +150,7 @@ class CallInfo {
       id: id,
       circleId: circleId,
       from: (map['from'] ?? '').toString(),
-      fromName: (map['fromName'] ?? 'Family').toString(),
+      fromName: (map['fromName'] ?? tr(isUrdu, 'family')).toString(),
       type:
           (map['type'] ?? 'audio') == 'video' ? CallType.video : CallType.audio,
       state: switch ((map['state'] ?? 'ringing').toString()) {
