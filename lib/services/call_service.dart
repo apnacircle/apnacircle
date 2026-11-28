@@ -7,6 +7,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../core/call_signaling.dart';
+import '../l10n/strings.dart';
 import '../models/member.dart';
 import 'family_service.dart';
 import 'firebase_config.dart';
@@ -60,7 +61,8 @@ class CallService extends ChangeNotifier {
 
   String? get _circleId => _family.activeCircleId;
   String? get _myUid => _family.myId;
-  String? get _myName => _family.myMember?.name ?? 'Family';
+  String _myName({bool isUrdu = false}) =>
+      _family.myMember?.name ?? tr(isUrdu, 'family');
 
   final List<StreamSubscription<DatabaseEvent>> _subs = [];
   final _incomingController = StreamController<CallInfo>.broadcast();
@@ -91,11 +93,11 @@ class CallService extends ChangeNotifier {
       Map.unmodifiable(_remoteStreams);
 
   /// Display names of the remote peers (from the members list).
-  String nameFor(String uid) {
+  String nameFor(String uid, {bool isUrdu = false}) {
     for (final m in _family.members) {
       if (m.id == uid) return m.name;
     }
-    return 'Family';
+    return tr(isUrdu, 'family');
   }
 
   bool _isMuted = false;
@@ -304,26 +306,27 @@ class CallService extends ChangeNotifier {
   Future<String?> startCall({
     required List<Member> callees,
     required CallType type,
+    bool isUrdu = false,
   }) async {
     if (_activeCall != null || _incomingCall != null) {
-      return 'You are already in a call.';
+      return tr(isUrdu, 'svc_callAlreadyInCall');
     }
     final circleId = _circleId;
     final myUid = _myUid;
     if (!_family.isSynced || circleId == null || myUid == null) {
-      return 'Calls need live sync — sign in to your circle first.';
+      return tr(isUrdu, 'svc_callNeedSync');
     }
     final others = callees.where((m) => m.id != myUid).toList();
     if (others.isEmpty) {
-      return 'Pick someone to call.';
+      return tr(isUrdu, 'svc_callPickSomeone');
     }
-    final permError = await _ensureMediaPermissions(type);
+    final permError = await _ensureMediaPermissions(type, isUrdu: isUrdu);
     if (permError != null) return permError;
 
     final callsRef = _root.child(FirebaseConfig.circleCallsPath(circleId));
     final callRef = callsRef.push();
     final callId = callRef.key;
-    if (callId == null) return 'Could not start the call. Try again.';
+    if (callId == null) return tr(isUrdu, 'svc_callStartFailed');
     final participants = <String, String>{myUid: 'joined'};
     for (final m in others) {
       participants[m.id] = 'invited';
@@ -332,7 +335,7 @@ class CallService extends ChangeNotifier {
       id: callId,
       circleId: circleId,
       from: myUid,
-      fromName: _myName ?? 'Family',
+      fromName: _myName(isUrdu: isUrdu),
       type: type,
       state: CallState.ringing,
       participants: participants,
@@ -341,10 +344,10 @@ class CallService extends ChangeNotifier {
     try {
       await callRef.set(call.toMap());
     } catch (_) {
-      return 'No internet — the call could not start.';
+      return tr(isUrdu, 'svc_callNoInternet');
     }
     _activeCall = call;
-    final mediaError = await _openLocalMedia(type);
+    final mediaError = await _openLocalMedia(type, isUrdu: isUrdu);
     if (mediaError != null) {
       await callRef.remove().catchError((_) {});
       _activeCall = null;
@@ -372,14 +375,14 @@ class CallService extends ChangeNotifier {
 
   /// Answer the ringing incoming call. Returns an error string
   /// when answering fails (no permission, no camera/mic).
-  Future<String?> answerCall() async {
+  Future<String?> answerCall({bool isUrdu = false}) async {
     final call = _incomingCall;
-    if (call == null) return 'No incoming call.';
+    if (call == null) return tr(isUrdu, 'svc_callNoIncoming');
     final myUid = _myUid;
-    if (myUid == null) return 'Not signed in.';
-    final permError = await _ensureMediaPermissions(call.type);
+    if (myUid == null) return tr(isUrdu, 'svc_callNotSignedIn');
+    final permError = await _ensureMediaPermissions(call.type, isUrdu: isUrdu);
     if (permError != null) return permError;
-    final mediaError = await _openLocalMedia(call.type);
+    final mediaError = await _openLocalMedia(call.type, isUrdu: isUrdu);
     if (mediaError != null) return mediaError;
     _incomingCall = null;
     _activeCall = call.copyWith(state: CallState.active);
@@ -566,27 +569,33 @@ class CallService extends ChangeNotifier {
 
   // --- Local media ---------------------------------------------------
 
-  Future<String?> _ensureMediaPermissions(CallType type) async {
+  Future<String?> _ensureMediaPermissions(
+    CallType type, {
+    bool isUrdu = false,
+  }) async {
     try {
       final mic = await Permission.microphone.request();
       if (!mic.isGranted) {
-        return 'Microphone permission is needed to call. Allow it in Settings.';
+        return tr(isUrdu, 'svc_callMicPermission');
       }
       if (type == CallType.video) {
         final cam = await Permission.camera.request();
         if (!cam.isGranted) {
-          return 'Camera permission is needed for a video call. Allow it in Settings.';
+          return tr(isUrdu, 'svc_callCameraPermission');
         }
       }
     } catch (_) {
       // The permission plugin itself failed (no plugin in tests,
       // a system error on a real phone) — never crash the call.
-      return 'Could not check microphone permission. Try again.';
+      return tr(isUrdu, 'svc_callMicCheckFailed');
     }
     return null;
   }
 
-  Future<String?> _openLocalMedia(CallType type) async {
+  Future<String?> _openLocalMedia(
+    CallType type, {
+    bool isUrdu = false,
+  }) async {
     try {
       final stream = await navigator.mediaDevices.getUserMedia({
         'audio': true,
@@ -597,8 +606,12 @@ class CallService extends ChangeNotifier {
       _localStream = stream;
       return null;
     } catch (_) {
-      return 'Could not open the microphone'
-          '${type == CallType.video ? ' or camera' : ''}. Check permissions and try again.';
+      return tr(
+        isUrdu,
+        type == CallType.video
+            ? 'svc_callOpenMicCamFailed'
+            : 'svc_callOpenMicFailed',
+      );
     }
   }
 
