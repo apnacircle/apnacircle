@@ -36,6 +36,17 @@ class LanguageService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// v0.6.31: go back — forget the choice so the language screen
+  /// shows again (the role screen's back arrow). The locale
+  /// resets to English until the user picks again.
+  Future<void> clearChoice() async {
+    _locale = const Locale('en');
+    _hasChosenLanguage = false;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_localeKey);
+    notifyListeners();
+  }
+
   void toggle() =>
       choose(isUrdu ? const Locale('en') : const Locale('ur'));
 }
