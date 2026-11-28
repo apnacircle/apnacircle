@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/language_service.dart';
+import '../l10n/strings.dart';
 import '../services/setup_service.dart';
 
 /// Guided first-run setup (v0.6.19) — the answer to "parents
@@ -60,7 +62,11 @@ class _SetupScreenState extends State<SetupScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _runStep(SetupStep step) async {
-    await runSetupStepAction(context, step);
+    await runSetupStepAction(
+      context,
+      step,
+      isUrdu: context.read<LanguageService>().isUrdu,
+    );
     // The action may have opened Settings — re-check when we get
     // back (didChangeAppLifecycleState), and also right now, so
     // a dialog grant ticks immediately.
@@ -80,46 +86,51 @@ class _SetupScreenState extends State<SetupScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    // v0.6.32: nullable watch — unit tests pump this screen bare
+    // (no LanguageService); it then falls back to English.
+    final lang = context.watch<LanguageService?>();
+    final isUrdu = lang?.isUrdu ?? false;
+    String t(String key) => tr(isUrdu, key);
+    String tf(String key, [Map<String, Object> args = const {}]) =>
+        trf(isUrdu, key, args);
     final doneCount = _done.values.where((done) => done == true).length;
     return Scaffold(
-      appBar: AppBar(title: const Text('Setup — ApnaCircle')),
+      appBar: AppBar(title: Text(t('scr_setupTitle'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text(
-            'One-time setup — tap each button, allow it, come back.',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+          Text(
+            t('scr_setupIntro'),
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 6),
-          const Text(
-            'Android does not let any app turn these on by itself — '
-            'each one needs one tap from you. This screen opens the '
-            'right page for each, so you never have to hunt through '
-            'Settings. A green tick means it is done.',
-          ),
+          Text(t('scr_setupBody')),
           const SizedBox(height: 12),
           LinearProgressIndicator(
             value: doneCount / SetupStep.values.length,
           ),
           const SizedBox(height: 4),
-          Text('$doneCount of ${SetupStep.values.length} done'),
+          Text(tf('scr_setupProgress', {
+            'done': doneCount,
+            'total': SetupStep.values.length,
+          })),
           const SizedBox(height: 12),
           for (final step in SetupStep.values) _stepCard(step),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: _finish,
-            child: const Text('Done — go to the map'),
+            child: Text(t('scr_setupDone')),
           ),
           const SizedBox(height: 8),
           TextButton(
             onPressed: _finish,
-            child: const Text('Skip for now'),
+            child: Text(t('scr_setupSkip')),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'You can come back anytime: Settings → "Setup — permissions".',
+          Text(
+            t('scr_setupComeBack'),
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey),
+            style: const TextStyle(color: Colors.grey),
           ),
         ],
       ),
@@ -127,6 +138,8 @@ class _SetupScreenState extends State<SetupScreen> with WidgetsBindingObserver {
   }
 
   Widget _stepCard(SetupStep step) {
+    final lang = context.watch<LanguageService?>();
+    String t(String key) => tr(lang?.isUrdu ?? false, key);
     final done = _done[step];
     final index = SetupStep.values.indexOf(step) + 1;
     return Card(
@@ -146,26 +159,28 @@ class _SetupScreenState extends State<SetupScreen> with WidgetsBindingObserver {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '$index. ${step.title}',
+                    '$index. ${step.titleIn(lang?.isUrdu ?? false)}',
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
                     ),
                   ),
                   Text(
-                    step.isRequired ? 'Required' : 'Recommended',
+                    step.isRequired
+                        ? t('scr_setupRequired')
+                        : t('scr_setupRecommended'),
                     style: TextStyle(
                       color: step.isRequired ? Colors.red : Colors.grey,
                       fontSize: 12,
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(step.why),
+                  Text(step.whyIn(lang?.isUrdu ?? false)),
                   const SizedBox(height: 8),
                   if (done != true) ...[
                     FilledButton.tonal(
                       onPressed: () => _runStep(step),
-                      child: Text(step.actionLabel),
+                      child: Text(step.actionLabelIn(lang?.isUrdu ?? false)),
                     ),
                     if (step == SetupStep.battery) ...[
                       // v0.6.22: the exemption dialog never comes
@@ -183,13 +198,13 @@ class _SetupScreenState extends State<SetupScreen> with WidgetsBindingObserver {
                           if (!mounted) return;
                           setState(() => _done[step] = d);
                         },
-                        child: const Text('Open battery settings'),
+                        child: Text(t('scr_setupBatterySettings')),
                       ),
                     ],
                   ] else
-                    const Text(
-                      'Done ✓',
-                      style: TextStyle(color: Colors.green),
+                    Text(
+                      t('scr_setupDoneTick'),
+                      style: const TextStyle(color: Colors.green),
                     ),
                 ],
               ),
