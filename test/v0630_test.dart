@@ -221,15 +221,17 @@ void main() {
 
     testWidgets('no language yet -> language screen', (tester) async {
       await pumpAppRoot(tester);
-      expect(find.text('Choose your language / اپنی زبان منتخب کریں'),
-          findsOneWidget);
+      // v0.6.32: the language screen is two separate lines now
+      // (English line + Urdu-script line), not one mixed string.
+      expect(find.text('Choose your language'), findsOneWidget);
+      expect(find.text('اپنی زبان منتخب کریں'), findsOneWidget);
     });
 
     testWidgets('language chosen -> role screen, once', (tester) async {
       await pumpAppRoot(tester, prefs: {'language_code_v1': 'en'});
-      expect(find.text('Aap kaun hain? / آپ کون ہیں؟'), findsOneWidget);
+      expect(find.text('Who are you?'), findsOneWidget);
       expect(find.text('Parent / Admin'), findsOneWidget);
-      expect(find.text('Child / بچہ'), findsOneWidget);
+      expect(find.text('Child'), findsOneWidget);
     });
 
     testWidgets('tap English -> role screen (language never asks again)',
@@ -239,7 +241,7 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(s.lang.hasChosenLanguage, isTrue);
-      expect(find.text('Aap kaun hain? / آپ کون ہیں؟'), findsOneWidget);
+      expect(find.text('Who are you?'), findsOneWidget);
     });
 
     testWidgets('parent, fresh install -> trial / subscribe choice',
@@ -249,7 +251,7 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(find.text('Family plan'), findsOneWidget);
-      expect(find.text('7-day FREE trial shuru karein'), findsOneWidget);
+      expect(find.text('Start 7-day FREE trial'), findsOneWidget);
       expect(find.text('Subscribe — \$5/year'), findsOneWidget);
       // A child must NEVER see this screen — the role screen only
       // offers the two roles, and the child path below proves it.
@@ -261,7 +263,7 @@ void main() {
       await tester.tap(find.text('Parent / Admin'));
       await tester.pump();
       await tester.pump();
-      await tester.tap(find.text('7-day FREE trial shuru karein'));
+      await tester.tap(find.text('Start 7-day FREE trial'));
       // The trial start chains several async steps (device id ->
       // save -> mark the choice done) — settle them all.
       await tester.pumpAndSettle(const Duration(seconds: 5));
@@ -271,12 +273,12 @@ void main() {
     testWidgets('child -> join request screen, no trial / payment',
         (tester) async {
       await pumpAppRoot(tester, prefs: {'language_code_v1': 'en'});
-      await tester.tap(find.text('Child / بچہ'));
+      await tester.tap(find.text('Child'));
       await tester.pump();
       await tester.pump();
       expect(find.text('Join family circle'), findsOneWidget);
-      expect(find.text('Parent ka PIN / code'), findsOneWidget);
-      expect(find.text('Join request bhejein'), findsOneWidget);
+      expect(find.text("Parent's PIN / code"), findsOneWidget);
+      expect(find.text('Send join request'), findsOneWidget);
       expect(find.textContaining('trial'), findsNothing);
       expect(find.textContaining('Subscribe'), findsNothing);
     });
