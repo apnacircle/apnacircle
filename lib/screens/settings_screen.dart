@@ -104,6 +104,8 @@ class _SettingsScreenState extends State<SettingsScreen>
   /// get through; the parent is never locked out, on this phone
   /// or on the child's phone.
   Future<void> _removeProtection() async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     final sync = context.read<SyncService>();
     final pin = context.read<PinService>();
     await askParentPinForProtectionRemoval(
@@ -118,8 +120,8 @@ class _SettingsScreenState extends State<SettingsScreen>
           SnackBar(
             content: Text(
               ok
-                  ? 'Protection removed — the app can now be uninstalled.'
-                  : 'Removal failed — check the protection status above.',
+                  ? t('scr_setProtectionRemoved')
+                  : t('scr_setRemovalFailed'),
             ),
           ),
         );
@@ -128,27 +130,23 @@ class _SettingsScreenState extends State<SettingsScreen>
   }
 
   Future<void> _toggleSms(bool value) async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     if (value) {
       // Plain explanation FIRST, then the OS permission dialog.
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('SMS location when offline?'),
-          content: const Text(
-            'When this phone has no internet (no Wi-Fi, no mobile '
-            'data), ApnaCircle sends its GPS location to the PARENT\'s '
-            'number by SMS — at most once every 15 minutes, only '
-            'when moved. SMS needs mobile signal and uses SMS '
-            'balance. SMS is never sent to anyone except the parent.',
-          ),
+          title: Text(t('scr_setSmsDialogTitle')),
+          content: Text(t('scr_setSmsDialogBody')),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
+              child: Text(t('cancel')),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Turn on'),
+              child: Text(t('scr_setTurnOn')),
             ),
           ],
         ),
@@ -160,8 +158,8 @@ class _SettingsScreenState extends State<SettingsScreen>
       if (!mounted) return;
       if (!granted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('SMS permission was not given.'),
+          SnackBar(
+            content: Text(t('scr_setSmsPermissionDenied')),
           ),
         );
         return;
@@ -214,25 +212,21 @@ class _SettingsScreenState extends State<SettingsScreen>
   /// tap there can grant it — no app can grant it itself. Without
   /// it, no distance can appear over a call screen.
   Future<void> _requestOverlayPermission() async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Show distance during calls?'),
-        content: const Text(
-          'When a family member calls on a normal SIM call — or you '
-          'call them — ApnaCircle shows their name and distance on '
-          'top of the call screen. For that, Android needs "Display '
-          'over other apps" turned on for ApnaCircle. The overlay '
-          'only ever appears for family members, never for strangers.',
-        ),
+        title: Text(t('scr_setOverlayTitle')),
+        content: Text(t('scr_setOverlayBody')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: Text(t('cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Open settings'),
+            child: Text(t('scr_setOpenSettings')),
           ),
         ],
       ),
@@ -252,24 +246,21 @@ class _SettingsScreenState extends State<SettingsScreen>
   /// phone has no circles (once a circle exists the role is
   /// proven by membership).
   Future<void> _changeRole() async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Role badlein?'),
-        content: const Text(
-          'Parent ya Child dobara chun sakte hain — jaise pehli '
-          'dafa setup karte waqt chuna tha. Koi circle ya data '
-          'delete nahi hota; agar join request bheji hui hai to '
-          'wo wapas le li jaye gi.',
-        ),
+        title: Text(t('scr_setChangeRoleTitle')),
+        content: Text(t('scr_setChangeRoleBody')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: Text(t('cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Role badlein'),
+            child: Text(t('scr_setChangeRoleBtn')),
           ),
         ],
       ),
@@ -302,9 +293,9 @@ class _SettingsScreenState extends State<SettingsScreen>
       if (!mounted) return;
       if (hash == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'Parent PIN is needed for this — connect to the internet and try again.',
+              t('scr_setPinNeeded'),
             ),
           ),
         );
@@ -384,16 +375,20 @@ class _SettingsScreenState extends State<SettingsScreen>
     final onboarding = context.watch<OnboardingService>();
     final live = FirebaseBootstrap.available && auth.signedIn;
     String t(String key) => tr(lang.isUrdu, key);
+    String tf(String key, [Map<String, Object> args = const {}]) =>
+        trf(lang.isUrdu, key, args);
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         ListTile(
           leading: const Icon(Icons.account_circle),
-          title: const Text('Account & Circles'),
+          title: Text(t('scr_setAccountCircles')),
           subtitle: Text(
             live
-                ? 'Signed in as ${auth.email ?? auth.phoneNumber ?? ''} · Live sync ON'
-                : 'Not signed in — demo mode (this phone only)',
+                ? tf('scr_setSignedIn', {
+                    'account': auth.email ?? auth.phoneNumber ?? '',
+                  })
+                : t('scr_setNotSignedIn'),
           ),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => Navigator.push(
@@ -406,11 +401,8 @@ class _SettingsScreenState extends State<SettingsScreen>
         // any time (e.g. after the child turned one off).
         ListTile(
           leading: const Icon(Icons.checklist),
-          title: const Text('Setup — permissions'),
-          subtitle: const Text(
-            'Step-by-step: location, notifications, SMS, overlay, '
-            'App Lock, Device Admin, battery.',
-          ),
+          title: Text(t('scr_setSetupPermissions')),
+          subtitle: Text(t('scr_setSetupHint')),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => Navigator.push(
             context,
@@ -419,29 +411,24 @@ class _SettingsScreenState extends State<SettingsScreen>
         ),
         if (!live)
           ListTile(
-            title: const Text('Sign in to sync across phones'),
-            subtitle: const Text(
-              'Parent on one phone, child on another — needs an account.',
-            ),
+            title: Text(t('scr_setSignInSync')),
+            subtitle: Text(t('scr_setSignInSyncHint')),
             trailing: FilledButton.tonal(
               onPressed: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const AuthScreen()),
               ),
-              child: const Text('Sign in'),
+              child: Text(t('scr_setSignIn')),
             ),
           ),
         SwitchListTile(
-          title: const Text('SMS location when offline'),
-          subtitle: const Text(
-            'No internet? Send GPS location to the parent by SMS '
-            '(every 15 min, only when moved). Needs SMS permission.',
-          ),
+          title: Text(t('scr_setSmsLocation')),
+          subtitle: Text(t('scr_setSmsLocationHint')),
           value: _smsOn,
           onChanged: _toggleSms,
         ),
         ListTile(
-          title: const Text('Language / زبان'),
+          title: Text(t('scr_setLanguage')),
           subtitle: Text(lang.isUrdu ? 'اردو' : 'English'),
           trailing: FilledButton.tonal(
             onPressed: () => lang.toggle(),
@@ -455,29 +442,27 @@ class _SettingsScreenState extends State<SettingsScreen>
         if (sync.myCircles.isEmpty)
           ListTile(
             leading: const Icon(Icons.switch_account),
-            title: const Text('Role badlein — Parent / Child'),
+            title: Text(t('scr_setChangeRoleTile')),
             subtitle: Text(
               onboarding.isParent
-                  ? 'Is phone par Parent chuna hua hai'
+                  ? t('scr_setRoleParent')
                   : onboarding.isChild
-                      ? 'Is phone par Child chuna hua hai'
-                      : 'Role abhi chuna nahi gaya',
+                      ? t('scr_setRoleChild')
+                      : t('scr_setRoleNone'),
             ),
             trailing: const Icon(Icons.chevron_right),
             onTap: _changeRole,
           ),
         ListTile(
-          title: const Text('Family members'),
+          title: Text(t('membersCount')),
           subtitle: Text(
-            '${family.memberCount} / 10 — works on old and new Android phones',
+            tf('scr_setMembersHint', {'count': family.memberCount}),
           ),
         ),
-        const ListTile(
-          title: Text('Lite mode'),
-          subtitle: Text(
-            'Low battery and low data use: location updates only when moving.',
-          ),
-          trailing: Icon(Icons.battery_saver),
+        ListTile(
+          title: Text(t('scr_setLiteMode')),
+          subtitle: Text(t('scr_setLiteModeHint')),
+          trailing: const Icon(Icons.battery_saver),
         ),
         const Divider(),
         // --- v0.5: protection ---
@@ -512,7 +497,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               // through, and the parent is never locked out.
               ? OutlinedButton(
                   onPressed: _removeProtection,
-                  child: const Text('Remove protection (parent code needed)'),
+                  child: Text(t('scr_setRemoveProtection')),
                 )
               : FilledButton(
                   onPressed: () async {
@@ -535,15 +520,15 @@ class _SettingsScreenState extends State<SettingsScreen>
                     ? Colors.orange
                     : Colors.grey,
           ),
-          title: const Text('Uninstall protection (Device Owner)'),
+          title: Text(t('scr_setDeviceOwner')),
           subtitle: Text(
             _isOwner == null
                 ? '…'
                 : _isOwner!
-                    ? 'Device Owner ON — cannot be uninstalled from Settings'
+                    ? t('scr_setOwnerOn')
                     : _adminActive == true
-                        ? 'Device Admin only — tap to set up the stronger protection'
-                        : 'Not protected — tap to set up uninstall protection',
+                        ? t('scr_setAdminOnly')
+                        : t('scr_setNotProtected'),
           ),
           trailing: const Icon(Icons.chevron_right),
           onTap: () async {
@@ -597,27 +582,27 @@ class _SettingsScreenState extends State<SettingsScreen>
             Icons.picture_in_picture_alt,
             color: _overlayGranted == true ? Colors.green : Colors.grey,
           ),
-          title: const Text('Call distance overlay'),
+          title: Text(t('scr_setCallOverlay')),
           subtitle: Text(
             _overlayGranted == null
                 ? '…'
                 : _overlayGranted!
-                    ? 'ON — distance shows on top of SIM calls'
-                    : 'OFF — no distance can appear during a call',
+                    ? t('scr_setOverlayOn')
+                    : t('scr_setOverlayOff'),
           ),
           trailing: _overlayGranted == true
               ? null
               : FilledButton.tonal(
                   onPressed: _requestOverlayPermission,
-                  child: const Text('Allow'),
+                  child: Text(t('allowPermissions')),
                 ),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Text(
             _outgoingGranted == true
-                ? 'Incoming + outgoing calls: distance shows for family members only. Tap the card to dismiss it; it hides when the call ends.'
-                : 'Incoming calls need Phone + Call Log (above); outgoing calls also need the outgoing-call permission, granted together with them. Without "Display over other apps" above, nothing appears during a call.',
+                ? t('scr_setOutgoingOn')
+                : t('scr_setOutgoingOff'),
             style: const TextStyle(fontSize: 13, color: Colors.grey),
           ),
         ),
@@ -639,11 +624,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                 : null,
             onTap: _deleting ? null : _deleteAccount,
           ),
-        const ListTile(
-          title: Text('About ApnaCircle'),
-          subtitle: Text(
-            'Family location safety. No ads. Location data is never sold.',
-          ),
+        ListTile(
+          title: Text(t('scr_setAbout')),
+          subtitle: Text(t('scr_setAboutBody')),
         ),
       ],
     );
