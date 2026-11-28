@@ -96,24 +96,26 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _sendOtp() async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
     final phone = _phone.text.trim();
     if (phone.isEmpty) {
-      setState(() => _error = 'Type your mobile number first (+92…).');
+      setState(() => _error = tr(isUrdu, 'onb_authErrPhoneEmpty'));
       return;
     }
     await _run(() async {
       final err =
           await context.read<AuthService>().startPhoneSignIn(phone);
       if (err == null && mounted) {
-        setState(() => _info = 'OTP sent by SMS — type the 6-digit code.');
+        setState(() => _info = tr(isUrdu, 'onb_authOtpSent'));
       }
       return err;
     });
   }
 
   Future<void> _verifyOtp() async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
     if (_code.text.trim().length < 6) {
-      setState(() => _error = 'Type the 6-digit code from the SMS.');
+      setState(() => _error = tr(isUrdu, 'onb_authErrCodeShort'));
       return;
     }
     await _run(
@@ -122,10 +124,11 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _emailGo() async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
     final email = _email.text.trim();
     final password = _password.text;
     if (email.isEmpty || password.isEmpty) {
-      setState(() => _error = 'Email and password are both needed.');
+      setState(() => _error = tr(isUrdu, 'onb_authErrEmailPass'));
       return;
     }
     final auth = context.read<AuthService>();
@@ -137,8 +140,7 @@ class _AuthScreenState extends State<AuthScreen> {
           _name.text,
         );
         if (err == null && mounted) {
-          setState(() => _info =
-              'Account created. A verification link was sent to your Gmail — open it to verify.');
+          setState(() => _info = tr(isUrdu, 'onb_authAccountCreated'));
         }
         return err;
       }
@@ -198,11 +200,11 @@ class _AuthScreenState extends State<AuthScreen> {
     String t(String key) => tr(lang.isUrdu, key);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Sign in — ApnaCircle'),
+        title: Text(t('onb_authTitle')),
         leading: widget.showRoleBack
             ? IconButton(
                 icon: const Icon(Icons.arrow_back),
-                tooltip: 'Wapas — role badlein',
+                tooltip: t('onb_backChangeRole'),
                 onPressed: () =>
                     context.read<OnboardingService>().clearRole(),
               )
@@ -211,17 +213,15 @@ class _AuthScreenState extends State<AuthScreen> {
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
-          const Text(
-            'Sign in to sync your family across phones: the parent on '
-            'one phone, the child on another. One account works on a '
-            'new phone too — your circles come back.',
-            style: TextStyle(fontSize: 16),
+          Text(
+            t('onb_authIntro'),
+            style: const TextStyle(fontSize: 16),
           ),
           const SizedBox(height: 16),
           SegmentedButton<int>(
             segments: [
-              const ButtonSegment(value: 0, label: Text('Phone (SMS OTP)')),
-              const ButtonSegment(value: 1, label: Text('Gmail')),
+              ButtonSegment(value: 0, label: Text(t('onb_authPhoneTab'))),
+              ButtonSegment(value: 1, label: Text(t('onb_authGmailTab'))),
               ButtonSegment(
                   value: 2, label: Text(t('emailCodeTitle'))),
             ],
@@ -233,16 +233,16 @@ class _AuthScreenState extends State<AuthScreen> {
             TextField(
               controller: _phone,
               keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                labelText: 'Mobile number',
+              decoration: InputDecoration(
+                labelText: t('onb_authMobileLabel'),
                 hintText: '+923001234567',
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
             FilledButton(
               onPressed: _busy ? null : _sendOtp,
-              child: const Text('Send OTP by SMS'),
+              child: Text(t('onb_authSendOtp')),
             ),
             if (auth.phoneCodeSent) ...[
               const SizedBox(height: 12),
@@ -250,70 +250,64 @@ class _AuthScreenState extends State<AuthScreen> {
                 controller: _code,
                 keyboardType: TextInputType.number,
                 maxLength: 6,
-                decoration: const InputDecoration(
-                  labelText: '6-digit OTP code',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: t('onb_authOtpCode'),
+                  border: const OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 12),
               FilledButton(
                 onPressed: _busy ? null : _verifyOtp,
-                child: const Text('Verify OTP & Sign in'),
+                child: Text(t('onb_authVerifyOtp')),
               ),
             ],
             const SizedBox(height: 8),
-            const Text(
-              'The OTP comes by SMS to your SIM number. No SMS yet? '
-              'Check the number, then ask for a new code.',
-              style: TextStyle(fontSize: 13, color: Colors.grey),
+            Text(
+              t('onb_authOtpNote'),
+              style: const TextStyle(fontSize: 13, color: Colors.grey),
             ),
           ] else if (_mode == 1) ...[
             if (_isSignUp)
               TextField(
                 controller: _name,
-                decoration: const InputDecoration(
-                  labelText: 'Your name',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: t('onb_yourName'),
+                  border: const OutlineInputBorder(),
                 ),
               ),
             if (_isSignUp) const SizedBox(height: 12),
             TextField(
               controller: _email,
               keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: 'Gmail address',
+              decoration: InputDecoration(
+                labelText: t('onb_authGmailLabel'),
                 hintText: 'you@gmail.com',
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _password,
               obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Password (6+ characters)',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: t('onb_authPasswordLabel'),
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
             FilledButton(
               onPressed: _busy ? null : _emailGo,
-              child: Text(_isSignUp ? 'Create account' : 'Sign in'),
+              child: Text(_isSignUp ? t('onb_authCreateAccount') : t('onb_authSignIn')),
             ),
             TextButton(
               onPressed: () => setState(() => _isSignUp = !_isSignUp),
               child: Text(
-                _isSignUp
-                    ? 'Already have an account? Sign in'
-                    : 'No account yet? Create one',
+                _isSignUp ? t('onb_authHaveAccount') : t('onb_authNoAccount'),
               ),
             ),
-            const Text(
-              'After sign-up a verification link is sent to your '
-              'Gmail inbox — open it to verify. No password? Use '
-              '"Email code" above — a 6-digit code comes to the '
-              'same Gmail inbox instead.',
-              style: TextStyle(fontSize: 13, color: Colors.grey),
+            Text(
+              t('onb_authVerifyNote'),
+              style: const TextStyle(fontSize: 13, color: Colors.grey),
             ),
           ] else ...[
             // Email-code login (v0.6): no password needed.
@@ -325,10 +319,10 @@ class _AuthScreenState extends State<AuthScreen> {
             TextField(
               controller: _email,
               keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: 'Gmail address',
+              decoration: InputDecoration(
+                labelText: t('onb_authGmailLabel'),
                 hintText: 'you@gmail.com',
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
@@ -356,10 +350,9 @@ class _AuthScreenState extends State<AuthScreen> {
                 onPressed: _busy ? null : _sendEmailCode,
                 child: Text(t('emailCodeResend')),
               ),
-              const Text(
-                'The code works for 10 minutes. 5 wrong tries lock '
-                'it — then ask for a new code.',
-                style: TextStyle(fontSize: 13, color: Colors.grey),
+              Text(
+                t('onb_authCodeExpiry'),
+                style: const TextStyle(fontSize: 13, color: Colors.grey),
               ),
             ],
           ],
@@ -383,14 +376,12 @@ class _AuthScreenState extends State<AuthScreen> {
             onPressed: _busy
                 ? null
                 : () => context.read<AuthService>().skipDemo(),
-            child: const Text('Continue without account (demo mode)'),
+            child: Text(t('onb_authDemoContinue')),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Demo mode works like before — everything stays on this '
-            'phone only, no sync to another phone. You can sign in '
-            'later from Settings → Account & Circles.',
-            style: TextStyle(fontSize: 13, color: Colors.grey),
+          Text(
+            t('onb_authDemoNote'),
+            style: const TextStyle(fontSize: 13, color: Colors.grey),
           ),
         ],
       ),
