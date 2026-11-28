@@ -5,14 +5,28 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'
     as local;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/alert_notification.dart';
 import '../core/call_notification.dart';
 import '../core/chat_notification.dart';
+import '../l10n/strings.dart';
 import '../models/chat_message.dart';
 import '../models/circle.dart';
 import 'firebase_bootstrap.dart';
 import 'sync_service.dart';
+
+/// Persisted language choice (same key as LanguageService):
+/// 'ur' means the user picked Urdu. Used where no locale can be
+/// threaded in (the top-level background push handler).
+Future<bool> _persistedIsUrdu() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('language_code_v1') == 'ur';
+  } catch (_) {
+    return false;
+  }
+}
 
 /// The loud alerts channel — high importance, sound + vibration +
 /// lights. Created at startup (and in the background handler) so it
@@ -219,10 +233,12 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       await _postChatNotification(plugin, chat: chat);
       return;
     }
+    final isUrdu = await _persistedIsUrdu();
+    final fallbackName = tr(isUrdu, 'svc_familyMember');
     final title = message.notification?.title ??
-        AlertNotifications.titleFor(type, 'A family member');
+        AlertNotifications.titleFor(type, fallbackName);
     final body = message.notification?.body ??
-        AlertNotifications.bodyFor(type, 'A family member');
+        AlertNotifications.bodyFor(type, fallbackName);
     await _postAlertNotification(
       plugin,
       alert: AlertNotification(
@@ -408,13 +424,17 @@ class NotificationService extends ChangeNotifier {
   /// Loud local notification for one foreground FCM message.
   /// Title/body come from the Cloud Function (the sender's name
   /// is in the body).
-  Future<bool> showAlertFromMessage(RemoteMessage message) async {
+  Future<bool> showAlertFromMessage(
+    RemoteMessage message, {
+    bool isUrdu = false,
+  }) async {
     final type = message.data['type'] as String? ?? 'alert';
     final fromUid = message.data['fromUid'] as String? ?? '';
+    final fallbackName = tr(isUrdu, 'svc_familyMember');
     final title = message.notification?.title ??
-        AlertNotifications.titleFor(type, 'A family member');
+        AlertNotifications.titleFor(type, fallbackName);
     final body = message.notification?.body ??
-        AlertNotifications.bodyFor(type, 'A family member');
+        AlertNotifications.bodyFor(type, fallbackName);
     final alert = AlertNotification(
       title: title,
       body: body,
@@ -447,14 +467,18 @@ class NotificationService extends ChangeNotifier {
     required String callerName,
     required bool isVideo,
     required String callId,
+    bool isUrdu = false,
   }) async {
     await _ensureLocalNotifications();
     if (!_localReady) return false;
     try {
       await _local.show(
         id: CallNotifications.notificationId,
-        title: 'Incoming ${isVideo ? 'video' : 'audio'} call',
-        body: '$callerName is calling you',
+        title: tr(
+          isUrdu,
+          isVideo ? 'svc_callIncomingVideo' : 'svc_callIncomingAudio',
+        ),
+        body: trf(isUrdu, 'svc_callIsCalling', {'name': callerName}),
         notificationDetails: _alertDetails(isSos: true),
         payload: CallNotifications.tapPayload(callId),
       );
