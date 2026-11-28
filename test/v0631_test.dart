@@ -176,13 +176,15 @@ void main() {
         tester,
         prefs: {'language_code_v1': 'en'},
       );
-      expect(find.text('Aap kaun hain? / آپ کون ہیں؟'), findsOneWidget);
+      expect(find.text('Who are you?'), findsOneWidget);
       await tester.tap(find.byIcon(Icons.arrow_back));
       await tester.pump();
       await tester.pump();
       expect(s.lang.hasChosenLanguage, isFalse);
-      expect(find.text('Choose your language / اپنی زبان منتخب کریں'),
-          findsOneWidget);
+      // v0.6.32: the language screen is two separate lines now
+      // (English line + Urdu-script line), not one mixed string.
+      expect(find.text('Choose your language'), findsOneWidget);
+      expect(find.text('اپنی زبان منتخب کریں'), findsOneWidget);
     });
 
     testWidgets('parent plan screen back arrow -> role screen',
@@ -199,7 +201,7 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(s.onboarding.hasChosenRole, isFalse);
-      expect(find.text('Aap kaun hain? / آپ کون ہیں؟'), findsOneWidget);
+      expect(find.text('Who are you?'), findsOneWidget);
     });
 
     testWidgets('child join screen back arrow -> role screen',
@@ -208,7 +210,7 @@ void main() {
         tester,
         prefs: {'language_code_v1': 'en'},
       );
-      await tester.tap(find.text('Child / بچہ'));
+      await tester.tap(find.text('Child'));
       await tester.pump();
       await tester.pump();
       expect(find.text('Join family circle'), findsOneWidget);
@@ -216,7 +218,7 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(s.onboarding.hasChosenRole, isFalse);
-      expect(find.text('Aap kaun hain? / آپ کون ہیں؟'), findsOneWidget);
+      expect(find.text('Who are you?'), findsOneWidget);
     });
 
     testWidgets('login screen back arrow (first-run) -> role screen',
