@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/language_service.dart';
+import '../l10n/strings.dart';
 import '../services/pin_service.dart';
 import '../services/sync_service.dart';
 
@@ -25,12 +27,14 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
   }
 
   Future<void> _save() async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     if (_pin.text.length < 4) {
-      setState(() => _error = 'PIN must be at least 4 digits.');
+      setState(() => _error = t('scr_pinSetupTooShort'));
       return;
     }
     if (_pin.text != _confirm.text) {
-      setState(() => _error = 'PINs do not match.');
+      setState(() => _error = t('scr_pinSetupMismatch'));
       return;
     }
     final pinService = context.read<PinService>();
@@ -52,17 +56,18 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageService>();
+    String t(String key) => tr(lang.isUrdu, key);
     return Scaffold(
-      appBar: AppBar(title: const Text('Set parent PIN')),
+      appBar: AppBar(title: Text(t('setParentPin'))),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Only the parent knows this PIN. It locks alerts, '
-              'location lock and app lock.',
-              style: TextStyle(fontSize: 17),
+            Text(
+              t('scr_pinSetupInfo'),
+              style: const TextStyle(fontSize: 17),
             ),
             const SizedBox(height: 24),
             TextField(
@@ -70,9 +75,9 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
               keyboardType: TextInputType.number,
               obscureText: true,
               maxLength: 6,
-              decoration: const InputDecoration(
-                labelText: 'Parent PIN',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: t('scr_pinSetupPinLabel'),
+                border: const OutlineInputBorder(),
               ),
             ),
             TextField(
@@ -80,9 +85,9 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
               keyboardType: TextInputType.number,
               obscureText: true,
               maxLength: 6,
-              decoration: const InputDecoration(
-                labelText: 'Confirm PIN',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: t('pinConfirm'),
+                border: const OutlineInputBorder(),
               ),
             ),
             if (_error != null)
@@ -91,7 +96,7 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
                 child: Text(_error!, style: const TextStyle(color: Colors.red)),
               ),
             const SizedBox(height: 16),
-            FilledButton(onPressed: _save, child: const Text('Save PIN')),
+            FilledButton(onPressed: _save, child: Text(t('scr_pinSetupSave'))),
           ],
         ),
       ),
