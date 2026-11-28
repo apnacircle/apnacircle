@@ -15,7 +15,9 @@ import '../core/call_notification.dart';
 import '../core/call_signaling.dart';
 import '../core/chat_notification.dart';
 import '../core/join_request.dart';
+import '../core/language_service.dart';
 import '../core/location_service.dart';
+import '../l10n/strings.dart';
 import '../core/osm_map.dart';
 import '../core/protection_level.dart';
 import '../core/remove_member.dart';
@@ -315,6 +317,8 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   /// that silently kills the background service is worse than one
   /// dialog). Only asked when the service is actually running.
   Future<void> _maybeAskBatteryOptimization() async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool(_batteryOptAskedKey) ?? false) return;
     if (!mounted) return;
@@ -323,21 +327,16 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     final turnOff = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Keep location sharing running?'),
-        content: const Text(
-          'Some phones stop apps running in the background to save '
-          'battery. Turn off battery optimization for ApnaCircle so '
-          'your family can keep seeing your location when the app '
-          'is closed.',
-        ),
+        title: Text(t('scr_homeKeepSharingTitle')),
+        content: Text(t('scr_homeKeepSharingBody')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Not now'),
+            child: Text(t('scr_homeNotNow')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Turn off'),
+            child: Text(t('scr_homeTurnOff')),
           ),
         ],
       ),
@@ -360,6 +359,8 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   /// didChangeAppLifecycleState re-checks the state + starts the
   /// service then.
   Future<void> _fixLocationSharing() async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     final loc = LocationService();
     var state = await loc.sharingState();
     if (state == LocationSharingState.off) {
@@ -368,10 +369,8 @@ class _HomeMapScreenState extends State<HomeMapScreen>
       if (state == LocationSharingState.off) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Location permission is needed to share your location with your family.',
-            ),
+          SnackBar(
+            content: Text(t('scr_homeLocationPermissionNeeded')),
           ),
         );
         return;
@@ -382,22 +381,16 @@ class _HomeMapScreenState extends State<HomeMapScreen>
       final go = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Share location even when the app is closed?'),
-          content: const Text(
-            'Your parent needs to see your location anytime, even '
-            'when ApnaCircle is closed — for example if you are on '
-            'your way home late. On the next screen, tap Location '
-            'and choose "Allow all the time". ApnaCircle only shares '
-            'your location with your own family circle, nobody else.',
-          ),
+          title: Text(t('scr_homeShareClosedTitle')),
+          content: Text(t('scr_homeShareClosedBody')),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Not now'),
+              child: Text(t('scr_homeNotNow')),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Open Settings'),
+              child: Text(t('scr_homeOpenSettings')),
             ),
           ],
         ),
@@ -440,7 +433,9 @@ class _HomeMapScreenState extends State<HomeMapScreen>
       final notifications = context.read<NotificationService>();
       notifications.messages.listen((msg) {
         if (!mounted) return;
-        final title = msg.notification?.title ?? 'ApnaCircle alert';
+        final title = msg.notification?.title ??
+            tr(context.read<LanguageService>().isUrdu,
+                'scr_homeAlertFallback');
         final body = msg.notification?.body ?? '';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('$title${body.isEmpty ? '' : ' — $body'}')),
@@ -498,15 +493,23 @@ class _HomeMapScreenState extends State<HomeMapScreen>
         unawaited(notifications.showAlertFromEvent(event));
         // v0.6.9: plain words, not raw type names — a parent
         // reading "internetOff" would not know what it means.
+        final evUrdu = context.read<LanguageService>().isUrdu;
+        String evTf(String key, [Map<String, Object> args = const {}]) =>
+            trf(evUrdu, key, args);
         final label = switch (event.type) {
-          'sos' => 'SOS from ${event.fromName}!',
-          'internetOff' =>
-            'Internet was switched off on ${event.fromName}\'s phone',
-          'locationOff' =>
-            'Location was switched off on ${event.fromName}\'s phone',
-          'lowBattery' => 'Low battery on ${event.fromName}\'s phone',
-          'phoneOff' => '${event.fromName}\'s phone was switched off',
-          _ => 'Alert from ${event.fromName}: ${event.type}',
+          'sos' => evTf('scr_homeEventSos', {'name': event.fromName}),
+          'internetOff' => evTf('scr_homeEventInternetOff',
+              {'name': event.fromName}),
+          'locationOff' => evTf('scr_homeEventLocationOff',
+              {'name': event.fromName}),
+          'lowBattery' =>
+            evTf('scr_homeEventLowBattery', {'name': event.fromName}),
+          'phoneOff' =>
+            evTf('scr_homeEventPhoneOff', {'name': event.fromName}),
+          _ => evTf('scr_homeEventOther', {
+              'name': event.fromName,
+              'type': event.type,
+            }),
         };
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -552,13 +555,19 @@ class _HomeMapScreenState extends State<HomeMapScreen>
 
   void _applySmsLocation(SmsLocation loc) {
     if (!mounted) return;
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String tf(String key, [Map<String, Object> args = const {}]) =>
+        trf(isUrdu, key, args);
     final family = context.read<FamilyService>();
     final applied = family.applySmsLocation(loc.from, loc.lat, loc.lon, loc.at);
     if (applied) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Location by SMS from ${loc.from} — ${_fmtTime(loc.at)}',
+            tf('scr_homeSmsLocation', {
+              'name': loc.from,
+              'time': _fmtTime(loc.at),
+            }),
           ),
         ),
       );
@@ -569,6 +578,8 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   /// asked (first time the phone goes offline). Nothing is sent
   /// unless the user taps "Turn on".
   Future<void> _maybeAskSmsPermission() async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool(_smsAskedKey) ?? false) return;
     if (!mounted) return;
@@ -577,23 +588,16 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     final enable = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('No internet — use SMS for location?'),
-        content: const Text(
-          'Your phone has no data right now, so your live location '
-          'cannot reach your family. ApnaCircle can send your GPS '
-          'location to your PARENT\'s number by SMS instead — at most '
-          'once every 15 minutes, only when you moved. SMS needs '
-          'mobile signal and uses your SMS balance. No SMS is ever '
-          'sent to anyone except your parent.',
-        ),
+        title: Text(t('scr_homeNoInternetSmsTitle')),
+        content: Text(t('scr_homeNoInternetSmsBody')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Not now'),
+            child: Text(t('scr_homeNotNow')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Turn on'),
+            child: Text(t('scr_homeTurnOn')),
           ),
         ],
       ),
@@ -606,10 +610,8 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     if (mounted) setState(() => _smsFallbackOn = granted);
     if (!granted && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'SMS permission was not given — offline location by SMS stays off.',
-          ),
+        SnackBar(
+          content: Text(t('scr_homeSmsPermissionDenied')),
         ),
       );
     }
@@ -724,8 +726,11 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Your location is not known yet.'),
+        SnackBar(
+          content: Text(tr(
+            context.read<LanguageService>().isUrdu,
+            'scr_homeLocationUnknown',
+          )),
         ),
       );
     }
@@ -819,6 +824,8 @@ class _HomeMapScreenState extends State<HomeMapScreen>
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageService>();
+    String t(String key) => tr(lang.isUrdu, key);
     final family = context.watch<FamilyService>();
     final members = family.members;
     // v0.6.30: pending join requests across all circles I parent
@@ -839,7 +846,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
               label: Text('$totalPending'),
               child: IconButton(
                 icon: const Icon(Icons.person_add),
-                tooltip: 'Join requests',
+                tooltip: t('scr_homeJoinRequestsTooltip'),
                 onPressed: () => setState(() => _tab = 1),
               ),
             ),
@@ -855,12 +862,12 @@ class _HomeMapScreenState extends State<HomeMapScreen>
           // the button felt dead. The list below has no ticking.)
           IconButton(
             icon: const Icon(Icons.group_add),
-            tooltip: 'Call',
+            tooltip: t('scr_homeCallTooltip'),
             onPressed: () => _showCallSheet(members),
           ),
           IconButton(
             icon: const Icon(Icons.phone),
-            tooltip: 'Simulate SIM call',
+            tooltip: t('scr_homeSimulateCall'),
             // Real path: MainActivity tells us when a real SIM call
             // arrives; this button is for testing on an emulator.
             onPressed: () {
@@ -910,7 +917,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                   // Icons.emergency is a siren glyph, so the label "SOS"
                   // now appears exactly once.
                   icon: const Icon(Icons.emergency),
-                  label: const Text('SOS'),
+                  label: Text(t('sos')),
                 ),
               ],
             )
@@ -921,17 +928,23 @@ class _HomeMapScreenState extends State<HomeMapScreen>
               currentIndex: _tab,
               type: BottomNavigationBarType.fixed,
               onTap: (i) => setState(() => _tab = i),
-              items: const [
+              items: [
                 // v0.6.24 order: Chat first, then Map, then the
                 // rest as before.
-                BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Chat'),
-                BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Map'),
                 BottomNavigationBarItem(
-                    icon: Icon(Icons.notifications), label: 'Alerts'),
-                BottomNavigationBarItem(icon: Icon(Icons.lock), label: 'Locks'),
-                BottomNavigationBarItem(icon: Icon(Icons.star), label: 'Plan'),
+                    icon: const Icon(Icons.chat), label: t('chat')),
                 BottomNavigationBarItem(
-                    icon: Icon(Icons.settings), label: 'Settings'),
+                    icon: const Icon(Icons.map), label: t('map')),
+                BottomNavigationBarItem(
+                    icon: const Icon(Icons.notifications),
+                    label: t('alerts')),
+                BottomNavigationBarItem(
+                    icon: const Icon(Icons.lock), label: t('locks')),
+                BottomNavigationBarItem(
+                    icon: const Icon(Icons.star), label: t('scr_navPlan')),
+                BottomNavigationBarItem(
+                    icon: const Icon(Icons.settings),
+                    label: t('settings')),
               ],
             ),
     );
@@ -944,6 +957,9 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   /// (they can retry). Requests in OTHER circles I parent are
   /// listed as a line, so nothing hides behind a circle switch.
   Widget _joinRequestsCard() {
+    final lang = context.watch<LanguageService>();
+    String tf(String key, [Map<String, Object> args = const {}]) =>
+        trf(lang.isUrdu, key, args);
     final joinRequests = context.watch<JoinRequestService>();
     final sync = context.watch<SyncService>();
     final pin = context.watch<PinService>();
@@ -965,8 +981,9 @@ class _HomeMapScreenState extends State<HomeMapScreen>
           children: [
             Text(
               pending.length == 1
-                  ? '1 bacha circle mein aana chahta hai'
-                  : '${pending.length} bache circle mein aana chahte hain',
+                  ? tf('scr_homeJoinOneChild')
+                  : tf('scr_homeJoinChildren',
+                      {'count': pending.length}),
               style:
                   const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
@@ -977,7 +994,30 @@ class _HomeMapScreenState extends State<HomeMapScreen>
             for (final e in otherPending) ...[
               const SizedBox(height: 8),
               Text(
-                'Circle "${sync.myCircles.firstWhere((c) => c.id == e.key, orElse: () => CircleInfo(id: e.key, name: 'Family')).name}" mein ${e.value} request hai — wahan ja kar dekhein.',
+                e.value == 1
+                    ? tf('scr_homeOtherCircleRequestOne', {
+                        'name': sync.myCircles
+                            .firstWhere(
+                              (c) => c.id == e.key,
+                              orElse: () => CircleInfo(
+                                id: e.key,
+                                name: 'Family',
+                              ),
+                            )
+                            .name,
+                      })
+                    : tf('scr_homeOtherCircleRequests', {
+                        'name': sync.myCircles
+                            .firstWhere(
+                              (c) => c.id == e.key,
+                              orElse: () => CircleInfo(
+                                id: e.key,
+                                name: 'Family',
+                              ),
+                            )
+                            .name,
+                        'count': e.value,
+                      }),
                 style: const TextStyle(fontSize: 13),
               ),
             ],
@@ -988,15 +1028,20 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   }
 
   Widget _joinRequestRow(JoinRequest req, String? pinHash) {
+    final lang = context.watch<LanguageService>();
+    final isUrdu = lang.isUrdu;
+    String t(String key) => tr(isUrdu, key);
+    String tf(String key, [Map<String, Object> args = const {}]) =>
+        trf(isUrdu, key, args);
     final matches = JoinRequestService.pinMatches(req, pinHash);
     final mins = DateTime.now()
         .difference(DateTime.fromMillisecondsSinceEpoch(req.requestedAtMs))
         .inMinutes;
     final when = mins < 1
-        ? 'abhi'
+        ? t('scr_homeJustNow')
         : mins < 60
-            ? '$mins min pehle'
-            : '${mins ~/ 60} ghante pehle';
+            ? tf('scr_homeMinsAgo', {'mins': mins})
+            : tf('scr_homeHoursAgo', {'hours': mins ~/ 60});
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1015,10 +1060,10 @@ class _HomeMapScreenState extends State<HomeMapScreen>
         const SizedBox(height: 4),
         Text(
           pinHash == null
-              ? 'Parent PIN verify nahi ho saka (is phone par PIN recover nahi hua) — Allow karne se pehle bache se code confirm kar lein.'
+              ? t('scr_homePinNotVerified')
               : matches
-                  ? 'Parent PIN ✓ sahi hai.'
-                  : 'Parent PIN ✗ ghalat hai — is bache ne ghalat code likha.',
+                  ? t('scr_homePinCorrect')
+                  : t('scr_homePinWrong'),
           style: TextStyle(
             fontSize: 13,
             color: pinHash != null && !matches ? Colors.red : Colors.grey,
@@ -1030,12 +1075,12 @@ class _HomeMapScreenState extends State<HomeMapScreen>
             FilledButton(
               onPressed: () => _decideJoinRequest(req, allow: true),
               style: FilledButton.styleFrom(backgroundColor: Colors.green),
-              child: const Text('Allow'),
+              child: Text(t('allowPermissions')),
             ),
             const SizedBox(width: 8),
             OutlinedButton(
               onPressed: () => _decideJoinRequest(req, allow: false),
-              child: const Text('Deny'),
+              child: Text(t('scr_homeDeny')),
             ),
           ],
         ),
@@ -1047,6 +1092,10 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     JoinRequest req, {
     required bool allow,
   }) async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
+    String tf(String key, [Map<String, Object> args = const {}]) =>
+        trf(isUrdu, key, args);
     final joinRequests = context.read<JoinRequestService>();
     final pin = context.read<PinService>();
     if (allow &&
@@ -1056,19 +1105,16 @@ class _HomeMapScreenState extends State<HomeMapScreen>
       final go = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Ghalat parent code — phir bhi allow karein?'),
-          content: Text(
-            '${req.name} ne ghalat parent code likha tha. Agar aap '
-            'phir bhi allow karein ge to wo circle mein aa jaye ga.',
-          ),
+          title: Text(t('scr_homeWrongCodeTitle')),
+          content: Text(tf('scr_homeWrongCodeBody', {'name': req.name})),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
+              child: Text(t('cancel')),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Phir bhi allow karein'),
+              child: Text(t('scr_homeAllowAnyway')),
             ),
           ],
         ),
@@ -1084,15 +1130,19 @@ class _HomeMapScreenState extends State<HomeMapScreen>
         content: Text(
           ok
               ? (allow
-                  ? '${req.name} ko allow kar diya — wo ab circle mein aa jaye ga.'
-                  : '${req.name} ko deny kar diya.')
-              : 'Faisla save nahi ho saka — internet check kar ke dobara try karein.',
+                  ? tf('scr_homeAllowed', {'name': req.name})
+                  : tf('scr_homeDenied', {'name': req.name}))
+              : t('scr_homeDecisionFailed'),
         ),
       ),
     );
   }
 
   Widget _mapTab(List<Member> members, bool smsSosOn) {
+    final lang = context.watch<LanguageService>();
+    String t(String key) => tr(lang.isUrdu, key);
+    String tf(String key, [Map<String, Object> args = const {}]) =>
+        trf(lang.isUrdu, key, args);
     // v0.6.19: when sharing is fine, the big status card shrinks
     // to one small green line — the map is the point of this tab,
     // and the user asked for it to be bigger.
@@ -1108,17 +1158,17 @@ class _HomeMapScreenState extends State<HomeMapScreen>
               horizontal: 12,
               vertical: 6,
             ),
-            child: const Row(
+            child: Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.check_circle,
                   color: Colors.green,
                   size: 18,
                 ),
-                SizedBox(width: 6),
+                const SizedBox(width: 6),
                 Text(
-                  'Location sharing ON — your family can see you',
-                  style: TextStyle(fontSize: 13),
+                  t('scr_homeSharingOn'),
+                  style: const TextStyle(fontSize: 13),
                 ),
               ],
             ),
@@ -1150,8 +1200,8 @@ class _HomeMapScreenState extends State<HomeMapScreen>
             ),
             child: Text(
               _smsFallbackOn
-                  ? 'You are offline (no data). Location is sent to your parent by SMS, every 15 min.'
-                  : 'You are offline (no data). Turn on SMS location in Settings to keep sharing.',
+                  ? t('scr_homeOfflineSmsOn')
+                  : t('scr_homeOfflineSmsOff'),
               style: const TextStyle(fontSize: 13),
             ),
           ),
@@ -1203,7 +1253,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                 child: FloatingActionButton.small(
                   heroTag: 'follow_me',
                   onPressed: () => unawaited(_centreOnViewer()),
-                  tooltip: 'Centre on me',
+                  tooltip: t('scr_homeCentreOnMe'),
                   child: const Icon(Icons.my_location),
                 ),
               ),
@@ -1215,7 +1265,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                   child: FloatingActionButton.small(
                     heroTag: 'close_fullscreen',
                     onPressed: () => setState(() => _mapFullscreen = false),
-                    tooltip: 'Close fullscreen map',
+                    tooltip: t('scr_homeCloseFullscreen'),
                     child: const Icon(Icons.close),
                   ),
                 ),
@@ -1231,7 +1281,8 @@ class _HomeMapScreenState extends State<HomeMapScreen>
           // header sits at the bottom, under the SOS FABs).
           ListTile(
             dense: true,
-            title: Text('Family (${members.length})'),
+            title: Text(tf('scr_homeFamilyCount',
+                {'count': members.length})),
             trailing: Icon(
               _membersExpanded ? Icons.expand_less : Icons.expand_more,
             ),
@@ -1262,6 +1313,11 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   }
 
   Widget _memberCard(Member m) {
+    final lang = context.watch<LanguageService>();
+    final isUrdu = lang.isUrdu;
+    String t(String key) => tr(isUrdu, key);
+    String tf(String key, [Map<String, Object> args = const {}]) =>
+        trf(isUrdu, key, args);
     // v0.6.14: measured from THIS phone's live position — never
     // from the old hardcoded Lahore point. '—' while the viewer's
     // position is still unknown.
@@ -1273,25 +1329,39 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     // last seen + how it arrived (live / SMS / nothing since off).
     final String status;
     if (m.locationViaSms) {
-      status = 'SMS se aayi · ${_fmtTime(m.lastSeen)} · $distance away';
+      status = tf('scr_homeSmsStatus', {
+        'time': _fmtTime(m.lastSeen),
+        'distance': distance,
+      });
     } else if (m.isOnline) {
       // Unknown battery (-1) shows no battery part at all — never
       // "-1%" (v0.6.2). A real level keeps showing "Battery 81%".
       // A level older than 30 minutes is marked "(old)" so a stale
       // value is never mistaken for a live one (v0.6.6).
       final batteryPart = m.hasKnownBattery
-          ? (m.batteryIsStale ? '${m.batteryLabel} (old)' : m.batteryLabel)
+          ? (m.batteryIsStale
+              ? tf('scr_homeBatteryOld', {
+                  'battery':
+                      tf('scr_homeBatteryPct', {'pct': m.battery}),
+                })
+              : tf('scr_homeBatteryPct', {'pct': m.battery}))
           : '';
       status = batteryPart.isEmpty
-          ? 'Online · $distance away'
-          : 'Online · $distance away · $batteryPart';
+          ? tf('scr_homeMemberOnline', {'distance': distance})
+          : tf('scr_homeMemberOnlineBattery', {
+              'distance': distance,
+              'battery': batteryPart,
+            });
     } else {
-      status = 'Offline since ${_fmtTime(m.lastSeen)} · $distance away';
+      status = tf('scr_homeMemberOffline', {
+        'time': _fmtTime(m.lastSeen),
+        'distance': distance,
+      });
     }
     // v0.6.13 (C): uninstall-protection level, when known — the
     // parent sees at a glance which child can uninstall and which
     // cannot. Unknown shows nothing (never a guess).
-    final protectionLabel = m.protection.label;
+    final protectionLabel = m.protection.localizedLabel(isUrdu: isUrdu);
     final fullStatus =
         protectionLabel.isEmpty ? status : '$status · $protectionLabel';
     // v0.6.13 (D): "child gayab" notice — a CHILD with no update
@@ -1332,7 +1402,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
               children: [
                 Text(fullStatus),
                 Text(
-                  missingWarningText(m.lastSeen!, now),
+                  missingWarningText(m.lastSeen!, now, isUrdu: isUrdu),
                   style: const TextStyle(color: Colors.orange),
                 ),
               ],
@@ -1347,18 +1417,18 @@ class _HomeMapScreenState extends State<HomeMapScreen>
           if (canRemove)
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert),
-              tooltip: 'Member options',
+              tooltip: t('scr_homeMemberOptions'),
               onSelected: (value) {
                 if (value == 'remove') {
                   unawaited(_confirmRemoveMember(m));
                 }
               },
-              itemBuilder: (ctx) => const [
+              itemBuilder: (ctx) => [
                 PopupMenuItem<String>(
                   value: 'remove',
                   child: Text(
-                    'Remove from circle',
-                    style: TextStyle(color: Colors.red),
+                    t('scr_homeRemoveFromCircle'),
+                    style: const TextStyle(color: Colors.red),
                   ),
                 ),
               ],
@@ -1394,6 +1464,9 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   /// A failed start (offline, no permission, demo mode) shows the
   /// plain-words error; a started call opens the call screen.
   Future<void> _showCallMenu(Member m) async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String tf(String key, [Map<String, Object> args = const {}]) =>
+        trf(isUrdu, key, args);
     final type = await showModalBottomSheet<CallType>(
       context: context,
       builder: (ctx) => SafeArea(
@@ -1402,12 +1475,12 @@ class _HomeMapScreenState extends State<HomeMapScreen>
           children: [
             ListTile(
               leading: const Icon(Icons.call),
-              title: Text('Audio call ${m.name}'),
+              title: Text(tf('scr_homeAudioCall', {'name': m.name})),
               onTap: () => Navigator.pop(ctx, CallType.audio),
             ),
             ListTile(
               leading: const Icon(Icons.videocam),
-              title: Text('Video call ${m.name}'),
+              title: Text(tf('scr_homeVideoCall', {'name': m.name})),
               onTap: () => Navigator.pop(ctx, CallType.video),
             ),
           ],
@@ -1433,12 +1506,14 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   /// at once (conference). The v0.6.21 dialog is kept for the
   /// conference part only — the sheet is the entry point.
   Future<void> _showCallSheet(List<Member> members) async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     final family = context.read<FamilyService>();
     final others = members.where((m) => m.id != family.myId).toList();
     if (others.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No one else in the circle to call.'),
+        SnackBar(
+          content: Text(t('scr_homeNoOneToCall')),
         ),
       );
       return;
@@ -1451,8 +1526,8 @@ class _HomeMapScreenState extends State<HomeMapScreen>
           children: [
             ListTile(
               leading: const Icon(Icons.group_add),
-              title: const Text('Group call'),
-              subtitle: const Text('Call several members at once'),
+              title: Text(t('scr_homeGroupCall')),
+              subtitle: Text(t('scr_homeGroupCallHint')),
               onTap: () => Navigator.pop(ctx, 'group'),
             ),
             const Divider(height: 1),
@@ -1482,12 +1557,14 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   /// Group call (v0.6.21): tick the members to invite, then pick
   /// audio or video — a conference call to all of them at once.
   Future<void> _showGroupCallPicker(List<Member> members) async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     final family = context.read<FamilyService>();
     final others = members.where((m) => m.id != family.myId).toList();
     if (others.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No one else in the circle to call.'),
+        SnackBar(
+          content: Text(t('scr_homeNoOneToCall')),
         ),
       );
       return;
@@ -1495,9 +1572,9 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     final selected = <String>{};
     final type = await showDialog<CallType>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
+        builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Group call — pick members'),
+          title: Text(t('scr_homeGroupCallPick')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1520,21 +1597,21 @@ class _HomeMapScreenState extends State<HomeMapScreen>
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
+              child: Text(t('cancel')),
             ),
             FilledButton.icon(
               onPressed: selected.isEmpty
                   ? null
                   : () => Navigator.pop(ctx, CallType.audio),
               icon: const Icon(Icons.call),
-              label: const Text('Audio call'),
+              label: Text(t('scr_homeAudioCallBtn')),
             ),
             FilledButton.icon(
               onPressed: selected.isEmpty
                   ? null
                   : () => Navigator.pop(ctx, CallType.video),
               icon: const Icon(Icons.videocam),
-              label: const Text('Video call'),
+              label: Text(t('scr_homeVideoCallBtn')),
             ),
           ],
         ),
@@ -1574,22 +1651,23 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   /// correct PIN. The service re-checks parent + not-self, so a
   /// child calling the service directly still fails.
   Future<void> _confirmRemoveMember(Member m) async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
+    String tf(String key, [Map<String, Object> args = const {}]) =>
+        trf(isUrdu, key, args);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Remove ${m.name}?'),
-        content: Text(
-          'Remove ${m.name} from the circle? '
-          'They can re-join with the invite code.',
-        ),
+        title: Text(tf('scr_homeRemoveTitle', {'name': m.name})),
+        content: Text(tf('scr_homeRemoveBody', {'name': m.name})),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: Text(t('cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Remove'),
+            child: Text(t('scr_homeRemove')),
           ),
         ],
       ),
@@ -1604,6 +1682,9 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   }
 
   Future<void> _doRemoveMember(Member m) async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String tf(String key, [Map<String, Object> args = const {}]) =>
+        trf(isUrdu, key, args);
     final family = context.read<FamilyService>();
     final (ok, error) = await family.removeMember(m.id);
     if (!mounted) return;
@@ -1611,8 +1692,8 @@ class _HomeMapScreenState extends State<HomeMapScreen>
       SnackBar(
         content: Text(
           ok
-              ? '${m.name} removed from the circle.'
-              : (error ?? 'Could not remove ${m.name}.'),
+              ? tf('scr_homeRemoved', {'name': m.name})
+              : (error ?? tf('scr_homeRemoveFailed', {'name': m.name})),
         ),
       ),
     );
@@ -1627,22 +1708,21 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   /// emergency — when the net is off or the family's apps are
   /// closed, so the normal SOS cannot reach them.
   Future<void> _sendSmsSos(BuildContext context) async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Send SMS SOS?'),
-        content: const Text(
-          'This texts every family member (about Rs. 2 per member '
-          'SMS, charged to your SIM). Use only in a real emergency.',
-        ),
+        title: Text(t('scr_homeSendSmsSosTitle')),
+        content: Text(t('scr_homeSendSmsSosBody')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(t('cancel')),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Send SMS'),
+            child: Text(t('scr_homeSendSms')),
           ),
         ],
       ),
@@ -1652,6 +1732,10 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   }
 
   Future<void> _sendAlert(BuildContext context, {required bool viaSms}) async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
+    String tf(String key, [Map<String, Object> args = const {}]) =>
+        trf(isUrdu, key, args);
     final family = context.read<FamilyService>();
     final sync = context.read<SyncService>();
     final sosSms = context.read<SosSmsService>();
@@ -1700,24 +1784,25 @@ class _HomeMapScreenState extends State<HomeMapScreen>
       smsThrottled = result.throttled;
     }
     if (!context.mounted) return;
-    final plural = smsSent == 1 ? '' : 's';
     final String message;
     if (rtdbSent && smsSent > 0) {
-      message = 'SOS sent to your family! SMS to $smsSent member$plural.';
+      message = smsSent == 1
+          ? t('scr_homeSosSentSmsOne')
+          : tf('scr_homeSosSentSmsMany', {'count': smsSent});
     } else if (rtdbSent && smsDenied && smsNeeded) {
-      message =
-          'SOS sent to your family! (SMS blocked — SMS permission needed.)';
+      message = t('scr_homeSosSmsBlocked');
     } else if (rtdbSent) {
-      message = 'SOS sent to your family!';
+      message = t('sosSent');
     } else if (smsSent > 0) {
-      message = 'SOS sent by SMS to $smsSent member$plural (no internet).';
+      message = smsSent == 1
+          ? t('scr_homeSosSentSmsOnlyOne')
+          : tf('scr_homeSosSentSmsOnlyMany', {'count': smsSent});
     } else if (smsThrottled) {
-      message =
-          'SOS already sent a moment ago — wait a minute before sending again.';
+      message = t('scr_homeSosThrottled');
     } else if (smsDenied) {
-      message = 'SOS could not be sent — allow SMS permission and try again.';
+      message = t('scr_homeSosSmsDenied');
     } else {
-      message = 'SOS could not be sent — check signal and try again.';
+      message = t('scr_homeSosFailed');
     }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
@@ -1741,7 +1826,7 @@ class _AlertsBell extends StatelessWidget {
       children: [
         IconButton(
           icon: const Icon(Icons.notifications),
-          tooltip: 'Alerts',
+          tooltip: tr(context.read<LanguageService>().isUrdu, 'alerts'),
           onPressed: onTap,
         ),
         if (unread > 0)
