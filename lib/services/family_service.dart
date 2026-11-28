@@ -10,6 +10,7 @@ import '../core/location_service.dart';
 import '../core/member_phone.dart';
 import '../core/removal_detection.dart';
 import '../core/remove_member.dart';
+import '../l10n/strings.dart';
 import '../models/chat_message.dart';
 import '../models/circle.dart';
 import '../models/member.dart';
@@ -183,7 +184,10 @@ class FamilyService extends ChangeNotifier {
   /// The removed phone also notices (its members read is
   /// denied) and stops sharing by itself; the parent's alerts
   /// centre hides the removed member's old events.
-  Future<(bool, String?)> removeMember(String id) async {
+  Future<(bool, String?)> removeMember(
+    String id, {
+    bool isUrdu = false,
+  }) async {
     if (!canRemoveMember(
       isAdmin: amParent,
       myUid: myId,
@@ -195,13 +199,13 @@ class FamilyService extends ChangeNotifier {
       return (
         false,
         amParent
-            ? 'You cannot remove yourself.'
-            : 'Only the parent can remove a member.',
+            ? tr(isUrdu, 'svc_memberCannotRemoveSelf')
+            : tr(isUrdu, 'svc_memberOnlyParentRemove'),
       );
     }
     final target = _members.where((m) => m.id == id).firstOrNull;
     if (target == null) {
-      return (false, 'That member is already gone.');
+      return (false, tr(isUrdu, 'svc_memberAlreadyGone'));
     }
     _members.remove(target);
     _save();
@@ -222,9 +226,10 @@ class FamilyService extends ChangeNotifier {
   /// and the local update is the whole change.
   Future<(bool, String?)> setMemberPhone(
     String memberId,
-    String rawInput,
-  ) async {
-    final validated = validateMemberPhone(rawInput);
+    String rawInput, {
+    bool isUrdu = false,
+  }) async {
+    final validated = validateMemberPhone(rawInput, isUrdu: isUrdu);
     final normalized = validated.number;
     if (normalized == null) return (false, validated.error);
     if (!canSetMemberPhone(
@@ -232,10 +237,10 @@ class FamilyService extends ChangeNotifier {
       myUid: _sync?.uid,
       targetMemberId: memberId,
     )) {
-      return (false, 'Only the parent can set a member\u2019s number.');
+      return (false, tr(isUrdu, 'svc_memberOnlyParentSetNumber'));
     }
     final i = _members.indexWhere((m) => m.id == memberId);
-    if (i < 0) return (false, 'Member not found.');
+    if (i < 0) return (false, tr(isUrdu, 'svc_memberNotFound'));
     if (isSynced && activeCircleId != null) {
       final ok = await _sync!.setMemberPhone(
         activeCircleId!,
@@ -245,7 +250,7 @@ class FamilyService extends ChangeNotifier {
       if (!ok) {
         return (
           false,
-          'Could not save the number — check internet and try again.'
+          tr(isUrdu, 'svc_memberSaveNumberFailed'),
         );
       }
     }
@@ -644,8 +649,11 @@ class FamilyService extends ChangeNotifier {
       _subscribed = false;
       await _save();
       await _sync?.removeCircleLocally(circleId);
-      removedNotice =
-          'You were removed from the circle. Your location is no longer shared and your alerts have stopped. Join again with the parent\'s invite code to come back.';
+      // No caller can thread the locale here (this runs from a
+      // stream error) — read the persisted choice instead.
+      final prefs = await SharedPreferences.getInstance();
+      final isUrdu = prefs.getString('language_code_v1') == 'ur';
+      removedNotice = tr(isUrdu, 'svc_removedNotice');
       notifyListeners();
     } finally {
       _removalHandling = false;
