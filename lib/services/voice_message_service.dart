@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 import '../core/voice_message.dart';
+import '../l10n/strings.dart';
 
 /// Voice-message recording (v0.6.29) — WhatsApp-style hold to
 /// record, release to send.
@@ -25,7 +26,7 @@ class VoiceMessageService {
   /// Start recording to a temp .m4a file. Returns (file, null) on
   /// success, (null, error) when the mic is unavailable or the
   /// permission is denied. The file only exists after [stopRecording].
-  Future<(File?, String?)> startRecording() async {
+  Future<(File?, String?)> startRecording({bool isUrdu = false}) async {
     try {
       final recorder = AudioRecorder();
       final ok = await recorder.hasPermission();
@@ -33,7 +34,7 @@ class VoiceMessageService {
         await recorder.dispose();
         return (
           null,
-          'Mic ki permission nahi mili — Settings se mic ON karo.',
+          tr(isUrdu, 'svc_voiceMicPermission'),
         );
       }
       final dir = await getTemporaryDirectory();
@@ -45,7 +46,7 @@ class VoiceMessageService {
       _startedAtMs = nowMs;
       return (File(path), null);
     } catch (e) {
-      return (null, 'Recording nahi ho saki ($e).');
+      return (null, trf(isUrdu, 'svc_voiceRecordingFailed', {'e': e.toString()}));
     }
   }
 
@@ -53,7 +54,7 @@ class VoiceMessageService {
   /// recording shorter than [minVoiceMessageMs] is discarded as an
   /// accidental tap — the file is deleted and the caller gets the
   /// plain-words reason.
-  Future<(File?, String?)> stopRecording() async {
+  Future<(File?, String?)> stopRecording({bool isUrdu = false}) async {
     final recorder = _recorder;
     final path = _currentPath;
     final startedAtMs = _startedAtMs;
@@ -61,13 +62,13 @@ class VoiceMessageService {
     _currentPath = null;
     _startedAtMs = null;
     if (recorder == null || path == null) {
-      return (null, 'Recording nahi ho saki.');
+      return (null, tr(isUrdu, 'svc_voiceRecordingFailedPlain'));
     }
     try {
       await recorder.stop();
     } catch (e) {
       await recorder.dispose();
-      return (null, 'Recording nahi ho saki ($e).');
+      return (null, trf(isUrdu, 'svc_voiceRecordingFailed', {'e': e.toString()}));
     } finally {
       await recorder.dispose();
     }
@@ -79,10 +80,10 @@ class VoiceMessageService {
       try {
         if (await file.exists()) await file.delete();
       } catch (_) {}
-      return (null, 'Bohat chhoti recording — dobara dabayein.');
+      return (null, tr(isUrdu, 'svc_voiceTooShort'));
     }
     if (!await file.exists()) {
-      return (null, 'Recording save nahi hui.');
+      return (null, tr(isUrdu, 'svc_voiceNotSaved'));
     }
     return (file, null);
   }
