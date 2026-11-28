@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/join_request.dart';
+import '../l10n/strings.dart';
 import '../models/circle.dart';
 import 'auth_service.dart';
 import 'firebase_config.dart';
@@ -87,19 +88,20 @@ class JoinRequestService extends ChangeNotifier {
     required String phone,
     required String parentPin,
     required String displayName,
+    bool isUrdu = false,
   }) async {
     if (!isAvailable || _auth.uid == null) {
-      return (null, 'Join ke liye sign-in chahiye.');
+      return (null, tr(isUrdu, 'svc_joinNeedSignIn'));
     }
     final code = inviteCode.trim();
     final name = displayName.trim();
-    if (code.isEmpty) return (null, 'Invite code likhein.');
-    if (name.isEmpty) return (null, 'Apna naam likhein.');
+    if (code.isEmpty) return (null, tr(isUrdu, 'svc_joinEnterInviteCode'));
+    if (name.isEmpty) return (null, tr(isUrdu, 'svc_joinEnterName'));
     if (phone.trim().isEmpty) {
-      return (null, 'Apna mobile number likhein.');
+      return (null, tr(isUrdu, 'svc_joinEnterPhone'));
     }
     if (parentPin.length < 4) {
-      return (null, 'Parent ka PIN kam se kam 4 digits ka hota hai.');
+      return (null, tr(isUrdu, 'svc_joinPinMinDigits'));
     }
     try {
       // Resolve the code -> circle (invites read is open to any
@@ -107,7 +109,7 @@ class JoinRequestService extends ChangeNotifier {
       final inviteSnap =
           await _root.child(FirebaseConfig.invitePath(code)).get();
       if (!inviteSnap.exists || inviteSnap.value == null) {
-        return (null, 'Is code ka koi circle nahi mila — digits check karein.');
+        return (null, tr(isUrdu, 'svc_joinNoCircleForCode'));
       }
       final circleId = inviteSnap.value as String;
       // Returning member? Their role entry still exists — re-join
@@ -121,8 +123,11 @@ class JoinRequestService extends ChangeNotifier {
           phoneNumber: phone,
           role: 'child',
           displayName: name,
+          isUrdu: isUrdu,
         );
-        if (circle == null) return (null, err ?? 'Join nahi ho saka.');
+        if (circle == null) {
+          return (null, err ?? tr(isUrdu, 'svc_joinFailed'));
+        }
         await _savePendingCircle(null);
         return (null, null);
       }
@@ -145,7 +150,7 @@ class JoinRequestService extends ChangeNotifier {
       watchMyRequest(circleId);
       return (req, null);
     } catch (e) {
-      return (null, 'Request nahi bhej sake: $e');
+      return (null, trf(isUrdu, 'svc_joinRequestFailed', {'e': e.toString()}));
     }
   }
 
