@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/language_service.dart';
 import '../services/onboarding_service.dart';
 
 /// Second first-run screen (v0.6.30): who is using THIS phone?
@@ -16,6 +17,17 @@ class RoleSelectScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // v0.6.31: back to the language screen — a wrong tap is
+      // undoable at every step (the user's report, 28 Nov 2026:
+      // Child dab gaya tha aur wapas jaane ka option hi nahi tha).
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          tooltip: 'Wapas — language badlein',
+          onPressed: () =>
+              context.read<LanguageService>().clearChoice(),
+        ),
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -36,8 +48,9 @@ class RoleSelectScreen extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Ye sirf ek dafa poocha jata hai — jis phone par app '
-                'hai, us ke hisaab se chuniye.',
+                'Jis phone par app hai, us ke hisaab se chuniye. '
+                'Ghalti se ghalat dab gaya to upar wapas ja kar '
+                'badal sakte hain — baad mein Settings se bhi.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 14, color: Colors.grey),
               ),
