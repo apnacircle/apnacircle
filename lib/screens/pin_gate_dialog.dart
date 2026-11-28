@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/escape_gate.dart';
+import '../core/language_service.dart';
+import '../l10n/strings.dart';
 import '../services/pin_service.dart';
 import '../services/sync_service.dart';
 
@@ -20,13 +22,15 @@ Future<void> askParentPin(
   required VoidCallback onUnlocked,
   String? expectedHash,
 }) async {
+  final isUrdu = context.read<LanguageService>().isUrdu;
+  String t(String key) => tr(isUrdu, key);
   final pinCtrl = TextEditingController();
   String? error;
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setState) => AlertDialog(
-        title: const Text('Parent PIN'),
+        title: Text(t('scr_pinGateTitle')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -36,9 +40,9 @@ Future<void> askParentPin(
               obscureText: true,
               maxLength: 6,
               autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Enter parent PIN',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: t('scr_pinGateEnter'),
+                border: const OutlineInputBorder(),
               ),
             ),
             if (error != null)
@@ -51,7 +55,7 @@ Future<void> askParentPin(
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: Text(t('cancel')),
           ),
           FilledButton(
             onPressed: () {
@@ -61,10 +65,10 @@ Future<void> askParentPin(
               if (correct) {
                 Navigator.pop(ctx, true);
               } else {
-                setState(() => error = 'Wrong PIN. Try again.');
+                setState(() => error = t('pinWrong'));
               }
             },
-            child: const Text('Unlock'),
+            child: Text(t('scr_pinGateUnlock')),
           ),
         ],
       ),
@@ -91,14 +95,14 @@ Future<void> askParentPinForProtectionRemoval(
   required PinService pin,
   required VoidCallback onUnlocked,
 }) async {
+  final isUrdu = context.read<LanguageService>().isUrdu;
+  String t(String key) => tr(isUrdu, key);
   final hash = await resolveParentPinHash(sync: sync, pin: pin);
   if (!context.mounted) return;
   if (hash == null) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Parent PIN not found — connect to the internet and try again.',
-        ),
+      SnackBar(
+        content: Text(t('scr_pinGateNotFound')),
       ),
     );
     return;
