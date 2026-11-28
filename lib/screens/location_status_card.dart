@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../core/language_service.dart';
 import '../core/location_service.dart';
+import '../l10n/strings.dart';
 
 /// Location sharing status card (v0.6.4) — same pattern as the
 /// v0.6.3 App Lock card in LocksScreen: show the real state on
@@ -45,6 +48,11 @@ class LocationStatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // v0.6.32: nullable watch — unit tests pump this card bare
+    // (no LanguageService); it then falls back to English.
+    final lang = context.watch<LanguageService?>();
+    final isUrdu = lang?.isUrdu ?? false;
+    String t(String key) => tr(isUrdu, key);
     final s = state;
     final isAlways = s == LocationSharingState.always;
     final isWhileInUse = s == LocationSharingState.whileInUse;
@@ -84,12 +92,12 @@ class LocationStatusCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     s == null
-                        ? 'Checking location sharing…'
+                        ? t('scr_locChecking')
                         : isAlways
-                            ? 'Location sharing ON (always)'
+                            ? t('scr_locOnAlways')
                             : isWhileInUse
-                                ? 'Location sharing: only while using the app'
-                                : 'Location sharing OFF',
+                                ? t('scr_locWhileInUse')
+                                : t('scr_locOff'),
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
@@ -98,7 +106,7 @@ class LocationStatusCard extends StatelessWidget {
                 ),
                 IconButton(
                   icon: const Icon(Icons.refresh),
-                  tooltip: 'Check again',
+                  tooltip: t('scr_lockCheckAgain'),
                   onPressed: onRefresh,
                 ),
               ],
@@ -108,25 +116,25 @@ class LocationStatusCard extends StatelessWidget {
                   ? ''
                   : isAlways
                       ? serviceRunning
-                          ? 'Your family can see you even when the app is closed.'
-                          : 'Permission is "always", but the background service is not running — tap Refresh.'
+                          ? t('scr_locFamilySees')
+                          : t('scr_locServiceNotRunning')
                       : locationLocked
-                          ? 'Location is locked by your parent — turn sharing back on.'
+                          ? t('scr_locLockedByParent')
                           : isWhileInUse
-                              ? 'Your family can see you ONLY while ApnaCircle is open on this phone. Turn on "Allow all the time" to keep sharing when the app is closed.'
-                              : 'Your family cannot see your location at all. Turn location sharing on.',
+                              ? t('scr_locOnlyWhileOpen')
+                              : t('scr_locCannotSee'),
             ),
             if (s != null && !isAlways) ...[
               const SizedBox(height: 8),
               FilledButton(
                 onPressed: onFix,
-                child: const Text('Turn on always'),
+                child: Text(t('scr_locTurnOnAlways')),
               ),
             ],
             const SizedBox(height: 4),
-            const Text(
-              'Every child\'s phone needs "Allow all the time" — it can only be turned on from that phone itself, never from the parent phone.',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+            Text(
+              t('scr_lockEveryChild'),
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ],
         ),
