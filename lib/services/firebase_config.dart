@@ -1,3 +1,5 @@
+import '../l10n/strings.dart';
+
 /// Firebase setup — v0.3 (22 Nov 2026): packages added, sync code
 /// written. NO Firebase project exists yet (no console project, no
 /// google-services.json) — until the project is created the app
@@ -116,10 +118,22 @@ class FirebaseConfig {
 
 /// One checklist item for the Firebase setup (FIREBASE_SETUP.md).
 /// `done` is tracked in the README, not in code.
+///
+/// v0.6.32: the item holds l10n KEYS, not text — the Roman Urdu
+/// literals that used to live here are now `core_checklist*` keys
+/// (see /tmp/v0632-keys-core.txt, merged into app_en/app_ur by
+/// the coordinator). [step]/[detail] render the text for a locale;
+/// [firebaseChecklistLocalized] renders the whole list at once.
+/// The class name and the [firebaseChecklist] list name are
+/// unchanged, so anything that references them later still finds
+/// them (nothing references them today — the list is dormant).
 class FirebaseChecklistItem {
-  final String step;
-  final String detail;
-  const FirebaseChecklistItem(this.step, this.detail);
+  final String stepKey;
+  final String detailKey;
+  const FirebaseChecklistItem(this.stepKey, this.detailKey);
+
+  String step({bool isUrdu = false}) => tr(isUrdu, stepKey);
+  String detail({bool isUrdu = false}) => tr(isUrdu, detailKey);
 }
 
 /// Setup steps in order — do them on the Firebase console, then
@@ -127,40 +141,43 @@ class FirebaseChecklistItem {
 /// [FirebaseConfig] above. Estimated: 1–2 hours on a normal machine.
 const firebaseChecklist = [
   FirebaseChecklistItem(
-    '1. Project banayein',
-    'Firebase console (console.firebase.google.com) par naya project — '
-        'naam: apnacircle. Google Analytics optional hai, off rakh sakte hain.',
+    'core_checklistCreateProject',
+    'core_checklistCreateProjectDetail',
   ),
   FirebaseChecklistItem(
-    '2. Android app register karein',
-    'Package: com.apnacircle.app. google-services.json download karke '
-        'android/app/ mein rakhein (ye file .gitignore mein hai — commit NAHI hogi).',
+    'core_checklistRegisterApp',
+    'core_checklistRegisterAppDetail',
   ),
   FirebaseChecklistItem(
-    '3. Realtime Database',
-    'Database banayein (locked mode se shuru karein), region: asia-southeast1 '
-        '(Pakistan ke qareeb). Rules: sirf apne circle ke members parh/sakte hain — '
-        'rules file FIREBASE_SETUP.md mein hai.',
+    'core_checklistDatabase',
+    'core_checklistDatabaseDetail',
   ),
   FirebaseChecklistItem(
-    '4. Authentication',
-    'Phone number sign-in ON karein (family ke liye phone number sab se '
-        'asaan hai). Email/password backup ke tor par.',
+    'core_checklistAuth',
+    'core_checklistAuthDetail',
   ),
   FirebaseChecklistItem(
-    '5. Cloud Messaging (FCM)',
-    'FCM API enable karein. Server key kabhi app mein NAHI dalni — '
-        'sirf Cloud Functions / server se use hogi.',
+    'core_checklistFcm',
+    'core_checklistFcmDetail',
   ),
   FirebaseChecklistItem(
-    '6. Packages add karein',
-    'pubspec.yaml mein: firebase_core, firebase_auth, '
-        'firebase_database, firebase_messaging. Phir `flutter pub get` '
-        'aur `Firebase.initializeApp()` main.dart mein.',
+    'core_checklistPackages',
+    'core_checklistPackagesDetail',
   ),
   FirebaseChecklistItem(
-    '7. Test karein',
-    'Do phones par live location sync, parent se remote lock, aur '
-        'SOS push notification — teeno kaam karte hon to hi v0.2 complete hai.',
+    'core_checklistTest',
+    'core_checklistTestDetail',
   ),
 ];
+
+/// The checklist rendered for a locale: one (step, detail) pair
+/// per item, in order. Pass isUrdu: true for Urdu script.
+List<({String step, String detail})> firebaseChecklistLocalized(
+        {bool isUrdu = false}) =>
+    [
+      for (final item in firebaseChecklist)
+        (
+          step: item.step(isUrdu: isUrdu),
+          detail: item.detail(isUrdu: isUrdu),
+        ),
+    ];
