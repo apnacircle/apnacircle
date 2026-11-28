@@ -1,3 +1,5 @@
+import '../l10n/strings.dart';
+
 /// The 15 alerts in ApnaCircle (agreed 21 Nov 2026; SOS by SMS
 /// added 26 Nov 2026).
 /// Every alert has its OWN on/off switch, and changing any of them
@@ -5,6 +7,7 @@
 /// Remote control: the parent changes these on THEIR phone; the
 /// values sync to the member's phone via the backend (Firebase
 /// Realtime Database in production; local persistence in v0.1).
+
 enum AlertType {
   sos,
   lowBattery,
@@ -62,6 +65,44 @@ extension AlertTypeInfo on AlertType {
     }
   }
 
+  /// Localized label (v0.6.32). [labelEn] is kept as the English
+  /// source; pass isUrdu: true for the Urdu-script label. The SOS
+  /// label reuses the existing `sos` key (EN/UR both 'SOS').
+  String label({bool isUrdu = false}) {
+    switch (this) {
+      case AlertType.sos:
+        return tr(isUrdu, 'sos');
+      case AlertType.lowBattery:
+        return tr(isUrdu, 'core_alertLowBattery');
+      case AlertType.phoneOff:
+        return tr(isUrdu, 'core_alertPhoneOff');
+      case AlertType.internetOff:
+        return tr(isUrdu, 'core_alertInternetOff');
+      case AlertType.arriveHome:
+        return tr(isUrdu, 'core_alertArriveHome');
+      case AlertType.leaveHome:
+        return tr(isUrdu, 'core_alertLeaveHome');
+      case AlertType.fallElderly:
+        return tr(isUrdu, 'core_alertFallElderly');
+      case AlertType.longStay:
+        return tr(isUrdu, 'core_alertLongStay');
+      case AlertType.noMovement:
+        return tr(isUrdu, 'core_alertNoMovement');
+      case AlertType.smsLocationWhenNetOff:
+        return tr(isUrdu, 'core_alertSmsLocation');
+      case AlertType.sosSms:
+        return tr(isUrdu, 'core_alertSosSms');
+      case AlertType.shakeSos:
+        return tr(isUrdu, 'core_alertShakeSos');
+      case AlertType.loudSosOnSilent:
+        return tr(isUrdu, 'core_alertLoudSos');
+      case AlertType.autoCall1122:
+        return tr(isUrdu, 'core_alertAutoCall1122');
+      case AlertType.locationViewed:
+        return tr(isUrdu, 'core_alertLocationViewed');
+    }
+  }
+
   /// Only the parent can turn this one on: it dials 1122.
   bool get needsExplicitOptIn => this == AlertType.autoCall1122;
 
@@ -74,6 +115,19 @@ extension AlertTypeInfo on AlertType {
   /// otherwise they cannot send an alert at all. The confirm
   /// dialog (with the cost) still guards every send.
   bool get needsParentPin => this != AlertType.sosSms;
+
+  /// Localized small print (v0.6.32). [hintEn] is kept as the
+  /// English source; pass isUrdu: true for the Urdu-script hint.
+  String? hint({bool isUrdu = false}) {
+    switch (this) {
+      case AlertType.autoCall1122:
+        return tr(isUrdu, 'core_alertHintAutoCall');
+      case AlertType.sosSms:
+        return tr(isUrdu, 'core_alertHintSosSms');
+      default:
+        return null;
+    }
+  }
 
   /// Small print under the switch, or null for plain alerts.
   /// SOS by SMS costs the sender's mobile balance, so the price
