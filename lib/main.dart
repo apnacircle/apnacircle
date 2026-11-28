@@ -19,8 +19,10 @@ import 'services/device_owner_service.dart';
 import 'services/email_otp_service.dart';
 import 'services/family_service.dart';
 import 'services/firebase_bootstrap.dart';
+import 'services/join_request_service.dart';
 import 'services/media_service.dart';
 import 'services/notification_service.dart';
+import 'services/onboarding_service.dart';
 import 'services/pin_service.dart';
 import 'services/sim_change_service.dart';
 import 'services/sms_location_service.dart';
@@ -86,6 +88,13 @@ Future<void> main() async {
   final deviceAdmin = DeviceAdminService();
   final emailOtp = EmailOtpService();
   final setup = SetupService();
+  // v0.6.30: join requests — the child asks, the parent allows.
+  final joinRequests = JoinRequestService(sync: sync, auth: auth);
+  // v0.6.30: language + role are loaded BEFORE the first frame,
+  // so AppRoot never flashes the language screen for a returning
+  // user (the v0.2 TODO — persist the language — is finally done).
+  final lang = LanguageService();
+  final onboarding = OnboardingService();
 
   if (FirebaseBootstrap.available) {
     FirebaseMessaging.onBackgroundMessage(
@@ -103,11 +112,16 @@ Future<void> main() async {
   await trial.load();
   await family.load();
   await setup.load();
+  await lang.load();
+  await onboarding.load();
+  await joinRequests.load();
 
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => LanguageService()),
+        ChangeNotifierProvider.value(value: lang),
+        ChangeNotifierProvider.value(value: onboarding),
+        ChangeNotifierProvider.value(value: joinRequests),
         ChangeNotifierProvider.value(value: pin),
         ChangeNotifierProvider.value(value: auth),
         ChangeNotifierProvider.value(value: sync),
