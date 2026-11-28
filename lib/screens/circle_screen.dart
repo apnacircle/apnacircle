@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/escape_gate.dart';
+import '../core/language_service.dart';
+import '../l10n/strings.dart';
 import '../models/circle.dart';
 import '../services/auth_service.dart';
 import '../services/family_service.dart';
@@ -63,6 +65,7 @@ class _CircleScreenState extends State<CircleScreen> {
   }
 
   Future<void> _restore() async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
     final sync = context.read<SyncService>();
     final pin = context.read<PinService>();
     setState(() {
@@ -87,12 +90,13 @@ class _CircleScreenState extends State<CircleScreen> {
     setState(() {
       _busy = false;
       _info = restoredPin
-          ? 'Circles restored — and your parent PIN was recovered from your circle.'
-          : 'Circles restored.';
+          ? tr(isUrdu, 'onb_circleRestoredPin')
+          : tr(isUrdu, 'onb_circleRestored');
     });
   }
 
   Future<void> _createCircle() async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
     final sync = context.read<SyncService>();
     final pin = context.read<PinService>();
     setState(() {
@@ -110,28 +114,29 @@ class _CircleScreenState extends State<CircleScreen> {
       _error = err;
       _info = circle == null
           ? null
-          : 'Circle "${circle.name}" created! Invite code: ${circle.inviteCode} — share it with the child.';
+          : trf(isUrdu, 'onb_circleCreated', {
+              'name': circle.name,
+              'code': circle.inviteCode,
+            });
     });
     if (circle != null) _circleName.clear();
   }
 
   Future<void> _confirmDeleteCircle(CircleInfo c) async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Delete "${c.name}"?'),
-        content: const Text(
-          'This deletes the circle for everyone in it. Members '
-          'will see that they were removed. This cannot be undone.',
-        ),
+        title: Text(trf(isUrdu, 'onb_circleDeleteTitle', {'name': c.name})),
+        content: Text(tr(isUrdu, 'onb_circleDeleteBody')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: Text(tr(isUrdu, 'cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
+            child: Text(tr(isUrdu, 'delete')),
           ),
         ],
       ),
@@ -148,6 +153,7 @@ class _CircleScreenState extends State<CircleScreen> {
   }
 
   Future<void> _doDeleteCircle(CircleInfo c) async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
     setState(() {
       _busy = true;
       _error = null;
@@ -157,12 +163,17 @@ class _CircleScreenState extends State<CircleScreen> {
     if (!mounted) return;
     setState(() {
       _busy = false;
-      _info = ok ? 'Circle "${c.name}" deleted.' : null;
-      _error = ok ? null : 'Could not delete "${c.name}".';
+      _info = ok
+          ? trf(isUrdu, 'onb_circleDeleted', {'name': c.name})
+          : null;
+      _error = ok
+          ? null
+          : trf(isUrdu, 'onb_circleDeleteFailed', {'name': c.name});
     });
   }
 
   Future<void> _joinCircle() async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
     final sync = context.read<SyncService>();
     setState(() {
       _busy = true;
@@ -173,6 +184,7 @@ class _CircleScreenState extends State<CircleScreen> {
       _inviteCode.text,
       phoneNumber: _joinPhone.text,
       role: _joinRole,
+      isUrdu: isUrdu,
     );
     if (!mounted) return;
     if (circle != null) {
@@ -188,7 +200,10 @@ class _CircleScreenState extends State<CircleScreen> {
       _error = err;
       _info = circle == null
           ? null
-          : 'Joined "${circle.name}" as ${circle.role}.';
+          : trf(isUrdu, 'onb_circleJoined', {
+              'name': circle.name,
+              'role': circle.role,
+            });
     });
     if (circle != null) _inviteCode.clear();
     if (circle != null) _joinPhone.clear();
@@ -203,6 +218,7 @@ class _CircleScreenState extends State<CircleScreen> {
   /// stored) = fail closed: the escape is blocked, with a plain
   /// message, never let through unverified.
   Future<bool> _passEscapeGate() async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
     final sync = context.read<SyncService>();
     if (!childEscapeNeedsParentPin(sync.activeCircle?.role)) return true;
     final hash = await resolveParentPinHash(
@@ -211,8 +227,8 @@ class _CircleScreenState extends State<CircleScreen> {
     );
     if (!mounted) return false;
     if (hash == null) {
-      setState(() => _error =
-          'Parent PIN is needed for this — connect to the internet and try again.');
+      setState(
+          () => _error = tr(isUrdu, 'onb_circleNeedPin'));
       return false;
     }
     var passed = false;
@@ -247,19 +263,21 @@ class _CircleScreenState extends State<CircleScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete account?'),
-        content: const Text(
-          'This deletes your ApnaCircle account. Your circles stay '
-          'for the other members, but you leave them.',
-        ),
+        title: Text(tr(
+            context.read<LanguageService>().isUrdu,
+            'onb_deleteAccountTitle')),
+        content: Text(tr(context.read<LanguageService>().isUrdu,
+            'onb_deleteAccountBody')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: Text(tr(
+                context.read<LanguageService>().isUrdu, 'cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
+            child: Text(tr(
+                context.read<LanguageService>().isUrdu, 'delete')),
           ),
         ],
       ),
@@ -281,21 +299,23 @@ class _CircleScreenState extends State<CircleScreen> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthService>();
     final sync = context.watch<SyncService>();
+    final lang = context.watch<LanguageService>();
+    String t(String key) => tr(lang.isUrdu, key);
+    String tf(String key, [Map<String, Object> args = const {}]) =>
+        trf(lang.isUrdu, key, args);
     final live = FirebaseBootstrap.available && auth.signedIn;
 
     if (!live) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Account & Circles')),
+        appBar: AppBar(title: Text(t('onb_circleTitle'))),
         body: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
-                'Live sync is OFF — Firebase is not set up yet, or '
-                'nobody is signed in. The app works in demo mode '
-                '(everything on this phone only).',
-                style: TextStyle(fontSize: 16),
+              Text(
+                t('onb_circleOffline'),
+                style: const TextStyle(fontSize: 16),
               ),
               const SizedBox(height: 16),
               FilledButton(
@@ -303,7 +323,7 @@ class _CircleScreenState extends State<CircleScreen> {
                   context,
                   MaterialPageRoute(builder: (_) => const AuthScreen()),
                 ),
-                child: const Text('Sign in / Create account'),
+                child: Text(t('onb_circleSignIn')),
               ),
             ],
           ),
@@ -311,13 +331,14 @@ class _CircleScreenState extends State<CircleScreen> {
       );
     }
 
-    final identity = auth.email ?? auth.phoneNumber ?? 'Account';
+    final identity =
+        auth.email ?? auth.phoneNumber ?? t('onb_accountFallback');
     // v0.6.27: I was removed from a circle — say so plainly, with
     // a way back in (join again with the parent's code below).
     final family = context.watch<FamilyService>();
     final removedNotice = family.removedNotice;
     return Scaffold(
-      appBar: AppBar(title: const Text('Account & Circles')),
+      appBar: AppBar(title: Text(t('onb_circleTitle'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -329,7 +350,7 @@ class _CircleScreenState extends State<CircleScreen> {
                 title: Text(removedNotice),
                 trailing: TextButton(
                   onPressed: family.clearRemovedNotice,
-                  child: const Text('Dismiss'),
+                  child: Text(t('onb_dismiss')),
                 ),
               ),
             ),
@@ -337,19 +358,17 @@ class _CircleScreenState extends State<CircleScreen> {
             leading: const Icon(Icons.account_circle),
             title: Text(identity),
             subtitle: Text(
-              'Live sync ON · ${sync.myCircles.length} circle(s)',
+              tf('onb_circleLiveSync', {'count': sync.myCircles.length}),
             ),
           ),
           const Divider(),
-          const Text(
-            'My circles',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          Text(
+            t('onb_circleMyCircles'),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
-          const Text(
-            'One account, many circles: you can be a member in one '
-            'circle and the parent (admin) of others. Tap a circle '
-            'to make it active.',
-            style: TextStyle(fontSize: 13, color: Colors.grey),
+          Text(
+            t('onb_circleMyCirclesNote'),
+            style: const TextStyle(fontSize: 13, color: Colors.grey),
           ),
           if (sync.myCircles.isNotEmpty)
             RadioGroup<String>(
@@ -363,7 +382,12 @@ class _CircleScreenState extends State<CircleScreen> {
                     RadioListTile<String>(
                       title: Text(c.name),
                       subtitle: Text(
-                        'Role: ${c.role}${c.inviteCode.isNotEmpty ? ' · Code: ${c.inviteCode}' : ''}',
+                        c.inviteCode.isNotEmpty
+                            ? tf('onb_circleRoleCode', {
+                                'role': c.role,
+                                'code': c.inviteCode,
+                              })
+                            : tf('onb_circleRoleOnly', {'role': c.role}),
                       ),
                       value: c.id,
                       // v0.6.28: delete a circle I parent — circles
@@ -378,7 +402,7 @@ class _CircleScreenState extends State<CircleScreen> {
                                 Icons.delete_outline,
                                 color: Colors.red,
                               ),
-                              tooltip: 'Delete circle',
+                              tooltip: t('onb_circleDeleteTooltip'),
                               onPressed:
                                   _busy ? null : () => _confirmDeleteCircle(c),
                             )
@@ -388,49 +412,47 @@ class _CircleScreenState extends State<CircleScreen> {
               ),
             ),
           if (sync.myCircles.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: Text('No circles yet — create one below.'),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(t('onb_circleNoneYet')),
             ),
           const SizedBox(height: 8),
           OutlinedButton(
             onPressed: _busy ? null : _restore,
-            child: const Text('Restore my circles'),
+            child: Text(t('onb_circleRestore')),
           ),
           const Divider(height: 32),
-          const Text(
-            'Create a circle (parent)',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          Text(
+            t('onb_circleCreateHeading'),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           TextField(
             controller: _circleName,
-            decoration: const InputDecoration(
-              labelText: 'Circle name',
+            decoration: InputDecoration(
+              labelText: t('onb_circleNameLabel'),
               hintText: 'e.g. Family',
-              border: OutlineInputBorder(),
+              border: const OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 8),
           FilledButton(
             onPressed: _busy ? null : _createCircle,
-            child: const Text('Create circle & get invite code'),
+            child: Text(t('onb_circleCreateBtn')),
           ),
           const Divider(height: 32),
           // v0.6.30: a CHILD never joins directly from here — the
           // request goes to the parent, who Allows / Denies it.
           // Parents / elderly / members join as before.
           if (context.watch<OnboardingService>().isChild) ...[
-            const Text(
-              'Join a circle — parent ki ijazat se',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Text(
+              t('onb_circleJoinHeading'),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Aap child hain: join request parent ko jaye gi. Wo '
-              'Allow karein ge to aap add ho jayein ge — is ke liye '
-              'parent ka PIN bhi chahiye.',
-              style: TextStyle(fontSize: 14, color: Colors.grey),
+            Text(
+              t('onb_circleJoinChildNote'),
+              style: const TextStyle(fontSize: 14, color: Colors.grey),
             ),
             const SizedBox(height: 8),
             FilledButton(
@@ -442,43 +464,44 @@ class _CircleScreenState extends State<CircleScreen> {
                           builder: (_) => const JoinRequestScreen(),
                         ),
                       ),
-              child: const Text('Join request bhejein'),
+              child: Text(t('onb_sendJoinRequest')),
             ),
           ] else ...[
-            const Text(
-              'Join a circle (child / member)',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Text(
+              t('onb_circleJoinHeading2'),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: _inviteCode,
               keyboardType: TextInputType.number,
               maxLength: 6,
-              decoration: const InputDecoration(
-                labelText: '6-digit invite code',
+              decoration: InputDecoration(
+                labelText: t('onb_inviteCodeLabel'),
                 hintText: 'e.g. 482913',
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: _joinPhone,
               keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                labelText: 'My mobile number',
+              decoration: InputDecoration(
+                labelText: t('onb_circleMyMobile'),
                 hintText: 'e.g. 03001234567',
-                helperText:
-                    'Needed so a SIM call from you shows your distance to the family. A real SIM number — never an email.',
-                border: OutlineInputBorder(),
+                helperText: t('onb_circlePhoneHelper'),
+                border: const OutlineInputBorder(),
               ),
             ),
             DropdownButtonFormField<String>(
               initialValue: _joinRole,
-              decoration: const InputDecoration(labelText: 'My role'),
-              items: const [
-                DropdownMenuItem(value: 'child', child: Text('Child')),
-                DropdownMenuItem(value: 'elderly', child: Text('Elderly')),
-                DropdownMenuItem(value: 'member', child: Text('Member')),
+              decoration: InputDecoration(labelText: t('onb_circleMyRole')),
+              items: [
+                DropdownMenuItem(value: 'child', child: Text(t('onb_roleChild'))),
+                DropdownMenuItem(
+                    value: 'elderly', child: Text(t('onb_roleElderly'))),
+                DropdownMenuItem(
+                    value: 'member', child: Text(t('onb_roleMember'))),
               ],
               onChanged: (v) {
                 if (v != null) setState(() => _joinRole = v);
@@ -487,7 +510,7 @@ class _CircleScreenState extends State<CircleScreen> {
             const SizedBox(height: 8),
             FilledButton(
               onPressed: _busy ? null : _joinCircle,
-              child: const Text('Join circle'),
+              child: Text(t('onb_circleJoinBtn')),
             ),
           ],
           if (_busy)
@@ -512,14 +535,14 @@ class _CircleScreenState extends State<CircleScreen> {
           const Divider(height: 32),
           OutlinedButton(
             onPressed: _busy ? null : _signOut,
-            child: const Text('Sign out'),
+            child: Text(t('onb_signOut')),
           ),
           const SizedBox(height: 8),
           TextButton(
             onPressed: _busy ? null : _deleteAccount,
-            child: const Text(
-              'Delete my account',
-              style: TextStyle(color: Colors.red),
+            child: Text(
+              t('onb_deleteMyAccount'),
+              style: const TextStyle(color: Colors.red),
             ),
           ),
         ],
