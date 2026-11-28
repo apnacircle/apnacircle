@@ -11,6 +11,8 @@ import '../services/device_admin_service.dart';
 import '../services/device_owner_service.dart';
 import '../services/family_service.dart';
 import '../services/firebase_bootstrap.dart';
+import '../services/join_request_service.dart';
+import '../services/onboarding_service.dart';
 import '../services/pin_service.dart';
 import '../services/sim_change_service.dart';
 import '../services/sms_location_service.dart';
@@ -241,6 +243,44 @@ class _SettingsScreenState extends State<SettingsScreen>
     // back (lifecycle observer).
   }
 
+  /// v0.6.31: re-pick the onboarding role (wrong tap during
+  /// first-run setup — the user's report, 28 Nov 2026: Child
+  /// dab gaya tha, demo mode mein aage nikal gaya, aur wapas
+  /// jaane ka option hi nahi tha). Confirm first, cancel any
+  /// open join request, then forget the role — AppRoot shows
+  /// the role screen again by itself. Only offered while this
+  /// phone has no circles (once a circle exists the role is
+  /// proven by membership).
+  Future<void> _changeRole() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Role badlein?'),
+        content: const Text(
+          'Parent ya Child dobara chun sakte hain — jaise pehli '
+          'dafa setup karte waqt chuna tha. Koi circle ya data '
+          'delete nahi hota; agar join request bheji hui hai to '
+          'wo wapas le li jaye gi.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Role badlein'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    await context.read<JoinRequestService>().cancelMyRequest();
+    if (!mounted) return;
+    await context.read<OnboardingService>().clearRole();
+    // AppRoot re-routes to the role screen by itself.
+  }
+
   /// Account delete (Play Store requirement). Order: remove my
   /// RTDB data first, then delete the Auth account, then clear
   /// local data — EXCEPT the per-device trial cache, so a deleted
@@ -340,6 +380,8 @@ class _SettingsScreenState extends State<SettingsScreen>
     final lang = context.watch<LanguageService>();
     final family = context.watch<FamilyService>();
     final auth = context.watch<AuthService>();
+    final sync = context.watch<SyncService>();
+    final onboarding = context.watch<OnboardingService>();
     final live = FirebaseBootstrap.available && auth.signedIn;
     String t(String key) => tr(lang.isUrdu, key);
     return ListView(
@@ -406,6 +448,24 @@ class _SettingsScreenState extends State<SettingsScreen>
             child: Text(lang.isUrdu ? 'English' : 'اردو'),
           ),
         ),
+        // v0.6.31: wrong role tapped during onboarding — change it
+        // here while this phone has no circles yet. Once a circle
+        // exists the role is proven by membership, so the option
+        // hides itself.
+        if (sync.myCircles.isEmpty)
+          ListTile(
+            leading: const Icon(Icons.switch_account),
+            title: const Text('Role badlein — Parent / Child'),
+            subtitle: Text(
+              onboarding.isParent
+                  ? 'Is phone par Parent chuna hua hai'
+                  : onboarding.isChild
+                      ? 'Is phone par Child chuna hua hai'
+                      : 'Role abhi chuna nahi gaya',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _changeRole,
+          ),
         ListTile(
           title: const Text('Family members'),
           subtitle: Text(
