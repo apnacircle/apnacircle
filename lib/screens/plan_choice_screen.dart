@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/language_service.dart';
+import '../l10n/strings.dart';
 import '../services/billing_service.dart';
 import '../services/onboarding_service.dart';
 import '../services/trial_service.dart';
@@ -23,14 +25,15 @@ class PlanChoiceScreen extends StatelessWidget {
   const PlanChoiceScreen({super.key});
 
   Future<void> _startTrial(BuildContext context) async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
     final ok =
         await context.read<TrialService>().startTrial();
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(ok
-            ? '7-day free trial shuru ho gaya.'
-            : 'Is phone par trial pehle hi use ho chuka hai.'),
+            ? tr(isUrdu, 'onb_trialStartedMsg')
+            : tr(isUrdu, 'trialAlreadyUsed')),
       ),
     );
     await context.read<OnboardingService>().markPlanChoiceDone();
@@ -44,6 +47,8 @@ class PlanChoiceScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final trial = context.watch<TrialService>();
     final billing = context.watch<BillingService>();
+    final lang = context.watch<LanguageService>();
+    String t(String key) => tr(lang.isUrdu, key);
     final canTrial = trial.canStartTrial && !billing.isSubscribed;
     return Scaffold(
       // v0.6.31: back to the role screen — a parent who tapped
@@ -52,7 +57,7 @@ class PlanChoiceScreen extends StatelessWidget {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          tooltip: 'Wapas — role badlein',
+          tooltip: t('onb_backChangeRole'),
           onPressed: () =>
               context.read<OnboardingService>().clearRole(),
         ),
@@ -64,35 +69,33 @@ class PlanChoiceScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
-                'Family plan',
+              Text(
+                t('plan'),
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
-              const Text(
-                '\$5 / saal — poori family (max 10 members). '
-                'Payment sirf parent karta hai.',
+              Text(
+                t('onb_planPriceNote'),
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 16),
+                style: const TextStyle(fontSize: 16),
               ),
               const SizedBox(height: 32),
               FilledButton(
                 onPressed: canTrial ? () => _startTrial(context) : null,
-                child: const Padding(
-                  padding: EdgeInsets.all(14),
-                  child: Text('7-day FREE trial shuru karein',
-                      style: TextStyle(fontSize: 18)),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Text(t('onb_startTrialFree'),
+                      style: const TextStyle(fontSize: 18)),
                 ),
               ),
               if (!canTrial)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
                   child: Text(
-                    'Is phone par trial pehle hi use ho chuka hai — '
-                    'trial sirf ek dafa milta hai.',
+                    t('onb_trialUsedOnce'),
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 13, color: Colors.grey),
+                    style: const TextStyle(fontSize: 13, color: Colors.grey),
                   ),
                 ),
               const SizedBox(height: 16),
@@ -104,16 +107,16 @@ class PlanChoiceScreen extends StatelessWidget {
                     ),
                   );
                 },
-                child: const Padding(
-                  padding: EdgeInsets.all(14),
-                  child: Text('Subscribe — \$5/year',
-                      style: TextStyle(fontSize: 18)),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Text(t('subscribe'),
+                      style: const TextStyle(fontSize: 18)),
                 ),
               ),
               const SizedBox(height: 16),
               TextButton(
                 onPressed: () => _skip(context),
-                child: const Text('Baad mein — abhi aage badhein'),
+                child: Text(t('onb_planLater')),
               ),
             ],
           ),
@@ -132,8 +135,10 @@ class _PlanSubscribePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageService>();
+    String t(String key) => tr(lang.isUrdu, key);
     return Scaffold(
-      appBar: AppBar(title: const Text('Subscribe — Family plan')),
+      appBar: AppBar(title: Text(t('onb_subscribeFamilyPlan'))),
       body: Column(
         children: [
           const Expanded(child: PlanScreen()),
@@ -148,10 +153,10 @@ class _PlanSubscribePage extends StatelessWidget {
                       .markPlanChoiceDone();
                   if (context.mounted) Navigator.of(context).pop();
                 },
-                child: const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Text('Continue — Gmail se login karein',
-                      style: TextStyle(fontSize: 17)),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(t('onb_continueGmail'),
+                      style: const TextStyle(fontSize: 17)),
                 ),
               ),
             ),
