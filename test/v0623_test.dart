@@ -286,7 +286,7 @@ void main() {
       await tester.pump();
       // Demo mode has no sync: a SnackBar, no picker sheet.
       expect(
-        find.text('Media bhejne ke liye internet aur circle chahiye.'),
+        find.text('You need internet and a circle to send media.'),
         findsOneWidget,
       );
       expect(find.text('Photo'), findsNothing);
