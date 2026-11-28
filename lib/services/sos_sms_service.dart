@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../l10n/strings.dart';
 import '../models/member.dart';
 import 'sms_location_service.dart';
 
@@ -91,17 +92,22 @@ class SosSmsService {
 
   /// Build the SMS body. With a location it carries a Maps link
   /// so the family can tap straight to the sender; without one it
-  /// says so plainly instead of faking a location.
+  /// says so plainly instead of faking a location. The
+  /// 'APNACIRCLE SOS:' prefix is never translated — it is the
+  /// marker family phones recognise. No code parses the rest of
+  /// the body (only sms_location_service parses 'APNACIRCLE LOC:'
+  /// location SMS), so translating the human-readable part is safe.
   static String buildSosSms({
     required String fromName,
     double? lat,
     double? lon,
+    bool isUrdu = false,
   }) {
     if (lat != null && lon != null) {
-      return '$smsPrefix $fromName needs help! Location: '
-          'https://maps.google.com/?q=$lat,$lon';
+      final url = 'https://maps.google.com/?q=$lat,$lon';
+      return '$smsPrefix ${trf(isUrdu, 'svc_sosNeedsHelp', {'name': fromName, 'url': url})}';
     }
-    return '$smsPrefix $fromName needs help! (No location available.)';
+    return '$smsPrefix ${trf(isUrdu, 'svc_sosNeedsHelpNoLoc', {'name': fromName})}';
   }
 
   /// Everyone who should get the SMS: all members except the
@@ -148,7 +154,14 @@ class SosSmsService {
     double? lat,
     double? lon,
     DateTime? now,
+    bool? isUrdu,
   }) async {
+    // Null means "not passed by the caller" — read the persisted
+    // language choice (the SOS caller has no locale to pass).
+    final urdu = isUrdu ??
+        (await SharedPreferences.getInstance())
+                .getString('language_code_v1') ==
+            'ur';
     final at = now ?? DateTime.now();
     final recipients = recipientsFor(members: members, senderId: senderId);
     final withoutNumber =
@@ -181,7 +194,12 @@ class SosSmsService {
         permissionDenied: true,
       );
     }
-    final body = buildSosSms(fromName: fromName, lat: lat, lon: lon);
+    final body = buildSosSms(
+      fromName: fromName,
+      lat: lat,
+      lon: lon,
+      isUrdu: urdu,
+    );
     var sent = 0;
     for (final m in recipients) {
       if (await _sms.sendRawSms(to: m.phone, body: body)) sent++;
