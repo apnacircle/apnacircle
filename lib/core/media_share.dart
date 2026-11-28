@@ -1,3 +1,5 @@
+import '../l10n/strings.dart';
+
 /// Media sharing (v0.6.23) — photo / video / audio / document in
 /// the family chat, with the user's own storage rules:
 ///
@@ -23,6 +25,7 @@
 /// the Storage rules themselves — the file path contains the
 /// circle id + an unguessable message id, and only a signed-in
 /// user who knows the exact path can read it (see storage.rules).
+
 enum MediaType {
   photo,
   video,
@@ -91,16 +94,18 @@ bool shouldDeleteMediaFromServer({
       senderId: senderId,
     );
 
-String mediaTypeLabel(MediaType type) {
+/// Localized media-type label (v0.6.32). Pass isUrdu: true for
+/// the Urdu-script label; default English, as before.
+String mediaTypeLabel(MediaType type, {bool isUrdu = false}) {
   switch (type) {
     case MediaType.photo:
-      return 'Photo';
+      return tr(isUrdu, 'core_mediaPhoto');
     case MediaType.video:
-      return 'Video';
+      return tr(isUrdu, 'core_mediaVideo');
     case MediaType.audio:
-      return 'Audio';
+      return tr(isUrdu, 'core_mediaAudio');
     case MediaType.document:
-      return 'Document';
+      return tr(isUrdu, 'core_mediaDocument');
   }
 }
 
