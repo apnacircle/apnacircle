@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/chat_delete.dart';
+import '../core/language_service.dart';
+import '../l10n/strings.dart';
 import '../core/chat_paging.dart';
 import '../core/chat_receipts.dart';
 import '../core/media_share.dart';
@@ -37,7 +39,7 @@ class _ChatScreenState extends State<ChatScreen> {
       id: '1',
       senderId: 'ali',
       senderName: 'Ali',
-      text: 'Ghar pahunch gaya.',
+      text: '__DEMO_SEED_REACHED_HOME__', // localised in build() (demo seed)
       at: DateTime.now().subtract(const Duration(minutes: 12)),
     ),
   ];
@@ -142,6 +144,10 @@ class _ChatScreenState extends State<ChatScreen> {
   /// Message info (v0.6.21): who read my message, and when —
   /// WhatsApp-style. Only for my own messages.
   Future<void> _showMessageInfo(ChatMessage m) async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
+    String tf(String key, [Map<String, Object> args = const {}]) =>
+        trf(isUrdu, key, args);
     final family = context.read<FamilyService>();
     final rows = readersOf(m, family.members);
     await showModalBottomSheet<void>(
@@ -153,9 +159,9 @@ class _ChatScreenState extends State<ChatScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Message info',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              Text(
+                t('scr_chatMessageInfo'),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
               Text(
@@ -172,19 +178,24 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                   title: Text(row.member.name),
                   trailing: row.readAt == null
-                      ? const Text(
-                          'Not read yet',
-                          style: TextStyle(color: Colors.grey),
+                      ? Text(
+                          t('scr_chatNotReadYet'),
+                          style: const TextStyle(color: Colors.grey),
                         )
                       : Text(
-                          'Read · ${formatReadTime(row.readAt!)}',
+                          tf('scr_chatReadAt', {
+                            'time': formatReadTime(
+                              row.readAt!,
+                              isUrdu: isUrdu,
+                            ),
+                          }),
                           style: const TextStyle(color: Colors.green),
                         ),
                 ),
               if (rows.isEmpty)
-                const Text(
-                  'No one else in the circle yet.',
-                  style: TextStyle(color: Colors.grey),
+                Text(
+                  t('scr_chatNoOneElse'),
+                  style: const TextStyle(color: Colors.grey),
                 ),
             ],
           ),
@@ -227,6 +238,8 @@ class _ChatScreenState extends State<ChatScreen> {
   void _send() {
     final text = _ctrl.text.trim();
     if (text.isEmpty) return;
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     final sync = context.read<SyncService>();
     final family = context.read<FamilyService>();
     final auth = context.read<AuthService>();
@@ -238,8 +251,10 @@ class _ChatScreenState extends State<ChatScreen> {
         ChatMessage(
           id: DateTime.now().millisecondsSinceEpoch.toString(),
           senderId: sync.uid ?? 'me',
-          senderName:
-              mine?.name ?? auth.displayName ?? auth.phoneNumber ?? 'Me',
+          senderName: mine?.name ??
+              auth.displayName ??
+              auth.phoneNumber ??
+              t('scr_chatMe'),
           text: text,
           at: DateTime.now(),
         ),
@@ -261,11 +276,13 @@ class _ChatScreenState extends State<ChatScreen> {
   /// Audio / Document. Demo mode (no sync) refuses with a plain
   /// message: there is no server to upload to.
   Future<void> _showAttachSheet() async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     final sync = context.read<SyncService>();
     if (!sync.isAvailable || sync.activeCircleId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Media bhejne ke liye internet aur circle chahiye.'),
+        SnackBar(
+          content: Text(t('scr_chatMediaNeedsInternet')),
         ),
       );
       return;
@@ -278,29 +295,29 @@ class _ChatScreenState extends State<ChatScreen> {
           children: [
             ListTile(
               leading: const Icon(Icons.photo),
-              title: const Text('Photo'),
-              subtitle: const Text('Compress ho kar jayegi.'),
+              title: Text(mediaTypeLabel(MediaType.photo, isUrdu: isUrdu)),
+              subtitle: Text(t('scr_chatPhotoCompressed')),
               onTap: () => Navigator.pop(ctx, MediaType.photo),
             ),
             ListTile(
               leading: const Icon(Icons.videocam),
-              title: const Text('Video'),
-              subtitle: const Text('Chhoti kar ke bhejta hai.'),
+              title: Text(mediaTypeLabel(MediaType.video, isUrdu: isUrdu)),
+              subtitle: Text(t('scr_chatVideoSmaller')),
               onTap: () => Navigator.pop(ctx, MediaType.video),
             ),
             ListTile(
               leading: const Icon(Icons.audiotrack),
-              title: const Text('Audio'),
+              title: Text(mediaTypeLabel(MediaType.audio, isUrdu: isUrdu)),
               onTap: () => Navigator.pop(ctx, MediaType.audio),
             ),
             ListTile(
               leading: const Icon(Icons.insert_drive_file),
-              title: const Text('Document'),
+              title: Text(mediaTypeLabel(MediaType.document, isUrdu: isUrdu)),
               onTap: () => Navigator.pop(ctx, MediaType.document),
             ),
             ListTile(
               leading: const Icon(Icons.close),
-              title: const Text('Cancel'),
+              title: Text(t('cancel')),
               onTap: () => Navigator.pop(ctx),
             ),
           ],
@@ -316,13 +333,16 @@ class _ChatScreenState extends State<ChatScreen> {
   /// the normal live subscription.
   Future<void> _sendMedia(MediaType type) async {
     if (_sendingMedia) return;
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     final sync = context.read<SyncService>();
     final media = context.read<MediaService>();
     final circleId = sync.activeCircleId;
     if (circleId == null) return;
     setState(() => _sendingMedia = true);
-    _snack('Bhej raha hun…');
-    final (file, pickError) = await media.pickAndCompress(type);
+    _snack(t('scr_chatSending'));
+    final (file, pickError) =
+        await media.pickAndCompress(type, isUrdu: isUrdu);
     if (!mounted) return;
     if (pickError != null) {
       setState(() => _sendingMedia = false);
@@ -351,6 +371,8 @@ class _ChatScreenState extends State<ChatScreen> {
     required MediaType type,
     required String fileName,
   }) async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     final sync = context.read<SyncService>();
     final family = context.read<FamilyService>();
     final auth = context.read<AuthService>();
@@ -366,11 +388,12 @@ class _ChatScreenState extends State<ChatScreen> {
       messageId: messageId,
       file: file,
       fileName: fileName,
+      isUrdu: isUrdu,
     );
     if (!mounted) return;
     if (uploadError != null || url == null) {
       setState(() => _sendingMedia = false);
-      _snack(uploadError ?? 'Upload nahi ho saki.');
+      _snack(uploadError ?? t('scr_chatUploadFailed'));
       return;
     }
     final size = await file.length();
@@ -380,7 +403,10 @@ class _ChatScreenState extends State<ChatScreen> {
       ChatMessage(
         id: messageId,
         senderId: sync.uid ?? 'me',
-        senderName: mine?.name ?? auth.displayName ?? auth.phoneNumber ?? 'Me',
+        senderName: mine?.name ??
+            auth.displayName ??
+            auth.phoneNumber ??
+            t('scr_chatMe'),
         text: fileName,
         at: DateTime.now(),
         mediaType: type,
@@ -398,7 +424,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
     if (!mounted) return;
     setState(() => _sendingMedia = false);
-    _snack(ok ? 'Bhej di.' : 'Bhej nahi saki — dobara try karo.');
+    _snack(ok ? t('scr_chatSent') : t('scr_chatSendFailed'));
   }
 
   /// Voice message (v0.6.29) — hold the mic to start recording.
@@ -406,13 +432,15 @@ class _ChatScreenState extends State<ChatScreen> {
   /// (same as the attach button).
   Future<void> _startVoiceRecording() async {
     if (_recordingVoice || _sendingMedia) return;
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     final sync = context.read<SyncService>();
     if (!sync.isAvailable || sync.activeCircleId == null) {
-      _snack('Voice bhejne ke liye internet aur circle chahiye.');
+      _snack(t('scr_chatVoiceNeedsInternet'));
       return;
     }
     final voice = context.read<VoiceMessageService>();
-    final (_, error) = await voice.startRecording();
+    final (_, error) = await voice.startRecording(isUrdu: isUrdu);
     if (!mounted) return;
     if (error != null) {
       _snack(error);
@@ -431,13 +459,15 @@ class _ChatScreenState extends State<ChatScreen> {
   /// recording is discarded with the plain-words reason.
   Future<void> _finishVoiceRecording() async {
     if (!_recordingVoice) return;
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     _recordTimer?.cancel();
     setState(() => _recordingVoice = false);
     final voice = context.read<VoiceMessageService>();
-    final (file, error) = await voice.stopRecording();
+    final (file, error) = await voice.stopRecording(isUrdu: isUrdu);
     if (!mounted) return;
     if (error != null || file == null) {
-      _snack(error ?? 'Recording nahi ho saki.');
+      _snack(error ?? t('scr_chatRecordingFailed'));
       return;
     }
     await _sendVoiceMessage(file);
@@ -455,8 +485,10 @@ class _ChatScreenState extends State<ChatScreen> {
   /// Send a finished recording as an audio media message.
   Future<void> _sendVoiceMessage(File file) async {
     if (_sendingMedia) return;
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     setState(() => _sendingMedia = true);
-    _snack('Bhej raha hun…');
+    _snack(t('scr_chatSending'));
     await _uploadAndSendMediaFile(
       file: file,
       type: MediaType.audio,
@@ -468,6 +500,8 @@ class _ChatScreenState extends State<ChatScreen> {
   /// media URL. Tapping again (or another note) stops it. A
   /// removed note has no URL and shows the removed line instead.
   Future<void> _toggleAudio(ChatMessage m) async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     if (_playingAudioId == m.id) {
       await _audioPlayer.stop();
       if (mounted) setState(() => _playingAudioId = null);
@@ -480,7 +514,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (!mounted) return;
       setState(() => _playingAudioId = m.id);
     } catch (_) {
-      _snack('Play nahi ho saki.');
+      _snack(t('scr_chatPlayFailed'));
     }
   }
 
@@ -493,11 +527,13 @@ class _ChatScreenState extends State<ChatScreen> {
   /// open the share sheet (the user picks where they go).
   Future<void> _downloadMedia(ChatMessage m) async {
     if (_downloadingIds.contains(m.id)) return;
+    final isUrdu = context.read<LanguageService>().isUrdu;
     final family = context.read<FamilyService>();
     setState(() => _downloadingIds.add(m.id));
     final (ok, message) = await context.read<MediaService>().downloadMedia(
           m: m,
           memberIds: family.members.map((e) => e.id).toList(),
+          isUrdu: isUrdu,
         );
     if (!mounted) return;
     setState(() => _downloadingIds.remove(m.id));
@@ -511,7 +547,8 @@ class _ChatScreenState extends State<ChatScreen> {
   /// means the server file is gone: 24 hours passed, or every
   /// member already downloaded it. The chat message itself stays
   /// until the 1-week chat rule.
-  Widget _mediaRow(ChatMessage m) {
+  Widget _mediaRow(ChatMessage m, {required bool isUrdu}) {
+    String t(String key) => tr(isUrdu, key);
     final sync = context.read<SyncService>();
     final family = context.read<FamilyService>();
     final memberIds = family.members.map((e) => e.id).toList();
@@ -564,7 +601,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     color: Colors.white, size: 44),
                 const SizedBox(height: 4),
                 Text(
-                  'Video$sizeLabel',
+                  '${mediaTypeLabel(MediaType.video, isUrdu: isUrdu)}$sizeLabel',
                   style: const TextStyle(color: Colors.white),
                 ),
               ],
@@ -583,7 +620,9 @@ class _ChatScreenState extends State<ChatScreen> {
                         ? Icons.stop_circle
                         : Icons.play_circle_fill,
                   ),
-                  tooltip: _playingAudioId == m.id ? 'Stop' : 'Play',
+                  tooltip: _playingAudioId == m.id
+                      ? t('scr_chatStop')
+                      : t('scr_chatPlay'),
                   onPressed: () => _toggleAudio(m),
                 ),
               Icon(
@@ -595,7 +634,7 @@ class _ChatScreenState extends State<ChatScreen> {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  '${mediaTypeLabel(type)}: ${m.fileName ?? m.text}$sizeLabel',
+                  '${mediaTypeLabel(type, isUrdu: isUrdu)}: ${m.fileName ?? m.text}$sizeLabel',
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -603,31 +642,32 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         const SizedBox(height: 6),
         if (removed)
-          const Text(
-            'Removed from server — 24 hours passed or everyone downloaded it.',
-            style: TextStyle(fontSize: 11, color: Colors.grey),
+          Text(
+            t('scr_chatMediaRemoved'),
+            style: const TextStyle(fontSize: 11, color: Colors.grey),
           )
         else if (downloading)
-          const Row(
+          Row(
             children: [
-              SizedBox(
+              const SizedBox(
                 width: 16,
                 height: 16,
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
-              SizedBox(width: 8),
-              Text('Downloading…', style: TextStyle(fontSize: 12)),
+              const SizedBox(width: 8),
+              Text(t('scr_chatDownloading'),
+                  style: const TextStyle(fontSize: 12)),
             ],
           )
         else if (iDownloaded)
-          const Text(
-            'Downloaded ✓',
-            style: TextStyle(fontSize: 12, color: Colors.green),
+          Text(
+            t('scr_chatDownloaded'),
+            style: const TextStyle(fontSize: 12, color: Colors.green),
           )
         else
           FilledButton.tonal(
             onPressed: () => _downloadMedia(m),
-            child: const Text('Download'),
+            child: Text(t('scr_chatDownload')),
           ),
       ],
     );
@@ -639,6 +679,8 @@ class _ChatScreenState extends State<ChatScreen> {
   /// sync) has no "for everyone": there is no server to delete
   /// from.
   Future<void> _showMessageMenu(ChatMessage m) async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     final sync = context.read<SyncService>();
     final isMine = sync.isAvailable && m.senderId == sync.uid;
     final choice = await showModalBottomSheet<String>(
@@ -649,20 +691,20 @@ class _ChatScreenState extends State<ChatScreen> {
           children: [
             ListTile(
               leading: const Icon(Icons.delete_outline),
-              title: const Text('Delete for me'),
-              subtitle: const Text('Only on this phone.'),
+              title: Text(t('scr_chatDeleteForMe')),
+              subtitle: Text(t('scr_chatDeleteForMeHint')),
               onTap: () => Navigator.pop(ctx, 'me'),
             ),
             if (isMine)
               ListTile(
                 leading: const Icon(Icons.delete_forever),
-                title: const Text('Delete for everyone'),
-                subtitle: const Text('Removed from every phone.'),
+                title: Text(t('scr_chatDeleteForEveryone')),
+                subtitle: Text(t('scr_chatDeleteForEveryoneHint')),
                 onTap: () => Navigator.pop(ctx, 'everyone'),
               ),
             ListTile(
               leading: const Icon(Icons.close),
-              title: const Text('Cancel'),
+              title: Text(t('cancel')),
               onTap: () => Navigator.pop(ctx),
             ),
           ],
@@ -675,7 +717,7 @@ class _ChatScreenState extends State<ChatScreen> {
       await deletes.deleteForMe(m);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Deleted for you.')),
+        SnackBar(content: Text(t('scr_chatDeletedForYou'))),
       );
       return;
     }
@@ -687,12 +729,12 @@ class _ChatScreenState extends State<ChatScreen> {
       await deletes.hideLocally(m);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Deleted for everyone.')),
+        SnackBar(content: Text(t('scr_chatDeletedForEveryone'))),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not delete — check internet and try again.'),
+        SnackBar(
+          content: Text(t('scr_chatDeleteFailed')),
         ),
       );
     }
@@ -702,22 +744,21 @@ class _ChatScreenState extends State<ChatScreen> {
   /// sent up to now is hidden here; new messages still arrive.
   /// Other phones are untouched.
   Future<void> _confirmClearChat() async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
+    String t(String key) => tr(isUrdu, key);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Clear chat?'),
-        content: const Text(
-          'Hide all messages on THIS phone? They stay on the '
-          'other phones, and new messages will still arrive.',
-        ),
+        title: Text(t('scr_chatClearTitle')),
+        content: Text(t('scr_chatClearBody')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: Text(t('cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Clear'),
+            child: Text(t('scr_chatClear')),
           ),
         ],
       ),
@@ -726,12 +767,32 @@ class _ChatScreenState extends State<ChatScreen> {
     await context.read<ChatDeleteService>().clearAll();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Chat cleared on this phone.')),
+      SnackBar(content: Text(t('scr_chatCleared'))),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageService>();
+    String t(String key) => tr(lang.isUrdu, key);
+    String tf(String key, [Map<String, Object> args = const {}]) =>
+        trf(lang.isUrdu, key, args);
+    // v0.6.32: the demo seed message is localised at display time
+    // (it is created in the field initialiser, before context
+    // exists, so it cannot call tr() there).
+    final demoSeed = _messages
+        .where((m) => m.id == '1' && m.senderId == 'ali')
+        .firstOrNull;
+    if (demoSeed != null && demoSeed.text == '__DEMO_SEED_REACHED_HOME__') {
+      final i = _messages.indexOf(demoSeed);
+      _messages[i] = ChatMessage(
+        id: demoSeed.id,
+        senderId: demoSeed.senderId,
+        senderName: demoSeed.senderName,
+        text: t('scr_chatDemoSeed'),
+        at: demoSeed.at,
+      );
+    }
     // v0.6.21: hide locally-deleted / cleared messages.
     final deletes = context.watch<ChatDeleteService>();
     final visible = _messages.where(deletes.isVisible).toList();
@@ -746,30 +807,30 @@ class _ChatScreenState extends State<ChatScreen> {
           padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
           child: Row(
             children: [
-              const Text(
-                'Family chat',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              Text(
+                t('scr_chatFamilyChat'),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(width: 8),
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'Messages auto-delete after 1 week.',
-                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                  t('scr_chatAutoDelete'),
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert),
-                tooltip: 'Chat options',
+                tooltip: t('scr_chatOptions'),
                 onSelected: (value) {
                   if (value == 'clear') {
                     unawaited(_confirmClearChat());
                   }
                 },
-                itemBuilder: (ctx) => const [
+                itemBuilder: (ctx) => [
                   PopupMenuItem<String>(
                     value: 'clear',
-                    child: Text('Clear chat'),
+                    child: Text(t('scr_chatClearChat')),
                   ),
                 ],
               ),
@@ -787,7 +848,9 @@ class _ChatScreenState extends State<ChatScreen> {
                     child: TextButton(
                       onPressed: _loadingOlder ? null : _loadOlder,
                       child: Text(
-                        _loadingOlder ? 'Loading…' : 'Load older messages',
+                        _loadingOlder
+                            ? t('scr_chatLoading')
+                            : t('scr_chatLoadOlder'),
                       ),
                     ),
                   ),
@@ -810,10 +873,13 @@ class _ChatScreenState extends State<ChatScreen> {
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (m.hasMedia) _mediaRow(m) else Text(m.text),
+                            if (m.hasMedia)
+                              _mediaRow(m, isUrdu: lang.isUrdu)
+                            else
+                              Text(m.text),
                             if (mine && readN > 0)
                               Text(
-                                'Read by $readN',
+                                tf('scr_chatReadBy', {'count': readN}),
                                 style: const TextStyle(
                                   fontSize: 11,
                                   color: Colors.green,
@@ -838,11 +904,12 @@ class _ChatScreenState extends State<ChatScreen> {
               children: [
                 const Icon(Icons.mic, color: Colors.red),
                 const SizedBox(width: 8),
-                Text('Recording… $_recordSeconds s — release to send'),
+                Text(tf('scr_chatRecordingBanner',
+                    {'seconds': _recordSeconds})),
                 const Spacer(),
                 TextButton(
                   onPressed: _cancelVoiceRecording,
-                  child: const Text('Cancel'),
+                  child: Text(t('cancel')),
                 ),
               ],
             ),
@@ -858,7 +925,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 child: TextField(
                   controller: _ctrl,
                   decoration: InputDecoration(
-                    hintText: 'Message family…',
+                    hintText: t('scr_chatMessageHint'),
                     filled: true,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(24),
@@ -866,7 +933,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                     suffixIcon: IconButton(
                       icon: const Icon(Icons.attach_file),
-                      tooltip: 'Send photo, video or file',
+                      tooltip: t('scr_chatAttachTooltip'),
                       onPressed:
                           _sendingMedia ? null : _showAttachSheet,
                     ),
@@ -884,7 +951,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     return CircleAvatar(
                       child: IconButton(
                         icon: const Icon(Icons.send),
-                        tooltip: 'Send',
+                        tooltip: t('scr_chatSend'),
                         onPressed: _send,
                       ),
                     );
