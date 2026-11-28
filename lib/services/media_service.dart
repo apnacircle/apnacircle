@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_compress/video_compress.dart';
 
 import '../core/media_share.dart';
+import '../l10n/strings.dart';
 import '../models/chat_message.dart';
 import 'sync_service.dart';
 
@@ -51,6 +52,7 @@ class MediaService {
   Future<(File?, String?)> pickAndCompress(
     MediaType type, {
     bool fromCamera = false,
+    bool isUrdu = false,
   }) async {
     try {
       File? picked;
@@ -82,7 +84,9 @@ class MediaService {
             quality: VideoQuality.MediumQuality,
           );
           picked = info?.file;
-          if (picked == null) return (null, 'Video compress nahi ho saki.');
+          if (picked == null) {
+            return (null, tr(isUrdu, 'svc_mediaVideoCompressFailed'));
+          }
         case MediaType.audio:
           final r = await FilePicker.pickFiles(
             type: FileType.audio,
@@ -102,11 +106,11 @@ class MediaService {
       }
       final size = await picked.length();
       if (size > maxMediaBytes) {
-        return (null, 'File bohat bari hai (max 100 MB).');
+        return (null, tr(isUrdu, 'svc_mediaFileTooLarge'));
       }
       return (picked, null);
     } catch (e) {
-      return (null, 'File nahi mili ($e).');
+      return (null, trf(isUrdu, 'svc_mediaFileNotFound', {'e': e.toString()}));
     }
   }
 
@@ -118,10 +122,11 @@ class MediaService {
     required String messageId,
     required File file,
     required String fileName,
+    bool isUrdu = false,
   }) async {
     final uid = sync.uid;
     if (!sync.isAvailable || uid == null) {
-      return (null, 'Internet nahi hai — file nahi bheji ja saki.');
+      return (null, tr(isUrdu, 'svc_mediaNoInternetSend'));
     }
     try {
       final path = storagePath(
@@ -135,7 +140,7 @@ class MediaService {
       final url = await ref.getDownloadURL();
       return (url, null);
     } catch (e) {
-      return (null, 'Upload nahi ho saki ($e).');
+      return (null, trf(isUrdu, 'svc_mediaUploadFailed', {'e': e.toString()}));
     }
   }
 
@@ -151,17 +156,18 @@ class MediaService {
   Future<(bool, String)> downloadMedia({
     required ChatMessage m,
     required List<String> memberIds,
+    bool isUrdu = false,
   }) async {
     final circleId = sync.activeCircleId;
     final url = m.mediaUrl;
     final path = m.storagePath;
     if (!sync.isAvailable || circleId == null || url == null || path == null) {
-      return (false, 'Internet nahi hai — download nahi ho saki.');
+      return (false, tr(isUrdu, 'svc_mediaNoInternetDownload'));
     }
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final uploadedAt = m.mediaUploadedAtMs ?? m.atMs;
     if (isMediaExpired(uploadedAtMs: uploadedAt, nowMs: nowMs)) {
-      return (false, 'Ye file 24 ghante ke baad server se hat gayi.');
+      return (false, tr(isUrdu, 'svc_mediaExpired24h'));
     }
     try {
       final dir = await getTemporaryDirectory();
@@ -178,11 +184,11 @@ class MediaService {
         final result = await SharePlus.instance.share(
           ShareParams(
             files: [XFile(local.path)],
-            text: m.fileName ?? 'ApnaCircle file',
+            text: m.fileName ?? tr(isUrdu, 'svc_mediaShareFallback'),
           ),
         );
         if (result.status != ShareResultStatus.success) {
-          return (false, 'Save cancel kar diya.');
+          return (false, tr(isUrdu, 'svc_mediaSaveCancelled'));
         }
       }
       await sync.markMediaDownloaded(circleId, m.id);
@@ -202,11 +208,11 @@ class MediaService {
         }
       }
       final savedWhere = type == MediaType.photo || type == MediaType.video
-          ? 'Gallery mein save ho gayi.'
-          : 'Save ho gayi.';
+          ? tr(isUrdu, 'svc_mediaSavedGallery')
+          : tr(isUrdu, 'svc_mediaSaved');
       return (true, savedWhere);
     } catch (e) {
-      return (false, 'Download nahi ho saki ($e).');
+      return (false, trf(isUrdu, 'svc_mediaDownloadFailed', {'e': e.toString()}));
     }
   }
 
