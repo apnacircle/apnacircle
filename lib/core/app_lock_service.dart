@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 
+import '../l10n/strings.dart';
 import 'constants.dart';
 import 'time_lock.dart';
 
@@ -67,9 +68,13 @@ class LockedApp {
 
   /// Human schedule line, e.g. "Mon–Fri · 08:00 – 14:00 · set once…"
   /// or "Locked all the time" for always-mode.
-  String scheduleSummary() {
-    if (mode == LockMode.time && window != null) return window!.summary();
-    return 'Locked all the time';
+  /// v0.6.32: localized via [isUrdu] (default English, as before);
+  /// reuses the existing `lockedAllTime` key for always-mode.
+  String scheduleSummary({bool isUrdu = false}) {
+    if (mode == LockMode.time && window != null) {
+      return window!.summary(isUrdu: isUrdu);
+    }
+    return tr(isUrdu, 'lockedAllTime');
   }
 
   LockedApp copyWith({
