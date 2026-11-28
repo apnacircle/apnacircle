@@ -572,8 +572,8 @@ void main() {
       // Let the SOS FAB finish its exit animation.
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pump();
-      expect(find.text('Ghar pahunch gaya.'), findsOneWidget);
-      await tester.longPress(find.text('Ghar pahunch gaya.'));
+      expect(find.text("I've reached home."), findsOneWidget);
+      await tester.longPress(find.text("I've reached home."));
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('Delete for me'), findsOneWidget);
@@ -584,7 +584,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('Deleted for you.'), findsOneWidget);
-      expect(find.text('Ghar pahunch gaya.'), findsNothing);
+      expect(find.text("I've reached home."), findsNothing);
     });
 
     testWidgets('chat: clear-chat menu item exists', (tester) async {
