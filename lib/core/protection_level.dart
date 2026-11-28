@@ -1,3 +1,5 @@
+import '../l10n/strings.dart';
+
 /// Uninstall-protection level of one phone (v0.6.13, 25 Nov 2026).
 ///
 /// The user order (25 Nov 2026): a child must NOT be able to delete
@@ -34,6 +36,16 @@ enum ProtectionLevel {
         ProtectionLevel.owner => 'Protected',
         ProtectionLevel.admin => 'Admin only',
         ProtectionLevel.none => 'Not protected',
+        ProtectionLevel.unknown => '',
+      };
+
+  /// Localized label (v0.6.32). [label] is kept as the English
+  /// source; pass isUrdu: true for the Urdu-script label. Empty
+  /// for unknown, as before.
+  String localizedLabel({bool isUrdu = false}) => switch (this) {
+        ProtectionLevel.owner => tr(isUrdu, 'core_protectionProtected'),
+        ProtectionLevel.admin => tr(isUrdu, 'core_protectionAdminOnly'),
+        ProtectionLevel.none => tr(isUrdu, 'core_protectionNotProtected'),
         ProtectionLevel.unknown => '',
       };
 
@@ -86,10 +98,12 @@ bool shouldShowMissingWarning({
 }
 
 /// The warning line, with the real staleness in it ("2 ghante se
-/// koi update nahi"). Pure — unit-tested.
-String missingWarningText(DateTime lastSeen, DateTime now) {
+/// koi update nahi"). Pure — unit-tested. v0.6.32: localized via
+/// [isUrdu] (default English, as before); singular/plural via
+/// trf with {hours}.
+String missingWarningText(DateTime lastSeen, DateTime now,
+    {bool isUrdu = false}) {
   final hours = now.difference(lastSeen).inHours;
-  final unit = hours == 1 ? 'ghanta' : 'ghante';
-  return '$hours $unit se koi update nahi — app delete ya phone '
-      'off ho sakta hai';
+  if (hours == 1) return tr(isUrdu, 'core_missingWarningOne');
+  return trf(isUrdu, 'core_missingWarningMany', {'hours': hours});
 }
