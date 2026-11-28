@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/join_request.dart';
+import '../core/language_service.dart';
+import '../l10n/strings.dart';
 import '../services/join_request_service.dart';
 import '../services/onboarding_service.dart';
 import '../services/pin_service.dart';
@@ -82,6 +84,7 @@ class _JoinRequestScreenState extends State<JoinRequestScreen> {
   }
 
   Future<void> _submit() async {
+    final isUrdu = context.read<LanguageService>().isUrdu;
     setState(() {
       _busy = true;
       _error = null;
@@ -93,6 +96,7 @@ class _JoinRequestScreenState extends State<JoinRequestScreen> {
       phone: _phone.text,
       parentPin: _parentPin.text,
       displayName: _name.text,
+      isUrdu: isUrdu,
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -102,7 +106,7 @@ class _JoinRequestScreenState extends State<JoinRequestScreen> {
     }
     if (req == null) {
       // Returning member — joined directly, no request needed.
-      setState(() => _info = 'Welcome back — aap circle mein aa gaye.');
+      setState(() => _info = tr(isUrdu, 'onb_joinWelcomeBack'));
       return;
     }
     setState(() => _stage = _JoinStage.waiting);
@@ -114,6 +118,7 @@ class _JoinRequestScreenState extends State<JoinRequestScreen> {
   Future<void> _joinAfterApproval(JoinRequest req) async {
     if (_joiningAfterApproval) return;
     _joiningAfterApproval = true;
+    final isUrdu = context.read<LanguageService>().isUrdu;
     final sync = context.read<SyncService>();
     final pin = context.read<PinService>();
     final service = context.read<JoinRequestService>();
@@ -122,11 +127,12 @@ class _JoinRequestScreenState extends State<JoinRequestScreen> {
       phoneNumber: req.phone,
       role: 'child',
       displayName: req.name,
+      isUrdu: isUrdu,
     );
     if (!mounted) return;
     if (circle == null) {
       _joiningAfterApproval = false;
-      setState(() => _error = err ?? 'Join nahi ho saka — dobara try karein.');
+      setState(() => _error = err ?? tr(isUrdu, 'onb_joinFailedRetry'));
       return;
     }
     await sync.cacheParentPinHash(pin);
@@ -163,6 +169,8 @@ class _JoinRequestScreenState extends State<JoinRequestScreen> {
   Widget build(BuildContext context) {
     final sync = context.watch<SyncService>();
     final service = context.watch<JoinRequestService>();
+    final lang = context.watch<LanguageService>();
+    String t(String key) => tr(lang.isUrdu, key);
     final req = service.myRequest;
 
     // Live decision: the parent just allowed / denied while this
@@ -184,10 +192,10 @@ class _JoinRequestScreenState extends State<JoinRequestScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Join family circle'),
+        title: Text(t('onb_joinTitle')),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          tooltip: 'Wapas — role badlein',
+          tooltip: t('onb_backChangeRole'),
           onPressed: _backToRole,
         ),
       ),
@@ -201,39 +209,34 @@ class _JoinRequestScreenState extends State<JoinRequestScreen> {
           if (!sync.isAvailable) ...[
             Card(
               color: Colors.orange.shade50,
-              child: const Padding(
-                padding: EdgeInsets.all(16),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
                 child: Text(
-                  'Join ke liye internet + Gmail sign-in chahiye — '
-                  'abhi live sync off hai, is liye request nahi bhej '
-                  'sakte. Demo mode mein aage badh sakte hain (sab '
-                  'kuch sirf is phone par).',
-                  style: TextStyle(fontSize: 16),
+                  t('onb_joinDemoNotice'),
+                  style: const TextStyle(fontSize: 16),
                 ),
               ),
             ),
             const SizedBox(height: 16),
             FilledButton(
               onPressed: _skipForNow,
-              child: const Text('Demo mode mein aage badhein'),
+              child: Text(t('onb_joinDemoContinue')),
             ),
             const SizedBox(height: 16),
           ],
           if (_stage == _JoinStage.waiting) ...[
             const Icon(Icons.hourglass_top, size: 48, color: Colors.orange),
             const SizedBox(height: 16),
-            const Text(
-              'Request parent ko bhej di gayi hai.',
+            Text(
+              t('onb_joinRequestSent'),
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Jaise hi parent Allow karein ge, aap circle mein aa '
-              'jayein ge — is screen par hi intezar karein, app '
-              'band karne ki zaroorat nahi.',
+            Text(
+              t('onb_joinWaiting'),
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16),
+              style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 24),
             const Center(child: CircularProgressIndicator()),
@@ -245,7 +248,7 @@ class _JoinRequestScreenState extends State<JoinRequestScreen> {
                 onPressed: req == null
                     ? null
                     : () => _joinAfterApproval(req),
-                child: const Text('Dobara join karein'),
+                child: Text(t('onb_joinTryAgain')),
               ),
             ],
           ] else if (_stage == _JoinStage.denied) ...[
@@ -253,8 +256,8 @@ class _JoinRequestScreenState extends State<JoinRequestScreen> {
             const SizedBox(height: 16),
             Text(
               req?.reason == JoinDenyReason.wrongCode
-                  ? 'Parent ka code ghalat tha.'
-                  : 'Parent ne allow nahi kiya.',
+                  ? t('onb_joinWrongCode')
+                  : t('onb_joinDenied'),
               textAlign: TextAlign.center,
               style:
                   const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
@@ -262,37 +265,33 @@ class _JoinRequestScreenState extends State<JoinRequestScreen> {
             const SizedBox(height: 8),
             Text(
               req?.reason == JoinDenyReason.wrongCode
-                  ? 'Jo parent code aap ne likha, wo parent ke code '
-                      'se nahi mila. Sahi code likh kar dobara try karein.'
-                  : 'Parent se baat kar ke dobara try karein — jab '
-                      'wo Allow karein ge, aap add ho jayein ge.',
+                  ? t('onb_joinWrongCodeDetail')
+                  : t('onb_joinDeniedDetail'),
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 24),
             FilledButton(
               onPressed: _retry,
-              child: const Text('Dobara try karein'),
+              child: Text(t('onb_tryAgain')),
             ),
             const SizedBox(height: 12),
             TextButton(
               onPressed: _skipForNow,
-              child: const Text('Abhi nahi — baad mein join karunga'),
+              child: Text(t('onb_joinNotNow')),
             ),
           ] else ...[
-            const Text(
-              'Parent ke circle mein join hone ke liye un ka code '
-              'chahiye. Request parent ko jaye gi — wo Allow karein '
-              'ge to aap add ho jayein ge, Deny karein ge to nahi.',
-              style: TextStyle(fontSize: 16),
+            Text(
+              t('onb_joinFormIntro'),
+              style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 20),
             TextField(
               controller: _name,
-              decoration: const InputDecoration(
-                labelText: 'Aap ka naam',
+              decoration: InputDecoration(
+                labelText: t('onb_yourName'),
                 hintText: 'e.g. Ali',
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
@@ -300,20 +299,20 @@ class _JoinRequestScreenState extends State<JoinRequestScreen> {
               controller: _inviteCode,
               keyboardType: TextInputType.number,
               maxLength: 6,
-              decoration: const InputDecoration(
-                labelText: '6-digit invite code',
+              decoration: InputDecoration(
+                labelText: t('onb_inviteCodeLabel'),
                 hintText: 'e.g. 482913',
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _phone,
               keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                labelText: 'Apna mobile number',
+              decoration: InputDecoration(
+                labelText: t('onb_yourMobile'),
                 hintText: 'e.g. 03001234567',
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
@@ -322,10 +321,10 @@ class _JoinRequestScreenState extends State<JoinRequestScreen> {
               keyboardType: TextInputType.number,
               obscureText: true,
               maxLength: 6,
-              decoration: const InputDecoration(
-                labelText: 'Parent ka PIN / code',
-                hintText: 'Wo code jo parent ne banaya tha',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: t('onb_parentPinCode'),
+                hintText: t('onb_parentCodeHint'),
+                border: const OutlineInputBorder(),
               ),
             ),
             if (_error != null)
@@ -353,22 +352,21 @@ class _JoinRequestScreenState extends State<JoinRequestScreen> {
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text('Join request bhejein'),
+                  : Text(t('onb_sendJoinRequest')),
             ),
             if (!sync.isAvailable)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  'Request tab bhej sakte hain jab Gmail se sign-in ho '
-                  '— abhi live sync off hai.',
+                  t('onb_joinNeedsSignIn'),
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13, color: Colors.grey),
+                  style: const TextStyle(fontSize: 13, color: Colors.grey),
                 ),
               ),
             const SizedBox(height: 12),
             TextButton(
               onPressed: _skipForNow,
-              child: const Text('Abhi nahi — baad mein join karunga'),
+              child: Text(t('onb_joinNotNow')),
             ),
           ],
         ],
