@@ -8,9 +8,11 @@ import '../models/circle.dart';
 import '../services/auth_service.dart';
 import '../services/family_service.dart';
 import '../services/firebase_bootstrap.dart';
+import '../services/onboarding_service.dart';
 import '../services/pin_service.dart';
 import '../services/sync_service.dart';
 import 'auth_screen.dart';
+import 'join_request_screen.dart';
 import 'pin_gate_dialog.dart';
 
 /// Account & Circles (v0.3, 22 Nov 2026).
@@ -415,50 +417,79 @@ class _CircleScreenState extends State<CircleScreen> {
             child: const Text('Create circle & get invite code'),
           ),
           const Divider(height: 32),
-          const Text(
-            'Join a circle (child / member)',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _inviteCode,
-            keyboardType: TextInputType.number,
-            maxLength: 6,
-            decoration: const InputDecoration(
-              labelText: '6-digit invite code',
-              hintText: 'e.g. 482913',
-              border: OutlineInputBorder(),
+          // v0.6.30: a CHILD never joins directly from here — the
+          // request goes to the parent, who Allows / Denies it.
+          // Parents / elderly / members join as before.
+          if (context.watch<OnboardingService>().isChild) ...[
+            const Text(
+              'Join a circle — parent ki ijazat se',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _joinPhone,
-            keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(
-              labelText: 'My mobile number',
-              hintText: 'e.g. 03001234567',
-              helperText:
-                  'Needed so a SIM call from you shows your distance to the family. A real SIM number — never an email.',
-              border: OutlineInputBorder(),
+            const SizedBox(height: 8),
+            const Text(
+              'Aap child hain: join request parent ko jaye gi. Wo '
+              'Allow karein ge to aap add ho jayein ge — is ke liye '
+              'parent ka PIN bhi chahiye.',
+              style: TextStyle(fontSize: 14, color: Colors.grey),
             ),
-          ),
-          DropdownButtonFormField<String>(
-            initialValue: _joinRole,
-            decoration: const InputDecoration(labelText: 'My role'),
-            items: const [
-              DropdownMenuItem(value: 'child', child: Text('Child')),
-              DropdownMenuItem(value: 'elderly', child: Text('Elderly')),
-              DropdownMenuItem(value: 'member', child: Text('Member')),
-            ],
-            onChanged: (v) {
-              if (v != null) setState(() => _joinRole = v);
-            },
-          ),
-          const SizedBox(height: 8),
-          FilledButton(
-            onPressed: _busy ? null : _joinCircle,
-            child: const Text('Join circle'),
-          ),
+            const SizedBox(height: 8),
+            FilledButton(
+              onPressed: _busy
+                  ? null
+                  : () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const JoinRequestScreen(),
+                        ),
+                      ),
+              child: const Text('Join request bhejein'),
+            ),
+          ] else ...[
+            const Text(
+              'Join a circle (child / member)',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _inviteCode,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              decoration: const InputDecoration(
+                labelText: '6-digit invite code',
+                hintText: 'e.g. 482913',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _joinPhone,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'My mobile number',
+                hintText: 'e.g. 03001234567',
+                helperText:
+                    'Needed so a SIM call from you shows your distance to the family. A real SIM number — never an email.',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            DropdownButtonFormField<String>(
+              initialValue: _joinRole,
+              decoration: const InputDecoration(labelText: 'My role'),
+              items: const [
+                DropdownMenuItem(value: 'child', child: Text('Child')),
+                DropdownMenuItem(value: 'elderly', child: Text('Elderly')),
+                DropdownMenuItem(value: 'member', child: Text('Member')),
+              ],
+              onChanged: (v) {
+                if (v != null) setState(() => _joinRole = v);
+              },
+            ),
+            const SizedBox(height: 8),
+            FilledButton(
+              onPressed: _busy ? null : _joinCircle,
+              child: const Text('Join circle'),
+            ),
+          ],
           if (_busy)
             const Padding(
               padding: EdgeInsets.only(top: 16),
