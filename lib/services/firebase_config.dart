@@ -81,6 +81,14 @@ class FirebaseConfig {
   static String circleChatPath(String circleId) => 'circles/$circleId/chat';
   static String circleEventsPath(String circleId) => 'circles/$circleId/events';
 
+  /// v0.6.30: join requests — a child who wants in writes one
+  /// node here (pending) and the parent approves / denies it.
+  /// See core/join_request.dart + database.rules.json (rules v7).
+  static String joinRequestsPath(String circleId) =>
+      'circles/$circleId/joinRequests';
+  static String joinRequestPath(String circleId, String uid) =>
+      'circles/$circleId/joinRequests/$uid';
+
   /// v0.6.21: call signaling — one node per call under the
   /// circle (see call_signaling.dart for the node shape).
   static String circleCallsPath(String circleId) => 'circles/$circleId/calls';
