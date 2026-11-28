@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/constants.dart';
+import '../l10n/strings.dart';
 import '../models/circle.dart';
 import 'auth_service.dart';
 import 'sync_service.dart';
@@ -125,7 +126,15 @@ class DeviceAdminService {
     if (!sync.isAvailable || auth.uid == null) return;
     final atMs = await pendingAdminDisabledAt();
     if (atMs == null) return;
-    final name = auth.displayName ?? auth.phoneNumber ?? auth.email ?? 'Me';
+    // v0.6.32: the sender-name fallback renders in the phone's
+    // chosen locale (persisted language — no Provider here).
+    final isUrdu = (await SharedPreferences.getInstance())
+            .getString('language_code_v1') ==
+        'ur';
+    final name = auth.displayName ??
+        auth.phoneNumber ??
+        auth.email ??
+        tr(isUrdu, 'svc_meName');
     var published = false;
     for (final circle in sync.myCircles) {
       try {
