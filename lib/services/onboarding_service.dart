@@ -13,8 +13,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 ///
 /// The role is per PHONE (this install), not per account — the
 /// parent's phone is the parent phone, the child's phone is the
-/// child phone. Changing it later is a reinstall (a parent who
-/// hands their old phone to a child reinstalls the app).
+/// child phone. A wrong tap is undoable (v0.6.31): every
+/// onboarding step has a back arrow — role -> language,
+/// plan / join -> role — and Settings offers "Role badlein"
+/// while this phone has no circles yet. Once a circle exists
+/// the role is proven by membership instead.
 class OnboardingService extends ChangeNotifier {
   static const _roleKey = 'onboarding_role_v1';
   static const _planChoiceKey = 'onboarding_plan_choice_v1';
@@ -53,6 +56,20 @@ class OnboardingService extends ChangeNotifier {
     _role = role;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_roleKey, role);
+    notifyListeners();
+  }
+
+  /// v0.6.31: go back — forget the role (and the plan choice /
+  /// join skip that came with it) so the role screen shows
+  /// again. AppRoot re-routes by itself on the notify.
+  Future<void> clearRole() async {
+    _role = null;
+    _planChoiceDone = false;
+    _joinSkipped = false;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_roleKey);
+    await prefs.remove(_planChoiceKey);
+    await prefs.remove(_joinSkippedKey);
     notifyListeners();
   }
 
