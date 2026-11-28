@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../core/language_service.dart';
+import '../l10n/strings.dart';
 import '../core/viewer_position.dart';
 import '../models/member.dart';
 
@@ -33,11 +36,15 @@ class CallOverlayScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageService>();
+    String t(String key) => tr(lang.isUrdu, key);
+    String tf(String key, [Map<String, Object> args = const {}]) =>
+        trf(lang.isUrdu, key, args);
     final distance = caller.hasLocation
         ? formatMemberDistance(viewer: viewerPosition, member: caller)
-        : 'Location unknown';
+        : t('scr_callOverlayLocationUnknown');
     return Scaffold(
-      appBar: AppBar(title: const Text('Incoming call · SIM')),
+      appBar: AppBar(title: Text(t('incomingCallSim'))),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -51,7 +58,7 @@ class CallOverlayScreen extends StatelessWidget {
             Text(caller.name, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
             Text(caller.phone, style: const TextStyle(fontSize: 18)),
             const SizedBox(height: 24),
-            const Text('Caller distance from you', style: TextStyle(fontSize: 16)),
+            Text(t('callerDistance'), style: const TextStyle(fontSize: 16)),
             Text(
               distance,
               style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold),
@@ -59,8 +66,9 @@ class CallOverlayScreen extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               caller.isOnline
-                  ? 'Live location'
-                  : 'Last location: ${caller.lastSeen}',
+                  ? t('scr_callOverlayLive')
+                  : tf('scr_callOverlayLastLocation',
+                      {'time': caller.lastSeen.toString()}),
               style: const TextStyle(fontSize: 15),
             ),
             const Spacer(),
@@ -70,7 +78,7 @@ class CallOverlayScreen extends StatelessWidget {
                   child: FilledButton.icon(
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.call),
-                    label: const Text('Answer'),
+                    label: Text(t('scr_callOverlayAnswer')),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -78,7 +86,7 @@ class CallOverlayScreen extends StatelessWidget {
                   child: OutlinedButton.icon(
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.call_end),
-                    label: const Text('Decline'),
+                    label: Text(t('scr_callDecline')),
                   ),
                 ),
               ],
