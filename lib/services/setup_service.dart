@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/app_lock_service.dart';
 import '../core/call_distance_service.dart';
 import '../core/location_service.dart';
+import '../l10n/strings.dart';
 import '../services/device_admin_service.dart';
 import '../services/sms_location_service.dart';
 
@@ -108,6 +109,48 @@ extension SetupStepInfo on SetupStep {
     }
   }
 
+  /// Localized [title] / [why] / [actionLabel]. The plain getters
+  /// stay (English, for existing call sites); screens that know
+  /// the locale call these instead.
+  String titleIn(bool isUrdu) {
+    if (!isUrdu) return title;
+    return switch (this) {
+      SetupStep.locationAlways => tr(true, 'svc_setupLocationTitle'),
+      SetupStep.notifications => tr(true, 'svc_setupNotificationsTitle'),
+      SetupStep.sms => tr(true, 'svc_setupSmsTitle'),
+      SetupStep.overlay => tr(true, 'svc_setupOverlayTitle'),
+      SetupStep.accessibility => tr(true, 'svc_setupAccessibilityTitle'),
+      SetupStep.deviceAdmin => tr(true, 'svc_setupDeviceAdminTitle'),
+      SetupStep.battery => tr(true, 'svc_setupBatteryTitle'),
+    };
+  }
+
+  String whyIn(bool isUrdu) {
+    if (!isUrdu) return why;
+    return switch (this) {
+      SetupStep.locationAlways => tr(true, 'svc_setupWhyLocation'),
+      SetupStep.notifications => tr(true, 'svc_setupWhyNotifications'),
+      SetupStep.sms => tr(true, 'svc_setupWhySms'),
+      SetupStep.overlay => tr(true, 'svc_setupWhyOverlay'),
+      SetupStep.accessibility => tr(true, 'svc_setupWhyAccessibility'),
+      SetupStep.deviceAdmin => tr(true, 'svc_setupWhyDeviceAdmin'),
+      SetupStep.battery => tr(true, 'svc_setupWhyBattery'),
+    };
+  }
+
+  String actionLabelIn(bool isUrdu) {
+    if (!isUrdu) return actionLabel;
+    return switch (this) {
+      SetupStep.locationAlways => tr(true, 'svc_setupAllowLocation'),
+      SetupStep.notifications => tr(true, 'svc_setupAllowNotifications'),
+      SetupStep.sms => tr(true, 'svc_setupAllowSms'),
+      SetupStep.overlay => tr(true, 'svc_setupOpenSettings'),
+      SetupStep.accessibility => tr(true, 'svc_setupOpenSettings'),
+      SetupStep.deviceAdmin => tr(true, 'svc_setupActivate'),
+      SetupStep.battery => tr(true, 'svc_setupAllow'),
+    };
+  }
+
   /// Label on the step's action button.
   String get actionLabel {
     switch (this) {
@@ -180,7 +223,11 @@ Future<bool> isSetupStepDone(SetupStep step) async {
 /// the plain-words reason is shown FIRST (Play Store rule — the
 /// same rationale as HomeMapScreen._fixLocationSharing), because
 /// Android 11+ can only grant it from the app's Settings page.
-Future<void> runSetupStepAction(BuildContext context, SetupStep step) async {
+Future<void> runSetupStepAction(
+  BuildContext context,
+  SetupStep step, {
+  bool isUrdu = false,
+}) async {
   try {
     switch (step) {
       case SetupStep.locationAlways:
@@ -193,22 +240,16 @@ Future<void> runSetupStepAction(BuildContext context, SetupStep step) async {
           final go = await showDialog<bool>(
             context: context,
             builder: (ctx) => AlertDialog(
-              title: const Text('Share location even when the app is closed?'),
-              content: const Text(
-                'Your parent needs to see your location anytime, even '
-                'when ApnaCircle is closed — for example if you are on '
-                'your way home late. On the next screen, tap Location '
-                'and choose "Allow all the time". ApnaCircle only shares '
-                'your location with your own family circle, nobody else.',
-              ),
+              title: Text(tr(isUrdu, 'svc_setupShareLocationTitle')),
+              content: Text(tr(isUrdu, 'svc_setupShareLocationBody')),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('Not now'),
+                  child: Text(tr(isUrdu, 'svc_setupNotNow')),
                 ),
                 FilledButton(
                   onPressed: () => Navigator.pop(ctx, true),
-                  child: const Text('Open Settings'),
+                  child: Text(tr(isUrdu, 'svc_setupOpenSettings')),
                 ),
               ],
             ),
