@@ -5,6 +5,7 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../l10n/strings.dart';
 import '../models/circle.dart';
 import 'family_service.dart';
 import 'firebase_config.dart';
@@ -181,20 +182,33 @@ List<CircleEvent> filterAlertsToMembers(
 /// type is a code ('internetOff'); the centre shows what a
 /// parent actually understands. An unknown type is shown as-is —
 /// never hidden.
-String alertTypeLabel(String type) => switch (type) {
-      'sos' => 'SOS',
-      'lowBattery' => 'Low battery',
-      'phoneOff' => 'Phone switched off',
-      'internetOff' => 'Internet off',
-      'locationOff' => 'Location switched off',
-      'simChanged' => 'SIM changed',
-      'adminDisabled' => 'Protection removed',
+String alertTypeLabel(String type, {bool isUrdu = false}) {
+  if (isUrdu) {
+    return switch (type) {
+      'lowBattery' => tr(true, 'svc_alertLowBattery'),
+      'phoneOff' => tr(true, 'svc_alertPhoneOff'),
+      'internetOff' => tr(true, 'svc_alertInternetOff'),
+      'locationOff' => tr(true, 'svc_alertLocationOff'),
+      'simChanged' => tr(true, 'svc_alertSimChanged'),
+      'adminDisabled' => tr(true, 'svc_alertProtectionRemoved'),
       _ => type,
     };
+  }
+  return switch (type) {
+    'sos' => 'SOS',
+    'lowBattery' => 'Low battery',
+    'phoneOff' => 'Phone switched off',
+    'internetOff' => 'Internet off',
+    'locationOff' => 'Location switched off',
+    'simChanged' => 'SIM changed',
+    'adminDisabled' => 'Protection removed',
+    _ => type,
+  };
+}
 
-/// Short time for one event: '26 Nov, 21:05'.
-String formatAlertTime(DateTime at) {
-  const months = [
+/// Short time for one event: '26 Nov, 21:05' (EN) / '26 نومبر، 21:05' (UR).
+String formatAlertTime(DateTime at, {bool isUrdu = false}) {
+  const enMonths = [
     'Jan',
     'Feb',
     'Mar',
@@ -208,7 +222,24 @@ String formatAlertTime(DateTime at) {
     'Nov',
     'Dec',
   ];
+  const urMonthKeys = [
+    'svc_monthJan',
+    'svc_monthFeb',
+    'svc_monthMar',
+    'svc_monthApr',
+    'svc_monthMay',
+    'svc_monthJun',
+    'svc_monthJul',
+    'svc_monthAug',
+    'svc_monthSep',
+    'svc_monthOct',
+    'svc_monthNov',
+    'svc_monthDec',
+  ];
   final hh = at.hour.toString().padLeft(2, '0');
   final mm = at.minute.toString().padLeft(2, '0');
-  return '${at.day} ${months[at.month - 1]}, $hh:$mm';
+  if (isUrdu) {
+    return '${at.day} ${tr(true, urMonthKeys[at.month - 1])}، $hh:$mm';
+  }
+  return '${at.day} ${enMonths[at.month - 1]}, $hh:$mm';
 }
