@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/constants.dart';
 import '../core/location_service.dart';
+import '../l10n/strings.dart';
 import '../models/circle.dart';
 import 'auth_service.dart';
 import 'sync_service.dart';
@@ -145,7 +146,15 @@ class SimChangeService {
   }) async {
     if (!sync.isAvailable || auth.uid == null) return;
     final last = await _location.lastKnown();
-    final name = auth.displayName ?? auth.phoneNumber ?? auth.email ?? 'Me';
+    // v0.6.32: the sender-name fallback renders in the phone's
+    // chosen locale (persisted language — no Provider here).
+    final isUrdu = (await SharedPreferences.getInstance())
+            .getString('language_code_v1') ==
+        'ur';
+    final name = auth.displayName ??
+        auth.phoneNumber ??
+        auth.email ??
+        tr(isUrdu, 'svc_meName');
     for (final circle in sync.myCircles) {
       await sync.sendEvent(
         circle.id,
