@@ -13,6 +13,7 @@ import '../core/battery_schedule.dart';
 import '../core/location_service.dart';
 import '../core/protection_level.dart';
 import '../core/removal_detection.dart';
+import '../l10n/strings.dart';
 import '../models/circle.dart';
 import 'device_admin_service.dart';
 import 'device_owner_service.dart';
@@ -84,6 +85,12 @@ class BackgroundLocationService {
   static const String notificationText =
       'ApnaCircle is sharing your location with your family';
 
+  /// Localized [notificationText]. The const above stays (English)
+  /// for existing call sites; the service start/update paths use
+  /// this with the persisted locale.
+  static String notificationTextFor(bool isUrdu) =>
+      tr(isUrdu, 'svc_bgSharingText');
+
   /// Task data keys (flutter_foreground_task saveData/getData —
   /// SharedPreferences-backed, so they survive a reboot and the
   /// task can restart on boot with the same circle).
@@ -154,12 +161,22 @@ class BackgroundLocationService {
       final result = await FlutterForegroundTask.startService(
         serviceTypes: [ForegroundServiceTypes.location],
         notificationTitle: notificationTitle,
-        notificationText: notificationText,
+        notificationText: notificationTextFor(await _persistedIsUrdu()),
         callback: backgroundLocationTaskCallback,
       );
       return result is ServiceRequestSuccess;
     } catch (e) {
       debugPrint('ApnaCircle: background location start failed ($e)');
+      return false;
+    }
+  }
+
+  /// Persisted language choice (same key as LanguageService).
+  static Future<bool> _persistedIsUrdu() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('language_code_v1') == 'ur';
+    } catch (_) {
       return false;
     }
   }
@@ -271,6 +288,10 @@ class BackgroundLocationTaskHandler extends TaskHandler {
   String? _name;
   DateTime? _lastPublishedFixAt;
 
+  /// Persisted locale, read once in [onStart] (this isolate has
+  /// no access to the main isolate's LanguageService).
+  bool _isUrdu = false;
+
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
     _circleId = await FlutterForegroundTask.getData<String>(
@@ -279,6 +300,7 @@ class BackgroundLocationTaskHandler extends TaskHandler {
         key: BackgroundLocationService.dataUid);
     _name = await FlutterForegroundTask.getData<String>(
         key: BackgroundLocationService.dataName);
+    _isUrdu = await BackgroundLocationService._persistedIsUrdu();
     if (_circleId == null ||
         _circleId!.isEmpty ||
         _uid == null ||
@@ -463,7 +485,7 @@ class BackgroundLocationTaskHandler extends TaskHandler {
         final mm = now.minute.toString().padLeft(2, '0');
         await FlutterForegroundTask.updateService(
           notificationText:
-              '${BackgroundLocationService.notificationText} · Last shared $hh:$mm',
+              '${BackgroundLocationService.notificationTextFor(_isUrdu)} · ${trf(_isUrdu, 'svc_bgLastShared', {'time': '$hh:$mm'})}',
         );
       } catch (_) {
         // Notification text is cosmetic — sharing already happened.
