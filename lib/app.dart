@@ -63,7 +63,7 @@ class AppRoot extends StatelessWidget {
       return const PlanChoiceScreen();
     }
     if (FirebaseBootstrap.available && !auth.signedIn && !auth.demoSkipped) {
-      return const AuthScreen(initialMode: 2);
+      return const AuthScreen(initialMode: 2, showRoleBack: true);
     }
     if (onboarding.isChild &&
         sync.myCircles.isEmpty &&
